@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+langchain
+langchain_community
+langchain-text-splitters
+transformers
+torch
+numpy
+sentence-transformers
+pypdf
+chromadb
+google-generativeai
