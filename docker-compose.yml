@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # --- INFRASTRUCTURE: REVERSE PROXY ---
+  nginx:
+    build:
+      context: .
+      dockerfile: ./infra/nginx/Dockerfile # File config Nginx điều hướng request
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gateway
+      - erp-portal
+      - ecommerce-store
+    networks:
+      - erp-network
+
+  # --- FRONTEND ---
+  erp-portal:
+    build:
+      context: ./apps/frontend/erp-portal #
+    networks:
+      - erp-network
+
+  ecommerce-store:
+    build:
+      context: ./apps/frontend/ecommerce-store #
+    networks:
+      - erp-network
+
+  # --- API GATEWAY ---
+  gateway:
+    build:
+      context: ./apps/gateway # Public Gateway (Java)
+    environment:
+      - IDENTITY_SERVICE_URL=http://identity:8081
+    depends_on:
+      - identity
+    networks:
+      - erp-network
+
+  # --- MICROSERVICES & THEIR OWN DATABASES ---
+
+  # 1. Identity Service (Java) + PostgreSQL
+  identity:
+    build: ./apps/identity #
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
+    depends_on:
+      - db-identity
+    networks:
+      - erp-network
+
+  db-identity:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=identity_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 2. HRM Service (Java) + PostgreSQL + MinIO
+  hrm:
+    build: ./apps/services/hrm #
+    depends_on:
+      - db-hrm
+      - minio
+    networks:
+      - erp-network
+
+  db-hrm:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hrm_db
+    volumes:
+      - hrm-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  minio: # Lưu trữ file cho HRM
+    image: minio/minio
+    command: server /data
+    networks:
+      - erp-network
+
+  # 3. AI Service (FastAPI) + PostgreSQL + Milvus
+  ai-service:
+    build: ./apps/services/ai-service #
+    depends_on:
+      - db-ai
+      - milvus
+    networks:
+      - erp-network
+
+  db-ai:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=ai_db
+    volumes:
+      - ai-db-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  milvus: # Vector DB cho RAG
+    image: milvusdb/milvus:latest
+    networks:
+      - erp-network
+
+  # 4. Supply-Chain Service (Go) + PostgreSQL + Redis
+  supply-chain:
+    build: ./apps/services/supply-chain #
+    depends_on:
+      - db-supply
+      - redis
+    networks:
+      - erp-network
+
+  db-supply:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=supply_db
+    volumes:
+      - supply-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  redis: # Cache cho Supply Chain
+    image: redis:alpine
+    networks:
+      - erp-network
+
+  # --- CÁC SERVICE KHÁC (SALES, FINANCE) TƯƠNG TỰ ---
+  # Bạn có thể copy cấu trúc trên cho Sales (kèm ElasticSearch) 
+  # và Finance (kèm OLTP/DWH) theo sơ đồ.
+
+networks:
+  erp-network:
+    driver: bridge
+
+volumes:
+  identity-data:
+  hrm-data:
+  ai-db-data:
+  supply-data:
