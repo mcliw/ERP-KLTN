@@ -1,0 +1,42 @@
+.btn-primary {
+    background: #0b3c9d;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-restore, .btn-success {
+    background: #0d9d0b;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-danger, .clear-btn {
+    background: #9d0b0b;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}

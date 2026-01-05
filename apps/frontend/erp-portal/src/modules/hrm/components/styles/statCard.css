@@ -1,0 +1,23 @@
+.stat-card {
+  background: #061a3a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 180px;
+}
+
+.stat-card__value {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.stat-card__title {
+  margin-top: 6px;
+  opacity: 0.8;
+}
+
+.stat-card__note {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.6;
+}

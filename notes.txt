@@ -1,0 +1,2 @@
+pnpm install
+pnpm --filter erp-portal add zod

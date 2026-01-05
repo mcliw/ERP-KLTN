@@ -1,0 +1,14 @@
+.main-document {
+    padding: 30px;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+span {
+    margin-left: 6px;
+}

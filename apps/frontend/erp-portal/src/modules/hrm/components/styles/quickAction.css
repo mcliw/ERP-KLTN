@@ -1,0 +1,18 @@
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #061a3a;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.quick-action-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+}
