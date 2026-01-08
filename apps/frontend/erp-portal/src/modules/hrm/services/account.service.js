@@ -89,7 +89,10 @@ export const accountService = {
    * Lấy tài khoản đang hoạt động
    */
   async getActive() {
-    return this.getAll();
+    const list = await this.getAll();
+    return list.filter(
+      (a) => a.status === "Hoạt động" && !a.deletedAt
+    );
   },
 
   /**
@@ -144,6 +147,15 @@ export const accountService = {
 
     const list = storage.get();
     const username = normalizeUsername(data?.username);
+
+    const emp = await employeeService.getByCode(data.employeeCode);
+    if (!emp || emp.status !== "Đang làm việc") {
+      throw createHttpError(
+        400,
+        "Chỉ tạo tài khoản cho nhân viên đang làm việc",
+        "employeeCode"
+      );
+    }
 
     if (!username) {
       throw createHttpError(
@@ -308,11 +320,21 @@ export const accountService = {
   async destroy(username) {
     await delay();
     const u = normalizeUsername(username);
+    const list = storage.get();
 
-    const list = storage.get().filter(
-      (a) => normalizeUsername(a.username) !== u
+    const index = list.findIndex(
+      (a) => normalizeUsername(a.username) === u
     );
 
+    if (index === -1) {
+      throw createHttpError(
+        404,
+        "Không tìm thấy tài khoản",
+        "username"
+      );
+    }
+
+    list.splice(index, 1);
     storage.set(list);
     return true;
   },

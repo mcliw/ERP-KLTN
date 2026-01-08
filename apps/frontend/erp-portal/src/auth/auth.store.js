@@ -1,5 +1,7 @@
+// src/auth/auth.store.js
+
 import { create } from "zustand";
-import { loginApi } from "./auth.service";
+import { loginApi, resetPasswordApi } from "./auth.service";
 
 export const useAuthStore = create((set) => ({
   user: JSON.parse(localStorage.getItem("erp_user") || "null"),
@@ -27,5 +29,16 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem("erp_user");
     localStorage.removeItem("erp_token");
     set({ user: null, token: null });
+  },
+
+  resetPassword: async ({ username, password }) => {
+    set({ loading: true, error: null });
+    try {
+      await resetPasswordApi({ username, password });
+      set({ loading: false });
+    } catch (e) {
+      set({ error: e.message, loading: false });
+      throw e;
+    }
   },
 }));

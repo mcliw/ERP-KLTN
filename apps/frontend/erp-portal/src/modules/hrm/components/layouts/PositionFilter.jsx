@@ -1,43 +1,88 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/PositionFilter.jsx
 
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import "../styles/filter.css";
 
-export default function PositionFilter({
-  keyword,
-  department,
-  status,
+const safeArray = (v) => (Array.isArray(v) ? v : []);
 
+export default function PositionFilter({
+  // values
+  keyword = "",
+  department = "",
+  status = "",
+
+  // options: [{ value, label }]
   departmentOptions = [],
   statusOptions = [],
 
+  // handlers
   onKeywordChange,
   onDepartmentChange,
   onStatusChange,
+  onClear,
 }) {
+  const canClear = keyword || department || status;
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    onKeywordChange?.("");
+    onDepartmentChange?.("");
+    onStatusChange?.("");
+  };
+
   return (
     <div className="filters">
+      {/* SEARCH */}
       <div className="search-wrap">
         <FaSearch className="search-icon" />
         <input
           className="search-input"
-          placeholder="Tìm theo mã hoặc tên chức vụ"
+          name="keyword"
           value={keyword}
-          onChange={(e) => onKeywordChange(e.target.value)}
+          placeholder="Tìm theo mã hoặc tên chức vụ"
+          onChange={(e) => onKeywordChange?.(e.target.value)}
         />
+
+        {canClear && (
+          <button
+            type="button"
+            className="clear-btn"
+            onClick={handleClear}
+            title="Xoá bộ lọc"
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
-      <select className="input" value={department} onChange={(e) => onDepartmentChange(e.target.value)}>
+      {/* DEPARTMENT */}
+      <select
+        className="input"
+        value={department}
+        onChange={(e) => onDepartmentChange?.(e.target.value)}
+      >
         <option value="">Tất cả phòng ban</option>
-        {departmentOptions.map((d) => (
-          <option key={d.value} value={d.value}>{d.label}</option>
+        {safeArray(departmentOptions).map((d) => (
+          <option key={d.value} value={d.value}>
+            {d.label}
+          </option>
         ))}
       </select>
 
-      <select className="input" value={status} onChange={(e) => onStatusChange(e.target.value)}>
+      {/* STATUS */}
+      <select
+        className="input"
+        value={status}
+        onChange={(e) => onStatusChange?.(e.target.value)}
+      >
         <option value="">Tất cả trạng thái</option>
-        {statusOptions.map((s) => (
-          <option key={s.value} value={s.value}>{s.label}</option>
+        {safeArray(statusOptions).map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
         ))}
       </select>
     </div>

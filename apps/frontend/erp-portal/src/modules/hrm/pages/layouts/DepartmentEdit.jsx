@@ -11,39 +11,97 @@ export default function DepartmentEdit() {
 
   const [department, setDepartment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  /* =========================
+   * Load department
+   * ========================= */
 
   useEffect(() => {
-    departmentService.getByCode(code).then((data) => {
-      setDepartment(data);
-      setLoading(false);
-    });
+    let alive = true;
+
+    const loadDepartment = async () => {
+      setLoading(true);
+      try {
+        const data = await departmentService.getByCode(code);
+        if (!alive) return;
+        setDepartment(data);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    loadDepartment();
+    return () => {
+      alive = false;
+    };
   }, [code]);
+
+  /* =========================
+   * Guards
+   * ========================= */
 
   if (loading) {
     return <div style={{ padding: 20 }}>Đang tải dữ liệu...</div>;
   }
 
   if (!department) {
-    return <div style={{ padding: 20 }}>Không tìm thấy phòng ban</div>;
+    return (
+      <div style={{ padding: 20 }}>
+        Không tìm thấy phòng ban
+      </div>
+    );
   }
 
-  const handleUpdate = async (data) => {
-    const payload = { ...data };
+  if (department.deletedAt) {
+    return (
+      <div style={{ padding: 20 }}>
+        Phòng ban đã bị xoá, không thể chỉnh sửa
+      </div>
+    );
+  }
 
-    // khóa code
-    delete payload.code;
+  /* =========================
+   * Handlers
+   * ========================= */
 
-    await departmentService.update(code, payload);
-    navigate(`/hrm/phong-ban/${code}`);
+  const handleUpdate = async (formData) => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    try {
+      await departmentService.update(code, {
+        ...formData,
+        code: undefined, // 🔒 khóa mã
+      });
+
+      navigate(`/hrm/phong-ban/${code}`);
+    } catch (err) {
+      if (err?.status === 404) {
+        alert("Không tìm thấy phòng ban");
+      } else if (err?.field) {
+        alert(err.message);
+      } else {
+        alert("Có lỗi khi cập nhật phòng ban");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  /* =========================
+   * Render
+   * ========================= */
 
   return (
     <div style={{ padding: 20 }}>
       <DepartmentForm
         mode="edit"
         initialData={department}
+        employeeCount={department.employeeCount ?? 0}
         onSubmit={handleUpdate}
         onCancel={() => navigate(-1)}
+        disabled={submitting}
       />
     </div>
   );

@@ -1,35 +1,14 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/AccountCreate.jsx
 
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import AccountForm from "../../components/layouts/AccountForm";
 import { accountService } from "../../services/account.service";
-import { employeeService } from "../../services/employee.service";
+import { ROLES } from "../../../../shared/constants/roles"
 
 export default function AccountCreate() {
   const navigate = useNavigate();
-  const [employeeOptions, setEmployeeOptions] = useState([]);
 
-  // ✅ Load danh sách nhân viên chưa có account
-  useEffect(() => {
-    Promise.all([
-      employeeService.getAll(),
-      accountService.getAll(),
-    ]).then(([employees, accounts]) => {
-      const usedCodes = new Set(
-        accounts.map((a) => a.employeeCode)
-      );
-
-      const options = employees
-        .filter((e) => !usedCodes.has(e.code))
-        .map((e) => ({
-          value: e.code,
-          label: `${e.code} - ${e.name}`,
-        }));
-
-      setEmployeeOptions(options);
-    });
-  }, []);
+  /* ================= HANDLER ================= */
 
   const handleCreate = async (data) => {
     try {
@@ -38,23 +17,37 @@ export default function AccountCreate() {
     } catch (e) {
       if (e?.status === 409 && e?.field === "username") {
         alert("Tên đăng nhập đã tồn tại");
-      } else if (e?.status === 409 && e?.field === "employeeCode") {
+      } else if (
+        e?.status === 409 &&
+        e?.field === "employeeCode"
+      ) {
         alert("Nhân viên này đã có tài khoản");
+      } else if (e?.status === 400) {
+        alert(e.message || "Dữ liệu không hợp lệ");
       } else {
         alert("Có lỗi xảy ra khi tạo tài khoản");
       }
     }
   };
 
+  /* ================= RENDER ================= */
+
   return (
     <div style={{ padding: 20 }}>
       <AccountForm
         mode="create"
-        employeeOptions={employeeOptions}
         roleOptions={[
-          { value: "ADMIN", label: "Admin" },
-          { value: "HR", label: "HR" },
-          { value: "USER", label: "User" },
+          { value: ROLES.ADMIN, label: "Admin" },
+          { value: ROLES.HR_MANAGER, label: "HR Manager" },
+          { value: ROLES.HR_EMPLOYEE, label: "HR Employee" },
+          { value: ROLES.SCM_MANAGER, label: "SCM Manager" },
+          { value: ROLES.SCM_EMPLOYEE, label: "SCM Employee" },
+          { value: ROLES.SALES_CRM_MANAGER, label: "Sales CRM Manager" },
+          { value: ROLES.SALES_CRM_EMPLOYEE, label: "Sales CRM Employee" },
+          { value: ROLES.SUPPLY_CHAIN_MANAGER, label: "Supply Chain Manager" },
+          { value: ROLES.SUPPLY_CHAIN_EMPLOYEE, label: "Supply Chain Employee" },
+          { value: ROLES.FINANCE_ACCOUNTING_MANAGER, label: "Finance Accounting Manager" },
+          { value: ROLES.FINANCE_ACCOUNTING_EMPLOYEE, label: "Finance Accounting Employee" },
         ]}
         onSubmit={handleCreate}
         onCancel={() => navigate(-1)}

@@ -1,4 +1,4 @@
-// apps/frontend/erp-portal/src/modules/hrm/services/employee.service.js
+import { positionService } from "./position.service";
 
 const KEY = "EMPLOYEES";
 
@@ -28,14 +28,79 @@ const createHttpError = (status, message, field) => {
 };
 
 /* =========================
+ * Business Validators
+ * ========================= */
+
+/**
+ * Kiểm tra capacity của chức vụ
+ */
+async function validatePositionCapacity(positionCode, ignoreEmployeeCode) {
+  if (!positionCode) return;
+
+  const position = await positionService.getByCode(positionCode);
+  if (!position) return;
+
+  const employees = storage.get();
+
+  const assignees = employees.filter(
+    (e) =>
+      !e.deletedAt &&
+      e.status === "Đang làm việc" &&
+      normalizeCode(e.position) === normalizeCode(positionCode) &&
+      normalizeCode(e.code) !== normalizeCode(ignoreEmployeeCode)
+  );
+
+  if (assignees.length >= position.capacity) {
+    throw createHttpError(
+      400,
+      "Chức vụ đã đủ số người đảm nhận",
+      "position"
+    );
+  }
+}
+
+/**
+ * Mỗi phòng ban chỉ có 1 Trưởng phòng
+ */
+async function validateSingleManager({
+  department,
+  positionCode,
+  ignoreEmployeeCode,
+}) {
+  if (!department || !positionCode) return;
+
+  const position = await positionService.getByCode(positionCode);
+  if (!position) return;
+
+  if (position.name !== "Trưởng phòng") return;
+
+  const employees = storage.get();
+
+  const exists = employees.some(
+    (e) =>
+      !e.deletedAt &&
+      e.status === "Đang làm việc" &&
+      normalizeCode(e.department) === normalizeCode(department) &&
+      normalizeCode(e.position) === normalizeCode(positionCode) &&
+      normalizeCode(e.code) !== normalizeCode(ignoreEmployeeCode)
+  );
+
+  if (exists) {
+    throw createHttpError(
+      400,
+      "Phòng ban này đã có Trưởng phòng",
+      "position"
+    );
+  }
+}
+
+/* =========================
  * Employee Service
  * ========================= */
 
 export const employeeService = {
   /**
    * Lấy danh sách nhân viên
-   * @param {Object} options
-   * @param {boolean} options.includeDeleted
    */
   async getAll({ includeDeleted = false } = {}) {
     await delay();
@@ -99,12 +164,23 @@ export const employeeService = {
       );
     }
 
+    // ===== BUSINESS RULES =====
+    await validatePositionCapacity(data.position);
+    await validateSingleManager({
+      department: data.department,
+      positionCode: data.position,
+    });
+
     const employee = {
       ...data,
       code,
+      department: data?.department || "",
+      position: data?.position || "",
+      status: data?.status ?? "Đang làm việc",
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
+      resignedAt: null,
     };
 
     storage.set([...list, employee]);
@@ -121,8 +197,7 @@ export const employeeService = {
     const targetCode = normalizeCode(code);
 
     const index = list.findIndex(
-      (e) =>
-        normalizeCode(e.code) === targetCode
+      (e) => normalizeCode(e.code) === targetCode
     );
 
     if (index === -1) {
@@ -133,10 +208,30 @@ export const employeeService = {
       );
     }
 
+    const current = list[index];
+
+    const nextDepartment =
+      data.department ?? current.department;
+
+    const nextPosition =
+      data.position ?? current.position;
+
+    // ===== BUSINESS RULES =====
+    await validatePositionCapacity(
+      nextPosition,
+      current.code
+    );
+
+    await validateSingleManager({
+      department: nextDepartment,
+      positionCode: nextPosition,
+      ignoreEmployeeCode: current.code,
+    });
+
     const updated = {
-      ...list[index],
+      ...current,
       ...data,
-      code: list[index].code, // khóa mã
+      code: current.code, // khóa mã
       updatedAt: new Date().toISOString(),
     };
 
@@ -169,18 +264,20 @@ export const employeeService = {
 
     const now = new Date().toISOString();
 
-    list[index].deletedAt = now;
-    list[index].resignedAt = now;
-    list[index].status = "Nghỉ việc";
-    list[index].updatedAt = now;
+    list[index] = {
+      ...list[index],
+      deletedAt: now,
+      resignedAt: now,
+      status: "Nghỉ việc",
+      updatedAt: now,
+    };
 
     storage.set(list);
-
     return true;
   },
 
   /**
-   * Xoá nhân viên vĩnh viễn (hard delete)
+   * Xóa nhân viên vĩnh viễn (hard delete)
    */
   async destroy(code) {
     await delay();
@@ -202,7 +299,6 @@ export const employeeService = {
 
     list.splice(index, 1);
     storage.set(list);
-
     return true;
   },
 
@@ -227,12 +323,15 @@ export const employeeService = {
       );
     }
 
-    list[index].deletedAt = null;
-    list[index].resignedAt = null;
-    list[index].status = "Đang làm việc";
-    list[index].department = "";
-    list[index].position = "";
-    list[index].updatedAt = new Date().toISOString();
+    list[index] = {
+      ...list[index],
+      deletedAt: null,
+      resignedAt: null,
+      department: "",
+      position: "",
+      status: "Đang làm việc",
+      updatedAt: new Date().toISOString(),
+    };
 
     storage.set(list);
     return list[index];

@@ -34,16 +34,19 @@ const createHttpError = (status, message, field) => {
  * ========================= */
 /**
  * Source of truth: EMPLOYEE
- * → số lượng & danh sách nhân viên giữ chức vụ này
+ * → số lượng & danh sách nhân viên đang giữ chức vụ này
  */
 async function enrichPosition(position) {
+  if (!position) return null;
+
   const employees = await employeeService.getAll();
+  const posCode = normalizeCode(position.code);
 
   const assignees = employees.filter(
     (e) =>
-      normalizeCode(e.position) ===
-        normalizeCode(position.code) &&
-      !e.deletedAt
+      !e.deletedAt &&
+      normalizeCode(e.position) === posCode &&
+      e.status === "Đang làm việc"
   );
 
   return {
@@ -51,6 +54,18 @@ async function enrichPosition(position) {
     assignees,
     assigneeCount: assignees.length,
   };
+}
+
+async function hasActiveAssignees(positionCode) {
+  const employees = await employeeService.getAll();
+  const code = normalizeCode(positionCode);
+
+  return employees.some(
+    (e) =>
+      !e.deletedAt &&
+      e.status === "Đang làm việc" &&
+      normalizeCode(e.position) === code
+  );
 }
 
 /* =========================
@@ -63,13 +78,15 @@ export const positionService = {
    */
   async getAll({ includeDeleted = false } = {}) {
     await delay();
-    const list = storage.get();
 
+    const list = storage.get();
     const filtered = includeDeleted
       ? list
       : list.filter((p) => !p.deletedAt);
 
-    return Promise.all(filtered.map(enrichPosition));
+    return Promise.all(
+      filtered.map(enrichPosition)
+    );
   },
 
   /**
@@ -77,21 +94,23 @@ export const positionService = {
    */
   async getByCode(code) {
     await delay();
-    const c = normalizeCode(code);
 
+    const c = normalizeCode(code);
     const found = storage
       .get()
       .find((p) => normalizeCode(p.code) === c);
 
-    if (!found) return null;
-    return enrichPosition(found);
+    return found
+      ? enrichPosition(found)
+      : null;
   },
 
   /**
-   * Kiểm tra mã chức vụ tồn tại
+   * Kiểm tra mã chức vụ đã tồn tại
    */
   async checkCodeExists(code) {
     await delay(200);
+
     const c = normalizeCode(code);
     if (!c) return false;
 
@@ -132,8 +151,8 @@ export const positionService = {
     const position = {
       ...data,
       code,
-      status: data.status ?? "Hoạt động",
-      capacity: Number(data.capacity ?? 1),
+      status: data?.status ?? "Hoạt động",
+      capacity: Number(data?.capacity ?? 1),
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
@@ -167,7 +186,7 @@ export const positionService = {
     const updated = {
       ...list[index],
       ...data,
-      code: list[index].code, // khóa code
+      code: list[index].code, // khóa mã
       updatedAt: new Date().toISOString(),
     };
 
@@ -198,17 +217,52 @@ export const positionService = {
       );
     }
 
-    list[index] = {
-      ...list[index],
-      deletedAt: new Date().toISOString(),
-    };
+    const stillHasAssignees = await hasActiveAssignees(c);
+    if (stillHasAssignees) {
+      throw createHttpError(
+        400,
+        "Không thể xoá chức vụ vì đang có nhân viên đảm nhận"
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    list[index].deletedAt = now;
+    list[index].updatedAt = now;
 
     storage.set(list);
     return true;
   },
 
   /**
-   * Khôi phục chức vụ
+   * Xóa chức vụ vĩnh viễn (hard delete)
+   */
+  async destroy(code) {
+    await delay();
+
+    const c = normalizeCode(code);
+    const list = storage.get();
+
+    const index = list.findIndex(
+      (p) => normalizeCode(p.code) === c
+    );
+
+    if (index === -1) {
+      throw createHttpError(
+        404,
+        "Không tìm thấy chức vụ",
+        "code"
+      );
+    }
+
+    list.splice(index, 1);
+    storage.set(list);
+
+    return true;
+  },
+
+  /**
+   * Khôi phục chức vụ đã xóa
    */
   async restore(code) {
     await delay();
@@ -228,30 +282,11 @@ export const positionService = {
       );
     }
 
-    list[index] = {
-      ...list[index],
-      deletedAt: null,
-      updatedAt: new Date().toISOString(),
-    };
+    list[index].deletedAt = null;
+    list[index].updatedAt =
+      new Date().toISOString();
 
     storage.set(list);
     return list[index];
-  },
-
-  /**
-   * Xóa vĩnh viễn chức vụ
-   */
-  async destroy(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const list = storage
-      .get()
-      .filter(
-        (p) => normalizeCode(p.code) !== c
-      );
-
-    storage.set(list);
-    return true;
   },
 };

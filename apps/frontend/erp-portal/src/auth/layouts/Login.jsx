@@ -1,3 +1,5 @@
+// src/auth/layouts/Login.jsx
+
 import "../styles/login.css";
 import { useState } from "react";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
@@ -78,7 +80,12 @@ export default function Login() {
             <label>
               <input type="checkbox" /> Nhớ mật khẩu
             </label>
-            <a href="#">Quên mật khẩu?</a>
+            <span
+              className="forgot-password"
+              onClick={() => navigate("/doi-mat-khau")}
+            >
+              Quên mật khẩu?
+            </span>
           </div>
 
           {error && <div className="login-error">{error}</div>}

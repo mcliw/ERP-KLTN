@@ -1,5 +1,3 @@
-// apps/frontend/erp-portal/src/modules/hrm/components/layouts/DepartmentForm.jsx
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import "../styles/form.css";
 import {
@@ -8,44 +6,83 @@ import {
 } from "../../validations/department.schema";
 import { FaSave, FaTimes } from "react-icons/fa";
 
+/* =========================
+ * Constants
+ * ========================= */
+
 const DEFAULT_FORM = {
   code: "",
   name: "",
-  manager: "",
+  description: "",
   status: "Hoạt động",
 };
+
+/* =========================
+ * Component
+ * ========================= */
 
 export default function DepartmentForm({
   mode = "create",
   initialData = null,
+  employeeCount = 0, // ⭐ QUAN TRỌNG
   onSubmit,
   onCancel,
 }) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [errors, setErrors] = useState({});
-
-  const initialSnapshotRef = useRef(null);
   const [infoMessage, setInfoMessage] = useState("");
 
-  // load data khi edit
+  const initialSnapshotRef = useRef(null);
+
+  /* =========================
+   * Edit mode init
+   * ========================= */
+
   useEffect(() => {
-    if (mode === "edit" && initialData) {
-      const nextForm = {
-        ...DEFAULT_FORM,
-        ...initialData,
-      };
+    if (mode !== "edit" || !initialData) return;
 
-      setForm(nextForm);
+    const nextForm = {
+      ...DEFAULT_FORM,
+      ...initialData,
+    };
 
-      // snapshot để check dirty
-      initialSnapshotRef.current = { ...nextForm };
-    }
+    setForm(nextForm);
+    initialSnapshotRef.current = { ...nextForm };
   }, [mode, initialData]);
+
+  /* =========================
+   * Auto guard status
+   * ========================= */
+
+  useEffect(() => {
+    if (
+      mode === "edit" &&
+      form.status === "Ngưng hoạt động" &&
+      employeeCount > 0
+    ) {
+      setInfoMessage(
+        "Không thể ngưng hoạt động phòng ban khi vẫn còn nhân viên đang làm việc."
+      );
+
+      setForm((prev) => ({
+        ...prev,
+        status: "Hoạt động",
+      }));
+    }
+  }, [form.status, employeeCount, mode]);
+
+  /* =========================
+   * Handlers
+   * ========================= */
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setInfoMessage("");
-    setForm((prev) => ({ ...prev, [name]: value }));
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = (e) => {
@@ -61,39 +98,49 @@ export default function DepartmentForm({
         ? departmentCreateSchema
         : departmentUpdateSchema;
 
-    const result = schema.safeParse(form);
+    const submitData =
+      mode === "edit"
+        ? (() => {
+            const { code, ...rest } = form;
+            return rest;
+          })()
+        : form;
+
+    const result = schema.safeParse(submitData);
 
     if (!result.success) {
       const fieldErrors = {};
-      result.error.issues.forEach((err) => {
-        fieldErrors[err.path[0]] = err.message;
+      result.error.issues.forEach((i) => {
+        fieldErrors[i.path[0]] = i.message;
       });
 
       setErrors(fieldErrors);
 
-      // focus field lỗi đầu tiên
-      const firstErrorField = Object.keys(fieldErrors)[0];
       document
-        .querySelector(`[name="${firstErrorField}"]`)
+        .querySelector(
+          `[name="${Object.keys(fieldErrors)[0]}"]`
+        )
         ?.focus();
 
       return;
     }
 
     setErrors({});
+    setInfoMessage("");
 
-    const confirmMessage =
+    const ok = window.confirm(
       mode === "create"
         ? "Bạn có chắc chắn muốn tạo phòng ban này?"
-        : "Bạn có chắc chắn muốn lưu thay đổi phòng ban này?";
+        : "Bạn có chắc chắn muốn lưu thay đổi phòng ban này?"
+    );
+    if (!ok) return;
 
-    if (!window.confirm(confirmMessage)) return;
-
-    onSubmit?.(form);
+    onSubmit?.(submitData);
   };
 
-  const renderError = (field) =>
-    errors[field] && <span className="error">{errors[field]}</span>;
+  /* =========================
+   * Derived
+   * ========================= */
 
   const isDirty = useMemo(() => {
     if (mode !== "edit") return true;
@@ -105,8 +152,20 @@ export default function DepartmentForm({
     );
   }, [mode, form]);
 
+  const renderError = (field) =>
+    errors[field] && (
+      <span className="error">{errors[field]}</span>
+    );
+
+  /* =========================
+   * Render
+   * ========================= */
+
   return (
-    <form className="department-form" onSubmit={handleSubmit}>
+    <form
+      className="department-form"
+      onSubmit={handleSubmit}
+    >
       <h3>
         {mode === "create"
           ? "Tạo phòng ban"
@@ -114,7 +173,7 @@ export default function DepartmentForm({
       </h3>
 
       <div className="form-grid">
-        {/* Mã phòng ban */}
+        {/* Code */}
         <div className="form-group">
           <label>Mã phòng ban *</label>
           <input
@@ -126,28 +185,22 @@ export default function DepartmentForm({
           {renderError("code")}
         </div>
 
-        {/* Tên phòng ban */}
+        {/* Name */}
         <div className="form-group">
           <label>Tên phòng ban *</label>
           <input
             name="name"
             value={form.name}
             onChange={handleChange}
+            disabled={
+              mode === "edit" &&
+              form.status === "Ngưng hoạt động"
+            }
           />
           {renderError("name")}
         </div>
 
-        {/* Trưởng phòng */}
-        <div className="form-group">
-          <label>Trưởng phòng</label>
-          <input
-            name="manager"
-            value={form.manager}
-            onChange={handleChange}
-          />
-        </div>
-
-        {/* Trạng thái */}
+        {/* Status */}
         <div className="form-group">
           <label>Trạng thái</label>
           <select
@@ -155,7 +208,10 @@ export default function DepartmentForm({
             value={form.status}
             onChange={handleChange}
           >
-            <option value="Hoạt động">Hoạt động</option>
+            <option value="Hoạt động">
+              Hoạt động
+            </option>
+
             {mode === "edit" && (
               <option value="Ngưng hoạt động">
                 Ngưng hoạt động
@@ -163,10 +219,24 @@ export default function DepartmentForm({
             )}
           </select>
         </div>
+
+        {/* Description */}
+        <div className="form-group full-width">
+          <label>Mô tả</label>
+          <textarea
+            name="description"
+            value={form.description}
+            onChange={handleChange}
+            rows={3}
+          />
+          {renderError("description")}
+        </div>
       </div>
 
       {infoMessage && (
-        <div className="info-message">{infoMessage}</div>
+        <div className="info-message">
+          {infoMessage}
+        </div>
       )}
 
       <div className="form-actions">
@@ -179,8 +249,10 @@ export default function DepartmentForm({
               : ""
           }
         >
-          <FaSave style={{ marginRight: 5 }} />
-          {mode === "create" ? "Tạo phòng ban" : "Lưu thay đổi"}
+          <FaSave />{" "}
+          <span>{mode === "create"
+            ? "Tạo phòng ban"
+            : "Lưu thay đổi"}</span>
         </button>
 
         <button
@@ -188,8 +260,7 @@ export default function DepartmentForm({
           className="btn-secondary"
           onClick={onCancel}
         >
-          <FaTimes />
-          <span>Hủy</span>
+          <FaTimes /> <span>Hủy</span>
         </button>
       </div>
     </form>

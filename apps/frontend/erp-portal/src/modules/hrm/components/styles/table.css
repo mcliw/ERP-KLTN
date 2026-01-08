@@ -80,3 +80,10 @@
 .main-table td.actions button:hover {
   color: #0b3c9d;
 }
+
+.truncate {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

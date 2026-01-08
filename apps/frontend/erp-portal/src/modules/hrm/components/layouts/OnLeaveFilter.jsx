@@ -1,23 +1,43 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/OnLeaveFilter.jsx
 
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import "../styles/filter.css";
 
-export default function OnLeaveFilter({
-  keyword,
-  department,
-  leaveType,
-  status,
+const safeArray = (v) => (Array.isArray(v) ? v : []);
 
+export default function OnLeaveFilter({
+  // values
+  keyword = "",
+  department = "",
+  leaveType = "",
+  status = "",
+
+  // options
   departmentOptions = [],
   leaveTypeOptions = [],
   statusOptions = [],
 
+  // handlers
   onKeywordChange,
   onDepartmentChange,
   onLeaveTypeChange,
   onStatusChange,
+  onClear,
 }) {
+  const canClear =
+    keyword || department || leaveType || status;
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    onKeywordChange?.("");
+    onDepartmentChange?.("");
+    onLeaveTypeChange?.("");
+    onStatusChange?.("");
+  };
+
   return (
     <div className="filters">
       {/* SEARCH */}
@@ -25,20 +45,36 @@ export default function OnLeaveFilter({
         <FaSearch className="search-icon" />
         <input
           className="search-input"
-          placeholder="Tìm theo mã NV hoặc tên"
+          name="keyword"
           value={keyword}
-          onChange={(e) => onKeywordChange?.(e.target.value)}
+          placeholder="Tìm theo mã NV hoặc họ tên"
+          onChange={(e) =>
+            onKeywordChange?.(e.target.value)
+          }
         />
+
+        {canClear && (
+          <button
+            type="button"
+            className="clear-btn"
+            onClick={handleClear}
+            title="Xoá bộ lọc"
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
       {/* DEPARTMENT */}
       <select
         className="input"
         value={department}
-        onChange={(e) => onDepartmentChange?.(e.target.value)}
+        onChange={(e) =>
+          onDepartmentChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả phòng ban</option>
-        {departmentOptions.map((d) => (
+        {safeArray(departmentOptions).map((d) => (
           <option key={d.value} value={d.value}>
             {d.label}
           </option>
@@ -49,10 +85,12 @@ export default function OnLeaveFilter({
       <select
         className="input"
         value={leaveType}
-        onChange={(e) => onLeaveTypeChange?.(e.target.value)}
+        onChange={(e) =>
+          onLeaveTypeChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả loại nghỉ</option>
-        {leaveTypeOptions.map((t) => (
+        {safeArray(leaveTypeOptions).map((t) => (
           <option key={t.value} value={t.value}>
             {t.label}
           </option>
@@ -63,10 +101,12 @@ export default function OnLeaveFilter({
       <select
         className="input"
         value={status}
-        onChange={(e) => onStatusChange?.(e.target.value)}
+        onChange={(e) =>
+          onStatusChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả trạng thái</option>
-        {statusOptions.map((s) => (
+        {safeArray(statusOptions).map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
           </option>

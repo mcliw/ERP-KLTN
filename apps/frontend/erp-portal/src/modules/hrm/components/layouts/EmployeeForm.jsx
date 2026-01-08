@@ -29,19 +29,17 @@ const DEFAULT_FORM = {
   position: "",
   joinDate: "",
   status: "Đang làm việc",
-
   avatar: null,
   avatarPreview: "",
   avatarUrl: "",
-
   cvFile: null,
   cvUrl: "",
-
   healthCertFile: null,
   healthCertUrl: "",
-
   degreeFile: null,
   degreeUrl: "",
+  contractFile: null,
+  contractUrl: "",
 };
 
 /* =========================
@@ -131,6 +129,11 @@ export default function EmployeeForm({
       ...initialData,
       avatar: null,
       avatarPreview: initialData.avatarUrl || "",
+
+      cvFile: null,
+      healthCertFile: null,
+      degreeFile: null,
+      contractFile: null,
     };
 
     setForm(nextForm);
@@ -139,8 +142,26 @@ export default function EmployeeForm({
       ...nextForm,
       avatar: null,
       avatarPreview: "",
+      cvFile: null,
+      healthCertFile: null,
+      degreeFile: null,
+      contractFile: null,
     };
   }, [mode, initialData]);
+
+    /* =========================
+   * Auto clear when resigned
+   * ========================= */
+
+  useEffect(() => {
+    if (form.status === "Nghỉ việc") {
+      setForm((prev) => ({
+        ...prev,
+        department: "",
+        position: "",
+      }));
+    }
+  }, [form.status]);
 
   /* =========================
    * Handlers
@@ -193,32 +214,6 @@ export default function EmployeeForm({
 
     reader.readAsDataURL(file);
   };
-
-  useEffect(() => {
-    if (mode !== "edit" || !initialData) return;
-
-    const nextForm = {
-      ...DEFAULT_FORM,
-      ...initialData,
-      avatar: null,
-      avatarPreview: initialData.avatarUrl || "",
-
-      cvFile: null,
-      healthCertFile: null,
-      degreeFile: null,
-    };
-
-    setForm(nextForm);
-
-    initialSnapshotRef.current = {
-      ...nextForm,
-      avatar: null,
-      avatarPreview: "",
-      cvFile: null,
-      healthCertFile: null,
-      degreeFile: null,
-    };
-  }, [mode, initialData]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -459,13 +454,7 @@ export default function EmployeeForm({
             </option>
 
             {positions.map((p) => {
-              const assigned =
-                typeof p.assigneeCount === "number"
-                  ? p.assigneeCount
-                  : p.assigneeCode
-                  ? 1
-                  : 0;
-
+              const assigned = p.assigneeCount ?? 0;
               const capacity = p.capacity ?? 1;
               const isFull = assigned >= capacity;
 
@@ -508,7 +497,22 @@ export default function EmployeeForm({
         </div>
 
         {/* ==== HỒ SƠ GIẤY TỜ ==== */}
-        <div className="form-group full-width">
+        <div className="form-group">
+          <label>Hợp đồng lao động (PDF)</label>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={handlePdfUpload("contractFile", "contractUrl")}
+          />
+
+          {form.contractUrl && (
+            <a href={form.contractUrl} target="_blank" rel="noreferrer">
+              Xem hợp đồng
+            </a>
+          )}
+        </div>
+
+        <div className="form-group">
           <label>CV (PDF)</label>
           <input
             type="file"
@@ -522,7 +526,7 @@ export default function EmployeeForm({
           )}
         </div>
 
-        <div className="form-group full-width">
+        <div className="form-group">
           <label>Giấy khám sức khỏe (PDF)</label>
           <input
             type="file"
@@ -539,7 +543,7 @@ export default function EmployeeForm({
           )}
         </div>
 
-        <div className="form-group full-width">
+        <div className="form-group">
           <label>Bằng cấp / Chứng chỉ (PDF)</label>
           <input
             type="file"
@@ -568,8 +572,8 @@ export default function EmployeeForm({
               : ""
           }
         >
-          <FaSave style={{ marginRight: "5px" }}/>{" "}
-          {mode === "create" ? "Tạo hồ sơ" : "Lưu thay đổi"}
+          <FaSave />{" "}
+          <span>{mode === "create" ? "Tạo hồ sơ" : "Lưu thay đổi"}</span>
         </button>
 
         <button

@@ -1,17 +1,34 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/DepartmentFilter.jsx
 
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import "../styles/filter.css";
 
-export default function DepartmentFilter({
-  keyword,
-  status,
+const safeArray = (v) => (Array.isArray(v) ? v : []);
 
+export default function DepartmentFilter({
+  // values
+  keyword = "",
+  status = "",
+
+  // options: [{ value, label }]
   statusOptions = [],
 
+  // handlers
   onKeywordChange,
   onStatusChange,
+  onClear,
 }) {
+  const canClear = keyword || status;
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    onKeywordChange?.("");
+    onStatusChange?.("");
+  };
+
   return (
     <div className="filters">
       {/* SEARCH */}
@@ -19,20 +36,36 @@ export default function DepartmentFilter({
         <FaSearch className="search-icon" />
         <input
           className="search-input"
-          placeholder="Tìm theo mã hoặc tên phòng ban"
+          name="keyword"
           value={keyword}
-          onChange={(e) => onKeywordChange(e.target.value)}
+          placeholder="Tìm theo mã hoặc tên phòng ban"
+          onChange={(e) =>
+            onKeywordChange?.(e.target.value)
+          }
         />
+
+        {canClear && (
+          <button
+            type="button"
+            className="clear-btn"
+            onClick={handleClear}
+            title="Xoá bộ lọc"
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
       {/* STATUS */}
       <select
         className="input"
         value={status}
-        onChange={(e) => onStatusChange(e.target.value)}
+        onChange={(e) =>
+          onStatusChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả trạng thái</option>
-        {statusOptions.map((s) => (
+        {safeArray(statusOptions).map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
           </option>

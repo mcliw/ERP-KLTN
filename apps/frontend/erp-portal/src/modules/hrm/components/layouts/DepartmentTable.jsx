@@ -9,12 +9,6 @@ import {
 } from "react-icons/fa";
 import "../styles/table.css";
 
-const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "—";
-
-const normalizeStatus = (v) =>
-  String(v || "").toLowerCase();
-
 export default function DepartmentTable({
   data = [],
   page = 1,
@@ -25,8 +19,11 @@ export default function DepartmentTable({
   onView,
   onEdit,
   onDelete,
+  renderExtraActions,
 }) {
-  const hasActions = onView || onEdit || onDelete;
+  const hasActions =
+    onView || onEdit || onDelete || renderExtraActions;
+
   const colSpan = hasActions ? 7 : 6;
 
   return (
@@ -37,13 +34,11 @@ export default function DepartmentTable({
             <th>Mã phòng ban</th>
             <th>Tên phòng ban</th>
             <th>Trưởng phòng</th>
-            <th>Số lượng nhân viên</th>
-            <th>Ngày tạo</th>
+            <th>Mô tả</th>
+            <th>Số NV</th>
             <th>Trạng thái</th>
             {hasActions && (
-              <th className="action-col">
-                Thao tác
-              </th>
+              <th className="action-col">Thao tác</th>
             )}
           </tr>
         </thead>
@@ -56,84 +51,75 @@ export default function DepartmentTable({
               </td>
             </tr>
           ) : (
-            data.map((d) => {
-              const isDeleted = Boolean(d.deletedAt);
+            data.map((d) => (
+              <tr
+                key={d.code}
+                className={[
+                  onRowClick && "clickable",
+                  d.deletedAt && "deleted",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => onRowClick?.(d)}
+              >
+                <td>{d.code}</td>
+                <td>{d.name}</td>
+                <td>{d.managerName || "—"}</td>
+                <td>{d.description || "—"}</td>
+                <td>{d.employeeCount ?? 0}</td>
+                <td>
+                  {d.deletedAt
+                    ? "Đã xoá"
+                    : d.status === "Ngưng hoạt động"
+                    ? "Ngưng hoạt động"
+                    : "Hoạt động"}
+                </td>
 
-              return (
-                <tr
-                  key={d.code}
-                  className={[
-                    onRowClick && "clickable",
-                    isDeleted && "deleted",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => onRowClick?.(d)}
-                >
-                  <td>{d.code}</td>
-                  <td>{d.name}</td>
-                  <td>{d.manager || "—"}</td>
-                  <td>{d.employeeCount ?? 0}</td>
-                  <td>{formatDate(d.createdAt)}</td>
+                {hasActions && (
+                  <td
+                    className="actions"
+                    onClick={(ev) =>
+                      ev.stopPropagation()
+                    }
+                  >
+                    {onView && (
+                      <button
+                        title="Xem"
+                        onClick={() => onView(d)}
+                      >
+                        <FaEye />
+                      </button>
+                    )}
 
-                  <td>
-                    <span
-                      className={`status ${
-                        normalizeStatus(d.status) ===
-                        "hoạt động"
-                          ? "active"
-                          : "inactive"
-                      }`}
-                    >
-                      {d.status}
-                    </span>
+                    {onEdit && !d.deletedAt && (
+                      <button
+                        title="Sửa"
+                        onClick={() => onEdit(d)}
+                      >
+                        <FaEdit />
+                      </button>
+                    )}
+
+                    {onDelete && !d.deletedAt && (
+                      <button
+                        className="danger"
+                        title={
+                          d.employeeCount > 0
+                            ? "Không thể xoá vì vẫn còn nhân viên"
+                            : "Xoá"
+                        }
+                        onClick={() => onDelete(d)}
+                      >
+                        <FaTrash />
+                      </button>
+                    )}
+
+                    {renderExtraActions &&
+                      renderExtraActions(d)}
                   </td>
-
-                  {hasActions && (
-                    <td
-                      className="actions"
-                      onClick={(ev) =>
-                        ev.stopPropagation()
-                      }
-                    >
-                      {onView && (
-                        <button
-                          title="Xem"
-                          onClick={() =>
-                            onView(d)
-                          }
-                        >
-                          <FaEye />
-                        </button>
-                      )}
-
-                      {onEdit && !isDeleted && (
-                        <button
-                          title="Sửa"
-                          onClick={() =>
-                            onEdit(d)
-                          }
-                        >
-                          <FaEdit />
-                        </button>
-                      )}
-
-                      {onDelete && !isDeleted && (
-                        <button
-                          className="danger"
-                          title="Xoá"
-                          onClick={() =>
-                            onDelete(d)
-                          }
-                        >
-                          <FaTrash />
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              );
-            })
+                )}
+              </tr>
+            ))
           )}
         </tbody>
       </table>

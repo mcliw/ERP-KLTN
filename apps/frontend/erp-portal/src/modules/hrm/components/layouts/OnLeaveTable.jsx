@@ -5,12 +5,13 @@ import {
   FaCaretRight,
   FaEye,
   FaEdit,
+  FaTrash,
 } from "react-icons/fa";
 import "../styles/table.css";
+import { useAuthStore } from "../../../../auth/auth.store";
+import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 
-const normalizeCode = (v) =>
-  String(v || "").trim().toUpperCase();
-
+/* ================= HELPERS ================= */
 const formatDate = (v) =>
   v ? new Date(v).toLocaleDateString("vi-VN") : "—";
 
@@ -19,8 +20,6 @@ const normalizeStatus = (v) =>
 
 export default function OnLeaveTable({
   data = [],
-  departmentMap = {},
-  positionMap = {},
   page = 1,
   totalPages = 1,
   onPrev,
@@ -28,19 +27,15 @@ export default function OnLeaveTable({
   onRowClick,
   onView,
   onEdit,
+  onDelete,
+  renderExtraActions,
 }) {
-  const hasActions = onView || onEdit;
+  const { user } = useAuthStore();
+
+  const hasActions =
+    onView || onEdit || onDelete || renderExtraActions;
+
   const colSpan = hasActions ? 10 : 9;
-
-  const resolveDepartment = (value) => {
-    const key = normalizeCode(value);
-    return departmentMap[key] || value || "—";
-  };
-
-  const resolvePosition = (value) => {
-    const key = normalizeCode(value);
-    return positionMap[key] || value || "—";
-  };
 
   return (
     <>
@@ -57,9 +52,7 @@ export default function OnLeaveTable({
             <th>Lý do</th>
             <th>Trạng thái</th>
             {hasActions && (
-              <th className="action-col">
-                Thao tác
-              </th>
+              <th className="action-col">Thao tác</th>
             )}
           </tr>
         </thead>
@@ -72,78 +65,75 @@ export default function OnLeaveTable({
               </td>
             </tr>
           ) : (
-            data.map((e) => {
-              const isDeleted = Boolean(e.deletedAt);
+            data.map((o) => {
+              const isPending = normalizeStatus(o.status) === "chờ duyệt";
+              const isManager = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
+              const canEditOrDelete = isManager || isPending;
+
+              const isDeleted = Boolean(o.deletedAt);
 
               return (
                 <tr
-                  key={e.id}
+                  key={o.id}
                   className={[
                     onRowClick && "clickable",
                     isDeleted && "deleted",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={() => onRowClick?.(e)}
+                  onClick={() => onRowClick?.(o)}
                 >
-                  <td>{e.employeeCode}</td>
-                  <td>{e.employeeName}</td>
-                  <td>
-                    {resolveDepartment(e.department)}
-                  </td>
-                  <td>
-                    {resolvePosition(e.position)}
-                  </td>
-                  <td>{e.leaveType}</td>
-                  <td>{formatDate(e.fromDate)}</td>
-                  <td>{formatDate(e.toDate)}</td>
-                  <td>{e.reason || "—"}</td>
+                  <td>{o.employeeCode || "-"}</td>
+                  <td>{o.employeeName || "-"}</td>
+                  <td>{o.departmentName || "-"}</td>
+                  <td>{o.positionName || "-"}</td>
+                  <td>{o.leaveType || "-"}</td>
+                  <td>{formatDate(o.fromDate)}</td>
+                  <td>{formatDate(o.toDate)}</td>
+                  <td>{o.reason || "—"}</td>
 
                   <td>
                     <span
                       className={`status ${
-                        normalizeStatus(e.status) ===
-                        "đã duyệt"
+                        isDeleted
+                          ? "deleted"
+                          : normalizeStatus(o.status) === "đã duyệt"
                           ? "active"
-                          : normalizeStatus(
-                              e.status
-                            ) === "từ chối"
+                          : normalizeStatus(o.status) === "từ chối"
                           ? "inactive"
                           : ""
                       }`}
                     >
-                      {e.status}
+                      {isDeleted
+                        ? "Đã xoá"
+                        : o.status || "Không rõ"}
                     </span>
                   </td>
 
                   {hasActions && (
                     <td
                       className="actions"
-                      onClick={(ev) =>
-                        ev.stopPropagation()
-                      }
+                      onClick={(ev) => ev.stopPropagation()}
                     >
                       {onView && (
-                        <button
-                          title="Xem"
-                          onClick={() =>
-                            onView(e)
-                          }
-                        >
+                        <button title="Xem" onClick={() => onView(o)}>
                           <FaEye />
                         </button>
                       )}
 
-                      {onEdit && !isDeleted && (
-                        <button
-                          title="Sửa"
-                          onClick={() =>
-                            onEdit(e)
-                          }
-                        >
+                      {onEdit && !isDeleted && canEditOrDelete && (
+                        <button title="Sửa" onClick={() => onEdit(o)}>
                           <FaEdit />
                         </button>
                       )}
+
+                      {onDelete && !isDeleted && canEditOrDelete && (
+                        <button className="danger" title="Xóa" onClick={() => onDelete(o)}>
+                          <FaTrash />
+                        </button>
+                      )}
+
+                      {renderExtraActions?.(o)}
                     </td>
                   )}
                 </tr>

@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 /* =========================
- * Common helpers
+ * Helpers
  * ========================= */
 
 // Cho phép "" từ input → coi như undefined
@@ -17,19 +17,8 @@ const emptyToUndefined = (schema) =>
 export const baseOnLeaveFields = {
   employeeCode: z
     .string()
+    .trim()
     .min(1, "Mã nhân viên bắt buộc"),
-
-  employeeName: z
-    .string()
-    .min(1, "Tên nhân viên bắt buộc"),
-
-  department: z
-    .string()
-    .min(1, "Phòng ban bắt buộc"),
-
-  position: z
-    .string()
-    .min(1, "Chức vụ bắt buộc"),
 
   leaveType: z.enum(
     ["Nghỉ phép", "Nghỉ không lương", "Nghỉ việc"],
@@ -48,7 +37,11 @@ export const baseOnLeaveFields = {
     .string()
     .min(1, "Ngày kết thúc bắt buộc"),
 
-  reason: emptyToUndefined(z.string()),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "Lý do bắt buộc")
+    .max(500, "Lý do tối đa 500 ký tự"),
 
   status: z.enum(
     ["Chờ duyệt", "Đã duyệt", "Từ chối"],
@@ -58,10 +51,12 @@ export const baseOnLeaveFields = {
       }),
     }
   ),
+  approvedAt: z.string().optional(),
+  approvedBy: z.string().optional(),
 };
 
 /* =========================
- * Business rule
+ * Business rules (schema-level)
  * ========================= */
 
 const validDateRangeRule = {
@@ -70,7 +65,7 @@ const validDateRangeRule = {
 };
 
 /* =========================
- * CREATE schema
+ * CREATE
  * ========================= */
 
 export const onLeaveCreateSchema = z
@@ -80,26 +75,29 @@ export const onLeaveCreateSchema = z
     // Khi tạo mới → luôn Chờ duyệt
     status: z.literal("Chờ duyệt"),
   })
-  .refine(
-    (data) =>
-      new Date(data.fromDate) <=
-      new Date(data.toDate),
-    validDateRangeRule
-  );
+  .superRefine((data, ctx) => {
+    const from = new Date(data.fromDate);
+    const to = new Date(data.toDate);
+
+    if (isNaN(from) || isNaN(to) || from > to) {
+      ctx.addIssue(validDateRangeRule);
+    }
+  });
 
 /* =========================
- * UPDATE schema
+ * UPDATE
  * ========================= */
 
 export const onLeaveUpdateSchema = z
-  .object({
-    ...baseOnLeaveFields,
-
-    // Status được phép đổi khi duyệt / từ chối
+  .object(baseOnLeaveFields)
+  .omit({
+    employeeCode: true, // khóa nhân viên (service cũng khóa)
   })
-  .refine(
-    (data) =>
-      new Date(data.fromDate) <=
-      new Date(data.toDate),
-    validDateRangeRule
-  );
+  .superRefine((data, ctx) => {
+    const from = new Date(data.fromDate);
+    const to = new Date(data.toDate);
+
+    if (isNaN(from) || isNaN(to) || from > to) {
+      ctx.addIssue(validDateRangeRule);
+    }
+  });

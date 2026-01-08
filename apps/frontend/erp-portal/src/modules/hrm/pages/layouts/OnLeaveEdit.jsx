@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import OnLeaveForm from "../../components/layouts/OnLeaveForm";
 import { onLeaveService } from "../../services/onLeave.service";
+import { useAuthStore } from "../../../../auth/auth.store";
 
 export default function OnLeaveEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const [onLeave, setOnLeave] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,7 @@ export default function OnLeaveEdit() {
       <OnLeaveForm
         mode="edit"
         initialData={onLeave}
+        currentUser={user}
         onSubmit={handleUpdate}
         onCancel={() => navigate(-1)}
       />

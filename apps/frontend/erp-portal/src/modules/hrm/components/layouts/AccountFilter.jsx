@@ -1,20 +1,38 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/AccountFilter.jsx
 
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import "../styles/filter.css";
 
+const safeArray = (v) => (Array.isArray(v) ? v : []);
+
 export default function AccountFilter({
-  keyword,
-  status,
-  role,
+  // values
+  keyword = "",
+  role = "",
+  status = "",
 
-  statusOptions = [],
+  // options
   roleOptions = [],
+  statusOptions = [],
 
+  // handlers
   onKeywordChange,
-  onStatusChange,
   onRoleChange,
+  onStatusChange,
+  onClear,
 }) {
+  const canClear = keyword || role || status;
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
+    onKeywordChange?.("");
+    onRoleChange?.("");
+    onStatusChange?.("");
+  };
+
   return (
     <div className="filters">
       {/* SEARCH */}
@@ -22,20 +40,36 @@ export default function AccountFilter({
         <FaSearch className="search-icon" />
         <input
           className="search-input"
-          placeholder="Tìm theo tài khoản, họ tên hoặc email"
+          name="keyword"
           value={keyword}
-          onChange={(e) => onKeywordChange(e.target.value)}
+          placeholder="Tìm theo tài khoản, họ tên hoặc email"
+          onChange={(e) =>
+            onKeywordChange?.(e.target.value)
+          }
         />
+
+        {canClear && (
+          <button
+            type="button"
+            className="clear-btn"
+            onClick={handleClear}
+            title="Xoá bộ lọc"
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
       {/* ROLE */}
       <select
         className="input"
         value={role}
-        onChange={(e) => onRoleChange?.(e.target.value)}
+        onChange={(e) =>
+          onRoleChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả vai trò</option>
-        {roleOptions.map((r) => (
+        {safeArray(roleOptions).map((r) => (
           <option key={r.value} value={r.value}>
             {r.label}
           </option>
@@ -46,10 +80,12 @@ export default function AccountFilter({
       <select
         className="input"
         value={status}
-        onChange={(e) => onStatusChange(e.target.value)}
+        onChange={(e) =>
+          onStatusChange?.(e.target.value)
+        }
       >
         <option value="">Tất cả trạng thái</option>
-        {statusOptions.map((s) => (
+        {safeArray(statusOptions).map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
           </option>

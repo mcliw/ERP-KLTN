@@ -18,17 +18,16 @@ export default function AccountRestore() {
 
   useEffect(() => {
     setLoading(true);
-    accountService.getAll().then((data) => {
-      const deletedAccounts = data.filter(
-        (a) =>
-          a.deleted === true ||
-          a.status === "Đã xoá" ||
-          a.status === "Ngưng hoạt động"
-      );
 
-      setAccounts(deletedAccounts);
-      setLoading(false);
-    });
+    accountService
+      .getAll({ includeDeleted: true })
+      .then((data) => {
+        const deletedAccounts = data.filter(
+          (a) => Boolean(a.deletedAt)
+        );
+        setAccounts(deletedAccounts);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const totalPages = Math.ceil(accounts.length / pageSize);
@@ -42,15 +41,11 @@ export default function AccountRestore() {
     if (!window.confirm(`Khôi phục tài khoản ${account.username}?`)) return;
 
     try {
-      await accountService.update(account.username, {
-        status: "Hoạt động",
-        deleted: false,
-      });
-
+      await accountService.restore(account.username); // ✅ FIX 3
       setAccounts((prev) =>
         prev.filter((a) => a.username !== account.username)
       );
-    } catch (e) {
+    } catch {
       alert("Không thể khôi phục tài khoản");
     }
   };

@@ -1,6 +1,7 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/department.service.js
 
 import { employeeService } from "./employee.service";
+import { positionService } from "./position.service";
 
 const KEY = "DEPARTMENTS";
 
@@ -33,20 +34,52 @@ const createHttpError = (status, message, field) => {
  * Enrich helpers
  * ========================= */
 
+/**
+ * Enrich phòng ban:
+ * - Số lượng nhân viên đang làm việc
+ * - Tên trưởng phòng (nếu có)
+ */
 async function enrichDepartment(department) {
+  if (!department) return null;
+
   const employees = await employeeService.getAll();
+  const positions = await positionService.getAll();
+
+  const deptCode = normalizeCode(department.code);
 
   const activeEmployees = employees.filter(
     (e) =>
-      normalizeCode(e.department) ===
-        normalizeCode(department.code) &&
-      !e.deletedAt
+      !e.deletedAt &&
+      e.status === "Đang làm việc" &&
+      normalizeCode(e.department) === deptCode
   );
+
+  const manager = activeEmployees.find((e) => {
+    const pos = positions.find(
+      (p) =>
+        normalizeCode(p.code) ===
+        normalizeCode(e.position)
+    );
+    return pos?.name === "Trưởng phòng";
+  });
 
   return {
     ...department,
     employeeCount: activeEmployees.length,
+    managerName: manager?.name || null,
   };
+}
+
+async function hasActiveEmployees(departmentCode) {
+  const employees = await employeeService.getAll();
+  const code = normalizeCode(departmentCode);
+
+  return employees.some(
+    (e) =>
+      !e.deletedAt &&
+      e.status === "Đang làm việc" &&
+      normalizeCode(e.department) === code
+  );
 }
 
 /* =========================
@@ -59,13 +92,15 @@ export const departmentService = {
    */
   async getAll({ includeDeleted = false } = {}) {
     await delay();
-    const list = storage.get();
 
+    const list = storage.get();
     const filtered = includeDeleted
       ? list
       : list.filter((d) => !d.deletedAt);
 
-    return Promise.all(filtered.map(enrichDepartment));
+    return Promise.all(
+      filtered.map(enrichDepartment)
+    );
   },
 
   /**
@@ -73,21 +108,23 @@ export const departmentService = {
    */
   async getByCode(code) {
     await delay();
-    const c = normalizeCode(code);
 
+    const c = normalizeCode(code);
     const found = storage
       .get()
       .find((d) => normalizeCode(d.code) === c);
 
-    if (!found) return null;
-    return enrichDepartment(found);
+    return found
+      ? enrichDepartment(found)
+      : null;
   },
 
   /**
-   * Kiểm tra mã phòng ban tồn tại
+   * Kiểm tra mã phòng ban đã tồn tại
    */
   async checkCodeExists(code) {
     await delay(200);
+
     const c = normalizeCode(code);
     if (!c) return false;
 
@@ -128,7 +165,7 @@ export const departmentService = {
     const department = {
       ...data,
       code,
-      status: data.status ?? "Hoạt động",
+      status: data?.status ?? "Hoạt động",
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
@@ -162,7 +199,7 @@ export const departmentService = {
     const updated = {
       ...list[index],
       ...data,
-      code: list[index].code, // khóa code
+      code: list[index].code, // khóa mã
       updatedAt: new Date().toISOString(),
     };
 
@@ -193,17 +230,53 @@ export const departmentService = {
       );
     }
 
-    list[index] = {
-      ...list[index],
-      deletedAt: new Date().toISOString(),
-    };
+    /* ===== NGHIỆP VỤ CHẶN XOÁ ===== */
+    const stillHasEmployees = await hasActiveEmployees(c);
+    if (stillHasEmployees) {
+      throw createHttpError(
+        400,
+        "Không thể xoá phòng ban vì vẫn còn nhân viên đang làm việc"
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    list[index].deletedAt = now;
+    list[index].updatedAt = now;
 
     storage.set(list);
     return true;
   },
 
   /**
-   * Khôi phục phòng ban
+   * Xóa phòng ban vĩnh viễn (hard delete)
+   */
+  async destroy(code) {
+    await delay();
+
+    const c = normalizeCode(code);
+    const list = storage.get();
+
+    const index = list.findIndex(
+      (d) => normalizeCode(d.code) === c
+    );
+
+    if (index === -1) {
+      throw createHttpError(
+        404,
+        "Không tìm thấy phòng ban",
+        "code"
+      );
+    }
+
+    list.splice(index, 1);
+    storage.set(list);
+
+    return true;
+  },
+
+  /**
+   * Khôi phục phòng ban đã xóa
    */
   async restore(code) {
     await delay();
@@ -223,30 +296,11 @@ export const departmentService = {
       );
     }
 
-    list[index] = {
-      ...list[index],
-      deletedAt: null,
-      updatedAt: new Date().toISOString(),
-    };
+    list[index].deletedAt = null;
+    list[index].updatedAt =
+      new Date().toISOString();
 
     storage.set(list);
     return list[index];
-  },
-
-  /**
-   * Xóa vĩnh viễn phòng ban
-   */
-  async destroy(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const list = storage
-      .get()
-      .filter(
-        (d) => normalizeCode(d.code) !== c
-      );
-
-    storage.set(list);
-    return true;
   },
 };

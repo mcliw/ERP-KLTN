@@ -3,9 +3,11 @@
 import { useNavigate } from "react-router-dom";
 import OnLeaveForm from "../../components/layouts/OnLeaveForm";
 import { onLeaveService } from "../../services/onLeave.service";
+import { useAuthStore } from "../../../../auth/auth.store";
 
 export default function OnLeaveCreate() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const handleCreate = async (data) => {
     try {
@@ -22,6 +24,7 @@ export default function OnLeaveCreate() {
     <div style={{ padding: 20 }}>
       <OnLeaveForm
         mode="create"
+        currentUser={user}
         onSubmit={handleCreate}
         onCancel={() => navigate(-1)}
       />

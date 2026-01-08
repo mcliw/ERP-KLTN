@@ -26,14 +26,24 @@ export const baseDepartmentFields = {
     .trim()
     .min(1, "Tên phòng ban bắt buộc"),
 
-  // Người quản lý (có thể chưa chọn)
+  description: emptyToUndefined(
+    z
+      .string()
+      .trim()
+      .max(500, "Mô tả tối đa 500 ký tự")
+  ),
+
+  // ⚠️ Field legacy – chỉ giữ nếu form/service còn dùng
   manager: emptyToUndefined(z.string()),
 
-  status: z.enum(["Hoạt động", "Ngưng hoạt động"], {
-    errorMap: () => ({
-      message: "Trạng thái không hợp lệ",
-    }),
-  }),
+  status: z.enum(
+    ["Hoạt động", "Ngưng hoạt động"],
+    {
+      errorMap: () => ({
+        message: "Trạng thái không hợp lệ",
+      }),
+    }
+  ),
 };
 
 /* =========================
@@ -59,6 +69,6 @@ export const departmentCreateSchema = z.object({
 export const departmentUpdateSchema = z.object({
   ...baseDepartmentFields,
 
-  // 🔒 Không cho sửa mã phòng ban
+  // 🔒 Không cho sửa mã phòng ban (giống employeeUpdateSchema)
   code: z.undefined().optional(),
 });

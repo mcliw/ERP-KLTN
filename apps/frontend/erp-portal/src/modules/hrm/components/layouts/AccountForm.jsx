@@ -8,6 +8,8 @@ import {
 } from "../../validations/account.schema";
 import { FaSave, FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
 import { employeeService } from "../../services/employee.service";
+import { positionService } from "../../services/position.service";
+import { departmentService } from "../../services/department.service";
 
 const DEFAULT_FORM = {
   username: "",
@@ -35,6 +37,48 @@ export default function AccountForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const initialSnapshotRef = useRef(null);
+
+  /* ================= LOAD POSITIONS ================= */
+  const [positionMap, setPositionMap] = useState({});
+
+  useEffect(() => {
+    const loadPositions = async () => {
+      try {
+        const list = await positionService.getAll();
+        const map = {};
+        list.forEach((p) => {
+          map[p.code] = p.name;
+        });
+        setPositionMap(map);
+      } catch (err) {
+        console.error("Không tải được danh sách chức vụ", err);
+        setPositionMap({});
+      }
+    };
+
+    loadPositions();
+  }, []);
+
+  /* ================= LOAD DEPARTMENTS ================= */
+  const [departmentMap, setDepartmentMap] = useState({});
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const list = await departmentService.getAll();
+        const map = {};
+        list.forEach((p) => {
+          map[p.code] = p.name;
+        });
+        setDepartmentMap(map);
+      } catch (err) {
+        console.error("Không tải được danh sách chức vụ", err);
+        setDepartmentMap({});
+      }
+    };
+
+    loadDepartments();
+  }, []);
 
   /* ================= LOAD EMPLOYEES ================= */
   const [employees, setEmployees] = useState([]);
@@ -152,6 +196,11 @@ export default function AccountForm({
         document.querySelector(`[name="password"]`)?.focus();
         return;
       }
+      if (pw.length < 6) { // thêm kiểm tra 6 ký tự
+        setErrors((prev) => ({ ...prev, password: "Mật khẩu phải ít nhất 6 ký tự" }));
+        document.querySelector(`[name="password"]`)?.focus();
+        return;
+      }
       if (!cpw) {
         setErrors((prev) => ({
           ...prev,
@@ -178,6 +227,11 @@ export default function AccountForm({
             ...prev,
             password: "Vui lòng nhập mật khẩu mới",
           }));
+          document.querySelector(`[name="password"]`)?.focus();
+          return;
+        }
+        if (pw.length < 6) { // thêm kiểm tra 6 ký tự
+          setErrors((prev) => ({ ...prev, password: "Mật khẩu phải ít nhất 6 ký tự" }));
           document.querySelector(`[name="password"]`)?.focus();
           return;
         }
@@ -274,13 +328,19 @@ export default function AccountForm({
         {/* Phòng ban */}
         <div className="form-group">
           <label>Phòng ban</label>
-          <input value={form.department} disabled />
+          <input
+            value={departmentMap[form.department] || "—"}
+            disabled
+          />
         </div>
 
         {/* Chức vụ */}
         <div className="form-group">
           <label>Chức vụ</label>
-          <input value={form.position} disabled />
+          <input
+            value={positionMap[form.position] || "—"}
+            disabled
+          />
         </div>
 
         {/* Mật khẩu */}
@@ -389,7 +449,6 @@ export default function AccountForm({
         <button
           type="submit"
           className="btn-primary"
-          disabled={mode === "edit" && !isDirty}
           title={mode === "edit" && !isDirty ? "Chưa có thay đổi để lưu" : ""}
         >
           <FaSave style={{ marginRight: 5 }} />

@@ -12,9 +12,6 @@ import "../styles/table.css";
 const normalizeCode = (v) =>
   String(v || "").trim().toUpperCase();
 
-const normalizeStatus = (v) =>
-  String(v || "").toLowerCase();
-
 export default function PositionTable({
   data = [],
   departmentMap = {},
@@ -26,13 +23,14 @@ export default function PositionTable({
   onView,
   onEdit,
   onDelete,
+  renderExtraActions,
 }) {
-  const hasActions = onView || onEdit || onDelete;
-  const colSpan = hasActions ? 8 : 7;
+  const hasActions =
+    onView || onEdit || onDelete || renderExtraActions;
 
   const resolveDepartment = (value) => {
     const key = normalizeCode(value);
-    return departmentMap[key] || value || "—";
+    return departmentMap[key] || value || "";
   };
 
   return (
@@ -43,14 +41,12 @@ export default function PositionTable({
             <th>Mã chức vụ</th>
             <th>Tên chức vụ</th>
             <th>Người đảm nhận</th>
-            <th>Số người đảm nhận</th>
+            <th>Số lượng</th>
             <th>Phòng ban</th>
-            <th>Cấp bậc</th>
             <th>Trạng thái</th>
+            <th>Mô tả</th>
             {hasActions && (
-              <th className="action-col">
-                Thao tác
-              </th>
+              <th className="action-col">Thao tác</th>
             )}
           </tr>
         </thead>
@@ -58,14 +54,12 @@ export default function PositionTable({
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={colSpan} className="empty">
+              <td colSpan={hasActions ? 8 : 7} className="empty">
                 Không có dữ liệu
               </td>
             </tr>
           ) : (
             data.map((p) => {
-              const isDeleted = Boolean(p.deletedAt);
-
               const assigned =
                 typeof p.assigneeCount === "number"
                   ? p.assigneeCount
@@ -78,7 +72,7 @@ export default function PositionTable({
                   key={p.code}
                   className={[
                     onRowClick && "clickable",
-                    isDeleted && "deleted",
+                    p.deletedAt && "deleted",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -92,7 +86,7 @@ export default function PositionTable({
                       ? p.assignees
                           .map((e) => e.name)
                           .join(", ")
-                      : "—"}
+                      : ""}
                   </td>
 
                   <td>
@@ -103,19 +97,13 @@ export default function PositionTable({
                     {resolveDepartment(p.department)}
                   </td>
 
-                  <td>{p.level || "—"}</td>
+                  <td>{p.status}</td>
 
-                  <td>
-                    <span
-                      className={`status ${
-                        normalizeStatus(p.status) ===
-                        "hoạt động"
-                          ? "active"
-                          : "inactive"
-                      }`}
-                    >
-                      {p.status}
-                    </span>
+                  <td
+                    title={p.description || ""}
+                    className="truncate"
+                  >
+                    {p.description || ""}
                   </td>
 
                   {hasActions && (
@@ -128,36 +116,37 @@ export default function PositionTable({
                       {onView && (
                         <button
                           title="Xem"
-                          onClick={() =>
-                            onView(p)
-                          }
+                          onClick={() => onView(p)}
                         >
                           <FaEye />
                         </button>
                       )}
 
-                      {onEdit && !isDeleted && (
+                      {onEdit && !p.deletedAt && (
                         <button
                           title="Sửa"
-                          onClick={() =>
-                            onEdit(p)
-                          }
+                          onClick={() => onEdit(p)}
                         >
                           <FaEdit />
                         </button>
                       )}
 
-                      {onDelete && !isDeleted && (
+                      {onDelete && !p.deletedAt && (
                         <button
                           className="danger"
-                          title="Xoá"
-                          onClick={() =>
-                            onDelete(p)
+                          title={
+                            assigned > 0
+                              ? "Không thể xoá vì đang có người đảm nhận"
+                              : "Xoá"
                           }
+                          onClick={() => onDelete(p)}
                         >
                           <FaTrash />
                         </button>
                       )}
+
+                      {renderExtraActions &&
+                        renderExtraActions(p)}
                     </td>
                   )}
                 </tr>

@@ -1,33 +1,57 @@
-export async function loginApi({ username, password }) {
-  // giả lập delay API
-  await new Promise((r) => setTimeout(r, 500));
+// src/auth/auth.service.js
 
-  if (password !== "123") {
+import { accountService } from "../modules/hrm/services/account.service";
+
+export async function loginApi({ username, password }) {
+  await new Promise((r) => setTimeout(r, 300));
+
+  const account = await accountService.getByUsername(username);
+
+  if (!account) {
+    throw new Error("User không tồn tại");
+  }
+
+  if (account.deletedAt) {
+    throw new Error("Tài khoản đã bị xoá");
+  }
+
+  if (account.status !== "Hoạt động") {
+    throw new Error("Tài khoản đã bị ngưng hoạt động");
+  }
+
+  if (account.password !== password) {
     throw new Error("Sai tài khoản hoặc mật khẩu");
   }
 
-  switch (username) {
-    case "admin":
-      return {
-        token: "token-admin",
-        user: { id: 1, name: "Admin", role: "ADMIN" },
-      };
-    case "hr":
-      return {
-        token: "token-hr",
-        user: { id: 2, name: "HR User", role: "HR" },
-      };
-    case "sales":
-      return {
-        token: "token-sales",
-        user: { id: 3, name: "Sales User", role: "SALES" },
-      };
-    case "finance":
-      return {
-        token: "token-finance",
-        user: { id: 4, name: "Finance User", role: "FINANCE" },
-      };
-    default:
-      throw new Error("User không tồn tại");
+  return {
+    token: `token-${account.username}`,
+    user: {
+      id: account.username,
+      employeeCode: account.employee?.code,
+      name: account.employee?.name || account.username,
+      role: account.role,
+    },
+  };
+}
+
+export async function resetPasswordApi({ username, password }) {
+  await new Promise((r) => setTimeout(r, 300));
+
+  const account = await accountService.getByUsername(username);
+
+  if (!account) {
+    throw new Error("User không tồn tại");
   }
+
+  if (account.deletedAt) {
+    throw new Error("Tài khoản đã bị xoá");
+  }
+
+  // cập nhật mật khẩu
+  await accountService.update(username, {
+    password,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return true;
 }

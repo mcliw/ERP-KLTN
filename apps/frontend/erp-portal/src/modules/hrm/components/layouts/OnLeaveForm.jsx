@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "../styles/form.css";
 import { FaSave, FaTimes } from "react-icons/fa";
+
+import { employeeService } from "../../services/employee.service";
 import { departmentService } from "../../services/department.service";
 import { positionService } from "../../services/position.service";
-import { employeeService } from "../../services/employee.service";
+import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 
 import {
   onLeaveCreateSchema,
   onLeaveUpdateSchema,
 } from "../../validations/onLeave.schema";
 
+/* ================= DEFAULT ================= */
 const DEFAULT_FORM = {
   employeeCode: "",
   employeeName: "",
@@ -27,109 +30,162 @@ const DEFAULT_FORM = {
 export default function OnLeaveForm({
   mode = "create",
   initialData = null,
+  currentUser = null,
   onSubmit,
   onCancel,
 }) {
+  const canUpdateStatus = useMemo(() => {
+    if (!currentUser) console.warn("OnLeaveForm: currentUser is missing!");
+    return HRM_PERMISSIONS.LEAVE_EDIT.includes(currentUser?.role);
+  }, [currentUser]);
+
+  const canChooseEmployee = useMemo(() => {
+    if (!currentUser) console.warn("OnLeaveForm: currentUser is missing!");
+    return HRM_PERMISSIONS.LEAVE_EDIT.includes(currentUser?.role);
+  }, [currentUser]);
+
   const [form, setForm] = useState(DEFAULT_FORM);
   const [errors, setErrors] = useState({});
   const [infoMessage, setInfoMessage] = useState("");
 
   const initialSnapshotRef = useRef(null);
 
+  /* ================= LOAD MAPS ================= */
+  const [departmentMap, setDepartmentMap] = useState({});
+  const [positionMap, setPositionMap] = useState({});
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const list = await departmentService.getAll();
+        const map = {};
+        list.forEach((d) => (map[d.code] = d.name));
+        setDepartmentMap(map);
+      } catch {
+        setDepartmentMap({});
+      }
+    };
+
+    const loadPositions = async () => {
+      try {
+        const list = await positionService.getAll();
+        const map = {};
+        list.forEach((p) => (map[p.code] = p.name));
+        setPositionMap(map);
+      } catch {
+        setPositionMap({});
+      }
+    };
+
+    loadDepartments();
+    loadPositions();
+  }, []);
+
+  /* ================= LOAD EMPLOYEES ================= */
   const [employees, setEmployees] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [positions, setPositions] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
   useEffect(() => {
-    employeeService.getAll().then((list) => {
-        const activeEmployees = list.filter(
-        (e) => e.status === "Đang làm việc"
+    const loadEmployees = async () => {
+      try {
+        setLoadingEmployees(true);
+        const list = await employeeService.getAll();
+        const active = list.filter(
+          (e) => !e.status || e.status === "Đang làm việc"
         );
-        setEmployees(activeEmployees);
-    });
-  }, []);
+        setEmployees(active);
 
-  /* -------------------- LOAD DEPARTMENTS -------------------- */
-  useEffect(() => {
-    departmentService
-      .getAll()
-      .then((list) =>
-        setDepartments(
-          list.filter((d) => !d.status || d.status === "Hoạt động")
-        )
-      )
-      .catch(() => setDepartments([]));
-  }, []);
+        if (mode === "create" && currentUser?.employeeCode) {
+           const myInfo = active.find(e => e.code === currentUser.employeeCode);
+           
+           setForm(prev => ({
+             ...prev,
+             employeeCode: currentUser.employeeCode, // Mã NV từ tài khoản
+             employeeName: currentUser.name,         // Tên từ tài khoản
+             // Lấy phòng ban/chức vụ từ danh sách nhân viên (nếu tìm thấy)
+             department: myInfo?.department || "",   
+             position: myInfo?.position || ""
+           }));
+        }
+      } catch {
+        setEmployees([]);
+      } finally {
+        setLoadingEmployees(false);
+      }
+    };
 
-  /* -------------------- LOAD POSITIONS BY DEPARTMENT -------------------- */
-  useEffect(() => {
-    if (!form.department) {
-      setPositions([]);
-      return;
-    }
+    loadEmployees();
+  }, [mode, currentUser]);
 
-    positionService
-      .getAll()
-      .then((list) =>
-        setPositions(
-          list.filter(
-            (p) =>
-              p.status === "Hoạt động" &&
-              p.department === form.department
-          )
-        )
-      )
-      .catch(() => setPositions([]));
-  }, [form.department]);
-
-  /* -------------------- LOAD INITIAL DATA (EDIT) -------------------- */
+  /* ================= LOAD EDIT DATA ================= */
   useEffect(() => {
     if (mode === "edit" && initialData) {
       const nextForm = { ...DEFAULT_FORM, ...initialData };
       setForm(nextForm);
-      initialSnapshotRef.current = nextForm;
+      initialSnapshotRef.current = { ...nextForm };
     }
   }, [mode, initialData]);
 
-  const handleEmployeeChange = (e) => {
-  const code = e.target.value;
+  /* ================= HANDLERS ================= */
+  const clearFieldError = (name) => {
+    setErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
 
-  if (!code) {
-    setForm((prev) => ({
-      ...prev,
-      employeeCode: "",
-      employeeName: "",
-      department: "",
-      position: "",
-    }));
-    return;
-  }
-
-  const emp = employees.find((e) => e.code === code);
-  if (!emp) return;
-
-  setForm((prev) => ({
-    ...prev,
-    employeeCode: emp.code,
-    employeeName: emp.name,
-    department: emp.department,
-    position: emp.position,
-  }));
-};
-
-  /* -------------------- CHANGE HANDLER -------------------- */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setInfoMessage("");
+    clearFieldError(name);
+
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEmployeeChange = (e) => {
+    const code = e.target.value;
+    setInfoMessage("");
+    clearFieldError("employeeCode");
+
+    if (!code) {
+      setForm((prev) => ({
+        ...prev,
+        employeeCode: "",
+        employeeName: "",
+        department: "",
+        position: "",
+      }));
+      return;
+    }
+
+    const emp = employees.find((x) => x.code === code);
+    if (!emp) return;
 
     setForm((prev) => ({
       ...prev,
-      [name]: value,
-      ...(name === "department" ? { position: "" } : null),
+      employeeCode: emp.code,
+      employeeName: emp.name,
+      department: emp.department || "",
+      position: emp.position || "",
     }));
   };
 
-  /* -------------------- SUBMIT -------------------- */
+  const renderError = (field) =>
+    errors[field] && <span className="error">{errors[field]}</span>;
+
+  /* ================= DIRTY CHECK ================= */
+  const isDirty = useMemo(() => {
+    if (mode !== "edit") return true;
+    if (!initialSnapshotRef.current) return false;
+    return (
+      JSON.stringify(form) !==
+      JSON.stringify(initialSnapshotRef.current)
+    );
+  }, [mode, form]);
+
+  /* ================= SUBMIT ================= */
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -156,75 +212,76 @@ export default function OnLeaveForm({
       document
         .querySelector(`[name="${firstError}"]`)
         ?.focus();
-
       return;
     }
 
     setErrors({});
 
-    const ok = window.confirm(
+    const confirmMessage =
       mode === "create"
         ? "Bạn có chắc chắn muốn tạo đơn nghỉ?"
-        : "Bạn có chắc chắn muốn lưu thay đổi?"
-    );
+        : "Bạn có chắc chắn muốn lưu thay đổi đơn nghỉ?";
 
-    if (!ok) return;
+    if (!window.confirm(confirmMessage)) return;
 
     onSubmit?.(form);
   };
 
-  const renderError = (field) =>
-    errors[field] && (
-      <span className="error">{errors[field]}</span>
-    );
-
-  /* -------------------- DIRTY CHECK -------------------- */
-  const isDirty = useMemo(() => {
-    if (mode !== "edit") return true;
-    if (!initialSnapshotRef.current) return false;
-    return (
-      JSON.stringify(form) !==
-      JSON.stringify(initialSnapshotRef.current)
-    );
-  }, [mode, form]);
+  /* ================= RENDER ================= */
+  const isEmployeeSelectDisabled = !canChooseEmployee || loadingEmployees || mode === "edit";
 
   return (
-    <form className="employee-form" onSubmit={handleSubmit}>
+    <form className="department-form" onSubmit={handleSubmit}>
       <h3>
-        {mode === "create"
-          ? "Tạo đơn nghỉ"
-          : "Cập nhật đơn nghỉ"}
+        {mode === "create" ? "Tạo đơn nghỉ" : "Cập nhật đơn nghỉ"}
       </h3>
 
       <div className="form-grid">
-        {/* NHÂN VIÊN */}
+        {/* Nhân viên */}
         <div className="form-group full">
-        <label>Nhân viên *</label>
-        <select
+          <label>Nhân viên *</label>
+          <select
             value={form.employeeCode}
             onChange={handleEmployeeChange}
-            disabled={mode === "edit"}
-        >
-            <option value="">-- Chọn nhân viên --</option>
-            {employees.map((e) => (
-            <option key={e.code} value={e.code}>
-                {e.code} – {e.name}
+            disabled={isEmployeeSelectDisabled}
+            style={isEmployeeSelectDisabled ? { backgroundColor: "#f5f5f5", cursor: "not-allowed" } : {}}
+          >
+            {/* Nếu đang loading hoặc chưa có list, vẫn hiện option của user hiện tại để không bị trống */}
+            {mode === 'create' && currentUser && !employees.length && (
+                <option value={currentUser.employeeCode}>
+                    {currentUser.employeeCode} - {currentUser.name}
+                </option>
+            )}
+            <option value="">
+              {loadingEmployees ? "Đang tải..." : "-- Chọn --"}
             </option>
+            {employees.map((e) => (
+              <option key={e.code} value={e.code}>
+                {e.code} - {e.name}
+              </option>
             ))}
-        </select>
-        {renderError("employeeCode")}
+          </select>
+          {renderError("employeeCode")}
         </div>
 
         {/* Phòng ban */}
         <div className="form-group">
-            <label>Phòng ban</label>
-            <input value={form.department} disabled />
+          <label>Phòng ban</label>
+          <input
+            value={departmentMap[form.department] || "—"}
+            disabled
+            style={{ backgroundColor: "#f5f5f5", cursor: "not-allowed" }}
+          />
         </div>
 
         {/* Chức vụ */}
         <div className="form-group">
-            <label>Chức vụ</label>
-            <input value={form.position} disabled />
+          <label>Chức vụ</label>
+          <input
+            value={positionMap[form.position] || "—"}
+            disabled
+            style={{ backgroundColor: "#f5f5f5", cursor: "not-allowed" }}
+          />
         </div>
 
         {/* Loại nghỉ */}
@@ -271,12 +328,13 @@ export default function OnLeaveForm({
 
         {/* Lý do */}
         <div className="form-group full">
-          <label>Lý do</label>
+          <label>Lý do *</label>
           <textarea
             name="reason"
             value={form.reason}
             onChange={handleChange}
           />
+          {renderError("reason")}
         </div>
 
         {/* Trạng thái */}
@@ -286,6 +344,8 @@ export default function OnLeaveForm({
             name="status"
             value={form.status}
             onChange={handleChange}
+            disabled={mode === "create" || !canUpdateStatus}
+            style={(mode === "create" || !canUpdateStatus) ? { backgroundColor: "#f5f5f5", cursor: "not-allowed" } : {}}
           >
             <option value="Chờ duyệt">Chờ duyệt</option>
             {mode === "edit" && (
@@ -306,7 +366,7 @@ export default function OnLeaveForm({
         <button
           type="submit"
           className="btn-primary"
-          disabled={mode === "edit" && !isDirty}
+          title={mode === "edit" && !isDirty ? "Chưa có thay đổi để lưu" : ""}
         >
           <FaSave style={{ marginRight: 5 }} />
           {mode === "create" ? "Tạo đơn" : "Lưu thay đổi"}
@@ -317,7 +377,7 @@ export default function OnLeaveForm({
           className="btn-secondary"
           onClick={onCancel}
         >
-            <FaTimes />
+          <FaTimes />
           <span>Hủy</span>
         </button>
       </div>

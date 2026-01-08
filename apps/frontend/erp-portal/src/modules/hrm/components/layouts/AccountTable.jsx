@@ -10,7 +10,7 @@ import {
 import "../styles/table.css";
 
 const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "-";
+  v ? new Date(v).toLocaleDateString("vi-VN") : "—";
 
 const normalizeStatus = (v) =>
   String(v || "").toLowerCase();
@@ -84,13 +84,14 @@ export default function AccountTable({
                   <td>
                     <span
                       className={`status ${
-                        normalizeStatus(a.status) ===
-                        "hoạt động"
+                        a.deletedAt
+                          ? "deleted"
+                          : normalizeStatus(a.status) === "hoạt động"
                           ? "active"
                           : "inactive"
                       }`}
                     >
-                      {a.status || "Không rõ"}
+                      {a.deletedAt ? "Đã xoá" : a.status || "Không rõ"}
                     </span>
                   </td>
 

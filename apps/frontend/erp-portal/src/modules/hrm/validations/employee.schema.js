@@ -1,9 +1,7 @@
-// apps/frontend/erp-portal/src/modules/hrm/validations/employee.schema.js
-
 import { z } from "zod";
 
 /* =========================
- * Common helpers
+ * Helpers
  * ========================= */
 
 const emptyToUndefined = (schema) =>
@@ -16,14 +14,12 @@ const pdfBase64 = emptyToUndefined(
       (v) =>
         !v ||
         v.startsWith("data:application/pdf;base64,"),
-      {
-        message: "Chỉ chấp nhận file PDF",
-      }
+      { message: "Chỉ chấp nhận file PDF" }
     )
 );
 
 /* =========================
- * Base fields (shared)
+ * Base fields
  * ========================= */
 
 export const baseEmployeeFields = {
@@ -73,57 +69,57 @@ export const baseEmployeeFields = {
     .trim()
     .min(1, "Nhập tên tài khoản ngân hàng"),
 
-  department: z
-    .string()
-    .min(1, "Chọn phòng ban"),
+  department: z.string().min(1, "Chọn phòng ban"),
 
-  position: z
-    .string()
-    .min(1, "Chọn chức vụ"),
+  position: z.string().min(1, "Chọn chức vụ"),
 
-  joinDate: z
-    .string()
-    .min(1, "Chọn ngày vào làm"),
+  joinDate: z.string().min(1, "Chọn ngày vào làm"),
 
-  status: z.enum(
-    ["Đang làm việc", "Nghỉ việc"],
-    {
-      errorMap: () => ({
-        message: "Trạng thái không hợp lệ",
-      }),
-    }
-  ),
+  status: z.enum(["Đang làm việc", "Nghỉ việc"], {
+    errorMap: () => ({
+      message: "Trạng thái không hợp lệ",
+    }),
+  }),
 
   cvUrl: pdfBase64,
-
   healthCertUrl: pdfBase64,
-
   degreeUrl: pdfBase64,
+  contractUrl: pdfBase64,
 };
 
 /* =========================
- * CREATE schema
+ * CREATE
  * ========================= */
 
-export const employeeCreateSchema = z.object({
-  ...baseEmployeeFields,
+export const employeeCreateSchema = z
+  .object({
+    ...baseEmployeeFields,
 
-  // Khi tạo mới → luôn là "Đang làm việc"
-  status: z.literal("Đang làm việc", {
-    errorMap: () => ({
-      message:
-        "Không thể tạo hồ sơ với trạng thái Nghỉ việc",
+    status: z.literal("Đang làm việc", {
+      errorMap: () => ({
+        message:
+          "Không thể tạo hồ sơ với trạng thái Nghỉ việc",
+      }),
     }),
-  }),
-});
+  })
+  .superRefine((data, ctx) => {
+    // Khi đang làm việc → nên có hợp đồng
+    if (
+      data.status === "Đang làm việc" &&
+      !data.contractUrl
+    ) {
+      ctx.addIssue({
+        path: ["contractUrl"],
+        message:
+          "Nhân viên đang làm việc bắt buộc có hợp đồng",
+      });
+    }
+  });
 
 /* =========================
- * UPDATE schema
+ * UPDATE
  * ========================= */
 
-export const employeeUpdateSchema = z.object({
-  ...baseEmployeeFields,
-
-  // Không cho sửa mã nhân viên
-  code: z.undefined().optional(),
-});
+export const employeeUpdateSchema = z
+  .object(baseEmployeeFields)
+  .omit({ code: true });

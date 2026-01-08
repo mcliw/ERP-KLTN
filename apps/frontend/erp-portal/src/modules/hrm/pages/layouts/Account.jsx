@@ -7,6 +7,8 @@ import AccountFilter from "../../components/layouts/AccountFilter";
 import { accountService } from "../../services/account.service";
 import "../styles/document.css";
 import { FaPlus, FaRecycle } from "react-icons/fa";
+import { ROLES } from "../../../../shared/constants/roles"
+
 
 export default function Account() {
   const navigate = useNavigate();
@@ -21,42 +23,68 @@ export default function Account() {
 
   const pageSize = 10;
 
-  // ✅ FETCH DATA
+  /* ================= FETCH DATA ================= */
+
   useEffect(() => {
-    accountService.getActive().then((data) => {
-      setAccounts(data);
-      setLoading(false);
-    });
+    let alive = true;
+
+    const loadAccounts = async () => {
+      setLoading(true);
+      try {
+        const data = await accountService.getActive();
+        if (!alive) return;
+        setAccounts(data);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    loadAccounts();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // ✅ FILTER
-  const filteredAccounts = useMemo(() => {
-    return accounts.filter(
-      (a) =>
-        a.deleted !== true &&
-        a.status !== "Đã xoá" &&
+  /* ================= FILTER ================= */
 
-        (
-          a.username?.toLowerCase().includes(keyword.toLowerCase()) ||
-          a.employee?.name
-            ?.toLowerCase()
-            .includes(keyword.toLowerCase()) ||
-          a.employee?.email
-            ?.toLowerCase()
-            .includes(keyword.toLowerCase())
-        ) &&
-        (status ? a.status === status : true) &&
-        (role ? a.role === role : true)
-    );
+  const filteredAccounts = useMemo(() => {
+    const kw = keyword.toLowerCase();
+
+    return accounts.filter((a) => {
+      // 🔒 chỉ account chưa xoá (đã được service đảm bảo)
+      if (a.deletedAt) return false;
+
+      const matchKeyword =
+        a.username?.toLowerCase().includes(kw) ||
+        a.employee?.name?.toLowerCase().includes(kw) ||
+        a.employee?.email?.toLowerCase().includes(kw);
+
+      const matchStatus = status ? a.status === status : true;
+      const matchRole = role ? a.role === role : true;
+
+      return matchKeyword && matchStatus && matchRole;
+    });
   }, [accounts, keyword, status, role]);
 
-  const totalPages = Math.ceil(filteredAccounts.length / pageSize);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAccounts.length / pageSize)
+  );
 
-  // ✅ PAGINATION
+  /* ================= PAGINATION ================= */
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const paginatedAccounts = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredAccounts.slice(start, start + pageSize);
   }, [filteredAccounts, page]);
+
+  /* ================= RENDER ================= */
 
   if (loading) {
     return <div style={{ padding: 20 }}>Đang tải...</div>;
@@ -67,17 +95,23 @@ export default function Account() {
       {/* HEADER */}
       <div className="page-header">
         <h2>Quản lý tài khoản</h2>
+
         <div style={{ display: "flex", gap: 10 }}>
           <button
-          className="btn-primary"
-          onClick={() => navigate("/hrm/tai-khoan/them-moi")}
+            className="btn-primary"
+            onClick={() =>
+              navigate("/hrm/tai-khoan/them-moi")
+            }
           >
             <FaPlus />
             <span>Thêm tài khoản</span>
           </button>
+
           <button
             className="btn-restore"
-            onClick={() => navigate("/hrm/tai-khoan/khoi-phuc")}
+            onClick={() =>
+              navigate("/hrm/tai-khoan/khoi-phuc")
+            }
           >
             <FaRecycle />
             <span>Khôi phục</span>
@@ -95,9 +129,17 @@ export default function Account() {
           { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
         ]}
         roleOptions={[
-          { value: "ADMIN", label: "Admin" },
-          { value: "HR", label: "HR" },
-          { value: "USER", label: "User" },
+          { value: ROLES.ADMIN, label: "Admin" },
+          { value: ROLES.HR_MANAGER, label: "HR Manager" },
+          { value: ROLES.HR_EMPLOYEE, label: "HR Employee" },
+          { value: ROLES.SCM_MANAGER, label: "SCM Manager" },
+          { value: ROLES.SCM_EMPLOYEE, label: "SCM Employee" },
+          { value: ROLES.SALES_CRM_MANAGER, label: "Sales CRM Manager" },
+          { value: ROLES.SALES_CRM_EMPLOYEE, label: "Sales CRM Employee" },
+          { value: ROLES.SUPPLY_CHAIN_MANAGER, label: "Supply Chain Manager" },
+          { value: ROLES.SUPPLY_CHAIN_EMPLOYEE, label: "Supply Chain Employee" },
+          { value: ROLES.FINANCE_ACCOUNTING_MANAGER, label: "Finance Accounting Manager" },
+          { value: ROLES.FINANCE_ACCOUNTING_EMPLOYEE, label: "Finance Accounting Employee" },
         ]}
         onKeywordChange={(v) => {
           setKeyword(v);
@@ -135,9 +177,7 @@ export default function Account() {
         }
         onDelete={async (a) => {
           if (
-            window.confirm(
-              `Xoá tài khoản ${a.username}?`
-            )
+            window.confirm(`Xoá tài khoản ${a.username}?`)
           ) {
             await accountService.remove(a.username);
             setAccounts((prev) =>

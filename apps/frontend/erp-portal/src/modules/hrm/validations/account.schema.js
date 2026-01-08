@@ -37,11 +37,19 @@ export const baseAccountFields = {
     .string()
     .min(1, "Vai trò bắt buộc"),
 
-  status: z.enum(["Hoạt động", "Ngưng hoạt động"], {
-    errorMap: () => ({
-      message: "Trạng thái không hợp lệ",
-    }),
-  }),
+  status: z.enum(
+    ["Hoạt động", "Ngưng hoạt động"],
+    {
+      errorMap: () => ({
+        message: "Trạng thái không hợp lệ",
+      }),
+    }
+  ),
+
+  password: z
+    .string()
+    .min(6, "Mật khẩu phải ít nhất 6 ký tự")
+    .optional(),
 };
 
 /* =========================
@@ -67,11 +75,10 @@ export const accountCreateSchema = z.object({
 export const accountUpdateSchema = z.object({
   ...baseAccountFields,
 
-  // 🔒 Backend không cho đổi
-  username: z.undefined().optional(),
-  employeeCode: z.undefined().optional(),
+  // Cho tồn tại nhưng backend sẽ ignore
+  username: emptyToUndefined(z.string()),
+  employeeCode: emptyToUndefined(z.string()),
 
-  // auto-fill, readonly
   department: emptyToUndefined(z.string()),
   position: emptyToUndefined(z.string()),
 });

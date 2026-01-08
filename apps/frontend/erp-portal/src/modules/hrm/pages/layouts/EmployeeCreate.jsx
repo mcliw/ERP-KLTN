@@ -37,10 +37,8 @@ export default function EmployeeCreate() {
 
       navigate("/hrm/ho-so-nhan-vien");
     } catch (err) {
-      if (err?.status === 409 && err?.field === "code") {
-        alert("Mã nhân viên đã tồn tại");
-      } else if (err?.status === 400) {
-        alert(err.message || "Dữ liệu không hợp lệ");
+      if (err?.field) {
+        alert(err.message);
       } else {
         alert("Có lỗi khi tạo hồ sơ nhân viên");
       }

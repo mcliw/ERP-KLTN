@@ -227,6 +227,11 @@ export default function EmployeeProfile() {
       {/* HỒ SƠ GIẤY TỜ */}
       <Section title="Hồ sơ giấy tờ">
         <DocumentItem
+          label="Hợp đồng"
+          url={employee.contractUrl}
+        />
+
+        <DocumentItem
           label="CV"
           url={employee.cvUrl}
         />

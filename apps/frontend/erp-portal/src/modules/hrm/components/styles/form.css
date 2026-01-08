@@ -101,3 +101,9 @@
 .form-group.full-width {
   grid-column: 1 / -1;
 }
+
+textarea {
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}

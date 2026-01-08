@@ -153,3 +153,13 @@ html, body, #root {
     margin-bottom: 15px;
     font-size: 12px;
 }
+
+.forgot-password {
+  font-size: 13px;
+  color: #1677ff;
+}
+
+.forgot-password:hover, .back-login:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
