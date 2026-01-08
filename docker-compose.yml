@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+
+# Frontend applications
+  erp-portal:
+    build:
+      context: ./apps/frontend/erp-portal
+      dockerfile: Dockerfile
+    container_name: erp_portal_app
+    volumes:
+      - portal_dist:/usr/share/nginx/html/portal
+    networks:
+      - erp-network
+
+  ecommerce-store:
+    build:
+      context: ./apps/frontend/ecommerce-store
+      dockerfile: Dockerfile
+    container_name: ecommerce_store_app
+    volumes:
+      - store_dist:/usr/share/nginx/html/store
+    networks:
+      - erp-network
+
+  # Nginx, Gateway, identiy xử lý người dùng
+  nginx:
+    image: nginx:latest
+    container_name: erp_nginx_gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d
+      - ./infra/nginx/certs:/etc/nginx/certs
+      - portal_dist:/usr/share/nginx/html/portal:ro 
+      - store_dist:/usr/share/nginx/html/store:ro
+    networks:
+      - erp-network
+    depends_on:
+      - erp-portal
+      - ecommerce-store
+      - gateway-service
+
+  gateway-service:
+    build:
+      context: ./apps/gateway-service
+      dockerfile: Dockerfile
+    container_name: erp_gateway
+    networks:
+      - erp-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker # Dùng profile cấu hình riêng cho docker
+      - SERVER_PORT=8080
+      # Định nghĩa địa chỉ các service con để Gateway gọi tới
+      - URI_IDENTITY=lb://identity-service
+      - URI_HRM=lb://hrm-service
+      - URI_FINANCE=lb://finance-service
+      # Cấu hình bảo mật (Nếu cần public key để verify JWT ngay tại Gateway)
+      - AUTH_PUBLIC_KEY_PATH=/app/keys/public.key 
+    depends_on:
+      - identity-service
+      - hrm-service
+      - finance-service
+
+  identity-service:
+    build:
+      context: ./apps/identity-service
+    container_name: erp_identity
+    networks:
+      - erp-network
+    environment:
+      - DB_URL=jdbc:postgresql://postgres-identity:5432/identity_db
+    depends_on:
+      - postgres-identity
+      
+  # Backend services
+
+
+
+networks:
+  erp-network:
+    driver: bridge
+
+volumes:
+  portal_dist:
+  store_dist:

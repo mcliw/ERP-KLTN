@@ -1,0 +1,2 @@
+mở thư mục nginx trên terminal chạy: openssl req -new -x509 -nodes -days 365 -newkey rsa:2048 -keyout private.key -out certificate.crt -config C:\Users\Linh\Workspace\ERP-KLTN\infra\nginx\certs\openssl.conf
+thay C:\Users\Linh\Workspace\ bằng đường dẫn tới thư mục dự án để tạo privatekey và chứng chỉ SSL dùng để xử lý phần bảo mật cho phép xác minh danh tính và thiết lâph kết nối
