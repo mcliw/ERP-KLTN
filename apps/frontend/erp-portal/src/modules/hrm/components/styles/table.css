@@ -1,0 +1,89 @@
+/* TABLE */
+.main-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  border: solid;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.main-table th {
+  text-align: left;
+  padding: 12px 14px;
+  border: 2px solid #fff;
+  background: #061a3a;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.main-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border: 2px solid #fff;
+  background: #eeeeee;
+  color: #061a3a;
+  font-size: 14px;
+}
+
+/* PAGINATION */
+.pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+/* EMPTY */
+.main-table .empty {
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+  color: #666;
+}
+
+/* ROW CLICK */
+.main-table tr.clickable {
+  cursor: pointer;
+}
+
+.main-table tr.clickable:hover td {
+  background: #e3e9f3;
+}
+
+/* ACTION COLUMN */
+.main-table .action-col {
+  text-align: center;
+  width: 120px;
+}
+
+.main-table td.actions {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 0px;
+}
+
+.main-table td.actions button {
+  border: none;
+  cursor: pointer;
+  color: #061a3a;
+  font-size: 16px;
+}
+
+.main-table td.actions button.danger {
+  color: #c62828;
+}
+
+.main-table td.actions button:hover {
+  color: #0b3c9d;
+}
+
+.truncate {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

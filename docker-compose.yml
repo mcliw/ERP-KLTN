@@ -1,88 +1,148 @@
 version: '3.8'
 
 services:
+  # --- INFRASTRUCTURE: REVERSE PROXY ---
+  nginx:
+    build:
+      context: .
+      dockerfile: ./infra/nginx/Dockerfile # File config Nginx điều hướng request
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gateway
+      - erp-portal
+      - ecommerce-store
+    networks:
+      - erp-network
 
-# Frontend applications
+  # --- FRONTEND ---
   erp-portal:
     build:
-      context: ./apps/frontend/erp-portal
-      dockerfile: Dockerfile
-    container_name: erp_portal_app
-    volumes:
-      - portal_dist:/usr/share/nginx/html/portal
+      context: ./apps/frontend/erp-portal #
     networks:
       - erp-network
 
   ecommerce-store:
     build:
-      context: ./apps/frontend/ecommerce-store
-      dockerfile: Dockerfile
-    container_name: ecommerce_store_app
-    volumes:
-      - store_dist:/usr/share/nginx/html/store
+      context: ./apps/frontend/ecommerce-store #
     networks:
       - erp-network
 
-  # Nginx, Gateway, identiy xử lý người dùng
-  nginx:
-    image: nginx:latest
-    container_name: erp_nginx_gateway
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./infra/nginx/conf.d:/etc/nginx/conf.d
-      - ./infra/nginx/certs:/etc/nginx/certs
-      - portal_dist:/usr/share/nginx/html/portal:ro 
-      - store_dist:/usr/share/nginx/html/store:ro
-    networks:
-      - erp-network
-    depends_on:
-      - erp-portal
-      - ecommerce-store
-      - gateway-service
-
-  gateway-service:
+  # --- API GATEWAY ---
+  gateway:
     build:
-      context: ./apps/gateway-service
-      dockerfile: Dockerfile
-    container_name: erp_gateway
+      context: ./apps/gateway # Public Gateway (Java)
+    environment:
+      - IDENTITY_SERVICE_URL=http://identity:8081
+    depends_on:
+      - identity
     networks:
       - erp-network
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker # Dùng profile cấu hình riêng cho docker
-      - SERVER_PORT=8080
-      # Định nghĩa địa chỉ các service con để Gateway gọi tới
-      - URI_IDENTITY=lb://identity-service
-      - URI_HRM=lb://hrm-service
-      - URI_FINANCE=lb://finance-service
-      # Cấu hình bảo mật (Nếu cần public key để verify JWT ngay tại Gateway)
-      - AUTH_PUBLIC_KEY_PATH=/app/keys/public.key 
-    depends_on:
-      - identity-service
-      - hrm-service
-      - finance-service
 
-  identity-service:
-    build:
-      context: ./apps/identity-service
-    container_name: erp_identity
+  # --- MICROSERVICES & THEIR OWN DATABASES ---
+
+  # 1. Identity Service (Java) + PostgreSQL
+  identity:
+    build: ./apps/identity #
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
+    depends_on:
+      - db-identity
     networks:
       - erp-network
+
+  db-identity:
+    image: postgres:15-alpine
     environment:
-      - DB_URL=jdbc:postgresql://postgres-identity:5432/identity_db
+      - POSTGRES_DB=identity_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 2. HRM Service (Java) + PostgreSQL + MinIO
+  hrm:
+    build: ./apps/services/hrm #
     depends_on:
-      - postgres-identity
-      
-  # Backend services
+      - db-hrm
+      - minio
+    networks:
+      - erp-network
 
+  db-hrm:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hrm_db
+    volumes:
+      - hrm-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
 
+  minio: # Lưu trữ file cho HRM
+    image: minio/minio
+    command: server /data
+    networks:
+      - erp-network
+
+  # 3. AI Service (FastAPI) + PostgreSQL + Milvus
+  ai-service:
+    build: ./apps/services/ai-service #
+    depends_on:
+      - db-ai
+      - milvus
+    networks:
+      - erp-network
+
+  db-ai:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=ai_db
+    volumes:
+      - ai-db-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  milvus: # Vector DB cho RAG
+    image: milvusdb/milvus:latest
+    networks:
+      - erp-network
+
+  # 4. Supply-Chain Service (Go) + PostgreSQL + Redis
+  supply-chain:
+    build: ./apps/services/supply-chain #
+    depends_on:
+      - db-supply
+      - redis
+    networks:
+      - erp-network
+
+  db-supply:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=supply_db
+    volumes:
+      - supply-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  redis: # Cache cho Supply Chain
+    image: redis:alpine
+    networks:
+      - erp-network
+
+  # --- CÁC SERVICE KHÁC (SALES, FINANCE) TƯƠNG TỰ ---
+  # Bạn có thể copy cấu trúc trên cho Sales (kèm ElasticSearch) 
+  # và Finance (kèm OLTP/DWH) theo sơ đồ.
 
 networks:
   erp-network:
     driver: bridge
 
 volumes:
-  portal_dist:
-  store_dist:
+  identity-data:
+  hrm-data:
+  ai-db-data:
+  supply-data:
