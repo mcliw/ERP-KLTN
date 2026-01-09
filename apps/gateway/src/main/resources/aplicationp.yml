@@ -1,0 +1,40 @@
+server:
+  port: 8080
+  # QUAN TRỌNG: Để Spring Boot xử lý các header X-Forwarded từ Nginx
+  forward-headers-strategy: framework 
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      # Cấu hình CORS (Cho phép Frontend gọi API)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: 
+              - "https://ldgcompany.local"
+              - "https://localhost"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+      
+      # Định tuyến (Routing) đến các Microservices
+      routes:
+        # Route 1: Identity Service
+        - id: identity-service
+          uri: http://identity-service:8080 # Tên service trong Docker Compose
+          predicates:
+            - Path=/identity/** # Khớp các url bắt đầu bằng /identity
+          # Nếu Nginx đã cắt /api, Gateway nhận vào /identity/... -> giữ nguyên
+
+        # Route 2: Sales CRM Service
+        - id: sales-service
+          uri: http://sales-crm:8080
+          predicates:
+            - Path=/sales/**
+
+        # Route 3: AI Assistant (Python)
+        - id: ai-assistant
+          uri: http://ai-assistant-service:8000 # Python thường chạy port khác, ví dụ 8000
+          predicates:
+            - Path=/ai/**

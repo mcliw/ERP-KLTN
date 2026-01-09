@@ -1,0 +1,5 @@
+package erp.company.identity.entity;
+
+public class RefreshToken {
+    
+}
