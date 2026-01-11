@@ -17,3 +17,4 @@ langchain-google-genai
 pydantic
 python-dotenv
 mcp[cli]
+tzdata

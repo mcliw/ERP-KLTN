@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
@@ -138,9 +138,10 @@ def tong_hop_cham_cong_thang(session: Session, employee_id: int, month: int, yea
             func.sum(func.coalesce(TimesheetDaily.early_leave_minutes, 0)).label("early_leave_minutes"),
             func.sum(func.coalesce(TimesheetDaily.ot_hours, 0)).label("ot_hours"),
             func.sum(func.coalesce(TimesheetDaily.working_day_count, 0)).label("working_day_count"),
-            func.sum(func.case((TimesheetDaily.status == "PRESENT", 1), else_=0)).label("present_days"),
-            func.sum(func.case((TimesheetDaily.status == "ABSENT", 1), else_=0)).label("absent_days"),
-            func.sum(func.case((TimesheetDaily.status == "LEAVE", 1), else_=0)).label("leave_days"),
+            func.sum(case((TimesheetDaily.status == "PRESENT", 1), else_=0)).label("present_days"),
+            func.sum(case((TimesheetDaily.status == "ABSENT", 1), else_=0)).label("absent_days"),
+            func.sum(case((TimesheetDaily.status == "LEAVE", 1), else_=0)).label("leave_days"),
+
         )
         .filter(
             TimesheetDaily.employee_id == int(employee_id),
@@ -179,6 +180,7 @@ def ngay_thieu_checkout(session: Session, employee_id: int, month: int, year: in
         .order_by(TimesheetDaily.date.asc())
         .all()
     )
+    
     data = [{"date": str(r.date), "check_in_time": str(r.check_in_time) if r.check_in_time else None} for r in rows]
     return ok({"month": month, "year": year, "missing_checkout_days": data}, "Danh sách ngày thiếu check-out.")
 

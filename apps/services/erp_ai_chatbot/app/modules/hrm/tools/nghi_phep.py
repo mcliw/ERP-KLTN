@@ -1,7 +1,9 @@
+# apps/services/erp_ai_chatbot/app/modules/hrm/tools/nghi_phep.py
 from __future__ import annotations
 
 from datetime import datetime
-from pydantic import BaseModel, Field
+from typing import Literal
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -9,13 +11,64 @@ from app.ai.tooling import ToolSpec, ok, can_lam_ro
 from app.modules.hrm.models import LeaveRequest
 
 
+def _normalize_leave_status(status: str | None) -> str | None:
+    if status is None:
+        return None
+    raw = status.strip()
+    if not raw:
+        return None
+
+    low = raw.lower()
+    aliases = {
+        "pending": "PENDING",
+        "cho duyet": "PENDING",
+        "chờ duyệt": "PENDING",
+        "waiting": "PENDING",
+        "awaiting": "PENDING",
+
+        "approved": "APPROVED",
+        "da duyet": "APPROVED",
+        "đã duyệt": "APPROVED",
+
+        "rejected": "REJECTED",
+        "tu choi": "REJECTED",
+        "từ chối": "REJECTED",
+
+        "cancelled": "CANCELLED",
+        "canceled": "CANCELLED",
+        "huy": "CANCELLED",
+        "hủy": "CANCELLED",
+    }
+    return aliases.get(low, raw.upper())
+
+
+# THÊM CANCELLED để khớp alias + enum DB (nếu có)
+LeaveStatus = Literal["PENDING", "APPROVED", "REJECTED", "CANCELLED"]
+LeaveType = Literal["ANNUAL", "SICK", "UNPAID"]
+
+
 class DanhSachDonNghiPhepArgs(BaseModel):
     employee_id: int = Field(..., ge=1)
-    status: str | None = Field(None, description="PENDING|APPROVED|REJECTED")
-    leave_type: str | None = Field(None, description="ANNUAL|SICK|UNPAID")
+    status: LeaveStatus | None = Field(None, description="PENDING|APPROVED|REJECTED|CANCELLED")
+    leave_type: LeaveType | None = Field(None, description="ANNUAL|SICK|UNPAID")
     tu_ngay: str | None = Field(None, description="YYYY-MM-DD")
     den_ngay: str | None = Field(None, description="YYYY-MM-DD")
     limit: int = Field(20, ge=1, le=100)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _norm_status(cls, v):
+        if v is None:
+            return None
+        return _normalize_leave_status(str(v))
+
+    @field_validator("leave_type", mode="before")
+    @classmethod
+    def _norm_leave_type(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip().upper()
+        return s or None
 
 
 class ChiTietDonNghiPhepArgs(BaseModel):
@@ -40,25 +93,59 @@ def _parse_date(s: str):
         return None
 
 
-def danh_sach_don_nghi_phep(session: Session, employee_id: int, status: str | None = None, leave_type: str | None = None,
-                            tu_ngay: str | None = None, den_ngay: str | None = None, limit: int = 20):
+# SỬA: nhận đủ args đúng như ArgsModel để khỏi lỗi unexpected keyword
+def danh_sach_don_nghi_phep(
+    session: Session,
+    employee_id: int,
+    status: str | None = None,
+    leave_type: str | None = None,
+    tu_ngay: str | None = None,
+    den_ngay: str | None = None,
+    limit: int = 20,
+):
     q = session.query(LeaveRequest).filter(LeaveRequest.employee_id == int(employee_id))
-    if status:
-        q = q.filter(LeaveRequest.status == status)
-    if leave_type:
-        q = q.filter(LeaveRequest.leave_type == leave_type)
-    if tu_ngay:
-        d = _parse_date(tu_ngay)
-        if d:
-            q = q.filter(func.date(LeaveRequest.from_date) >= d)
-    if den_ngay:
-        d = _parse_date(den_ngay)
-        if d:
-            q = q.filter(func.date(LeaveRequest.to_date) <= d)
 
-    rows = q.order_by(LeaveRequest.from_date.desc()).limit(limit).all()
+    # status
+    if status:
+        status_norm = _normalize_leave_status(status)
+
+        allowed = set(getattr(getattr(LeaveRequest, "status").type, "enums", []) or [])
+        if allowed and status_norm not in allowed:
+            return can_lam_ro(
+                f"Trạng thái nghỉ phép '{status}' không hợp lệ. Hợp lệ: {', '.join(sorted(allowed))}.",
+                goi_y=sorted(allowed),
+            )
+
+        q = q.filter(LeaveRequest.status == status_norm)
+
+    # leave_type
+    if leave_type:
+        leave_type_norm = str(leave_type).strip().upper()
+        if leave_type_norm:
+            q = q.filter(LeaveRequest.leave_type == leave_type_norm)
+
+    # date range
+    d_from = _parse_date(tu_ngay) if tu_ngay else None
+    d_to = _parse_date(den_ngay) if den_ngay else None
+
+    if tu_ngay and not d_from:
+        return can_lam_ro("`tu_ngay` không đúng định dạng YYYY-MM-DD.", [])
+    if den_ngay and not d_to:
+        return can_lam_ro("`den_ngay` không đúng định dạng YYYY-MM-DD.", [])
+
+    if d_from:
+        q = q.filter(LeaveRequest.from_date >= d_from)
+    if d_to:
+        q = q.filter(LeaveRequest.to_date <= d_to)
+
+    rows = q.order_by(LeaveRequest.from_date.desc()).limit(int(limit)).all()
+
+    if not rows:
+        return ok([], f"Không có đơn nghỉ phép nào{' đang ' + status.lower() if status else ''} cho nhân viên ID {employee_id}.")
+
     data = [{
         "leave_request_id": r.id,
+        "id": r.id,
         "leave_type": r.leave_type,
         "from_date": r.from_date.isoformat() if r.from_date else None,
         "to_date": r.to_date.isoformat() if r.to_date else None,
@@ -68,6 +155,7 @@ def danh_sach_don_nghi_phep(session: Session, employee_id: int, status: str | No
         "reason": r.reason,
         "approved_at": r.approved_at.isoformat() if getattr(r, "approved_at", None) else None,
     } for r in rows]
+
     return ok(data, "Danh sách đơn nghỉ phép.")
 
 

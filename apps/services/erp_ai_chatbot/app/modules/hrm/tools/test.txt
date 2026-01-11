@@ -1,0 +1,142 @@
+Test từng tool (single-tool)
+1) tim_nhan_vien (search theo từ khóa)
+
+“Tìm nhân viên NV001”
+
+“Tìm giúp tôi nhân viên tên ‘Nhân Viên 1’”
+
+“Có nhân viên nào thuộc phòng DP001 không? (liệt kê vài người)”
+
+2) thong_tin_nhan_vien (lookup theo employee_code)
+
+“Cho tôi thông tin nhân viên NV001”
+
+“NV001 thuộc phòng nào và đang ACTIVE không?”
+
+“NV001 có ngày vào làm là ngày nào?”
+
+3) cham_cong_hom_nay (chấm công hôm nay)
+
+“Cho tôi chấm công hôm nay của NV001”
+
+“Hôm nay NV001 đi muộn mấy phút?”
+
+“Hôm nay NV001 check-in/check-out lúc mấy giờ và ca làm gì?”
+
+4) tong_hop_cham_cong_thang (tổng hợp tháng)
+
+“Tổng hợp chấm công NV001 tháng 10/2025”
+
+“Tháng 10/2025 NV001 đi làm mấy ngày, OT bao nhiêu giờ?”
+
+“Tháng 10/2025 NV001 đi muộn tổng bao nhiêu phút?”
+
+5) danh_sach_ngay_thieu_checkout (ngày thiếu checkout theo tháng)
+
+“Tháng 10/2025 NV001 có ngày nào thiếu check-out không?”
+
+“Liệt kê các ngày NV001 thiếu check-out trong tháng 10/2025”
+
+“Tháng này NV001 có ngày nào chỉ có check-in mà không có check-out?”
+
+6) danh_sach_don_nghi_phep (list nghỉ phép theo nhân viên)
+
+“Liệt kê 5 đơn nghỉ phép gần nhất của NV001”
+
+“NV001 có đơn nghỉ phép nào đang chờ duyệt không?” Không có đơn nghỉ phép nào đang chờ duyệt cho nhân viên này.
+
+“Cho tôi các đơn nghỉ phép đã duyệt của NV001 (lấy 3 đơn gần nhất)”
+
+7) chi_tiet_don_nghi_phep (detail theo id)
+
+“Cho tôi chi tiết đơn nghỉ phép id 1”
+
+“Xem chi tiết đơn nghỉ phép #2”
+
+“Đơn nghỉ phép #3 thuộc loại gì và từ ngày nào đến ngày nào?”   "Đơn nghỉ phép #3 là loại nghỉ không lương (UNPAID), diễn ra từ ngày 15/01/2026 đến ngày 16/01/2026."
+
+8) tong_hop_nghi_phep_nam (tổng hợp nghỉ phép năm)
+
+“Tổng số ngày nghỉ đã duyệt của NV001 trong năm 2025 là bao nhiêu?” 0 ngày
+
+“Năm 2024 NV001 đã nghỉ phép (đã duyệt) tổng cộng bao nhiêu ngày?”
+
+“Năm 2025, NV001 nghỉ ANNUAL (đã duyệt) bao nhiêu ngày?” (câu này để test lọc leave_type nếu bạn có bật)
+
+9) don_nghi_phep_cho_duyet (list theo approver_id)
+
+“Approver 1 đang có những đơn nghỉ phép nào chờ duyệt? Lấy 10 đơn.”
+
+“Danh sách đơn nghỉ phép chờ duyệt của người duyệt id 1 (mới nhất trước)”
+
+“Cho tôi 5 đơn nghỉ phép đang chờ duyệt của approver_id=1”
+
+10) (Tool thứ 10 trong bộ của bạn) — nếu bộ 10 tools của HRM hiện tại khác danh sách trên
+
+Bạn chỉ cần gửi tên tool thứ 10 (tên trong registry), mình sẽ bổ sung ngay bộ câu test riêng cho tool đó theo đúng args/schema.
+(Vì trong đoạn bạn paste, HRM đang có nhiều tool; mình đang dựa đúng 10 tool “nhóm nhân sự + chấm công + nghỉ phép” mà bạn dùng để test gần đây.)
+
+2) Test multi-tools (chuỗi 2–4 tool) — nên dùng để kiểm tra resolve biến + save_as + LLM compose ngắn
+A. Nhân viên → chấm công
+
+“NV001 hôm nay chấm công thế nào? Cho tôi ca làm + số phút đi muộn.” Ca làm: Ca Hành chính #1. Đi muộn: 5 phút.
+
+(tim/thông tin NV) → chấm công hôm nay
+
+“NV001 hôm nay có OT không? Nếu có, bao nhiêu giờ?”
+
+(thông tin NV) → chấm công hôm nay
+
+B. Nhân viên → tổng hợp tháng → thiếu checkout
+
+“Tổng hợp chấm công NV001 tháng 10/2025, và cho tôi biết có ngày nào thiếu check-out không.”
+
+(thông tin NV) → tổng hợp tháng → ngày thiếu checkout
+
+“Tháng 10/2025 NV001 đi muộn tổng bao nhiêu phút, và liệt kê ngày nào thiếu check-out (nếu có).”
+
+(thông tin NV) → tổng hợp tháng → ngày thiếu checkout
+
+C. Nhân viên → danh sách nghỉ phép → chi tiết đơn gần nhất
+
+“NV001 có đơn nghỉ phép nào đang chờ duyệt không? Nếu có, xem chi tiết đơn gần nhất.”
+
+(tim/thông tin NV) → danh_sach_don_nghi_phep(status=PENDING, limit=1) → chi_tiet_don_nghi_phep(id)
+
+“NV001 có đơn nghỉ phép đã duyệt nào không? Lấy đơn gần nhất và cho tôi chi tiết.”
+
+(tim/thông tin NV) → danh_sach_don_nghi_phep(status=APPROVED, limit=1) → chi_tiet_don_nghi_phep
+
+“Liệt kê 3 đơn nghỉ phép gần nhất của NV001, rồi mở chi tiết đơn thứ 2.” Đơn nghỉ phép gần nhất của NV001 là:\n1. Đơn số 1 (Nghỉ phép năm, 1 ngày, từ 11/01/2026 đến 12/01/2026, Trạng thái: Đã duyệt).\nKhông thể mở chi tiết đơn thứ 2 vì chỉ có 1 đơn nghỉ phép.
+
+(tim/thông tin NV) → danh_sach_don_nghi_phep(limit=3) → chi_tiet_don_nghi_phep(id của phần tử [1])
+
+D. Approver → danh sách chờ duyệt → chi tiết
+
+“Approver_id=1 đang có đơn nào chờ duyệt? Nếu có, mở chi tiết đơn đầu tiên.”
+
+don_nghi_phep_cho_duyet(limit=1 hoặc nhiều) → chi_tiet_don_nghi_phep
+
+“Cho tôi 5 đơn chờ duyệt của approver 1, và tóm tắt mỗi đơn 1 dòng (loại nghỉ, thời gian, tổng ngày).”
+
+don_nghi_phep_cho_duyet(limit=5) → (LLM compose tóm tắt)
+
+E. Nhân viên → tổng hợp nghỉ phép năm + đối chiếu nhanh
+
+“Năm 2025 NV001 đã nghỉ phép (đã duyệt) bao nhiêu ngày? Đồng thời cho biết hiện có đơn nào đang chờ duyệt không.”
+
+(thông tin NV) → tong_hop_nghi_phep_nam → danh_sach_don_nghi_phep(status=PENDING, limit=1)
+
+“So sánh nghỉ phép đã duyệt năm 2024 và 2025 của NV001 (mỗi năm bao nhiêu ngày).” Năm 2024, NV001 có 0 ngày nghỉ phép đã duyệt. Năm 2025, NV001 có 0 ngày nghỉ phép đã duyệt.
+
+(thông tin NV) → tong_hop_nghi_phep_nam(year=2024) → tong_hop_nghi_phep_nam(year=2025)
+
+F. Test đường lỗi/clarification (cố tình)
+
+“NV999 có đơn nghỉ phép chờ duyệt không?”
+
+để test: không tìm thấy nhân viên → hỏi lại/clarify
+
+“Tổng hợp chấm công NV001 tháng 13/2025”
+
+để test: validate args/tháng không hợp lện

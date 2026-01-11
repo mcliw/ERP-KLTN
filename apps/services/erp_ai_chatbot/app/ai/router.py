@@ -98,26 +98,56 @@ def _build_system_instruction(module: str, auth: dict) -> str:
     parts.append("4) final_response_template BẮT BUỘC null.")
     parts.append("")
     parts.append("Gợi ý chọn tool:")
-    parts.append("- Chính sách/hướng dẫn/FAQ: tra_cuu_kho_tri_thuc.")
-    parts.append("- Phiếu nhập gần đây: gr_gan_day (days, limit).")
-    parts.append("")
+    if module == "supply_chain":
+        parts.append("- Chính sách/hướng dẫn/FAQ: tra_cuu_kho_tri_thuc.")
+        parts.append("- Phiếu nhập gần đây: gr_gan_day (days, limit).")
+    elif module == "hrm":
+        parts.append("- Tra cứu nhân sự: tra_cuu_nhan_su / ...")
+        parts.append("- Chấm công/nghỉ phép/tăng ca: cham_cong / nghi_phep / tang_ca ...")
+        parts.append("")
+    parts.append("Lưu ý: tool hồ sơ nhân viên trả field 'employee_id' (không dùng 'id').")
     parts.append("Tools khả dụng:")
     parts.append(_tool_catalog(module))
     return "\n".join(parts)
 
 def plan_route(module: str, message: str, auth: dict) -> Plan:
     msg = (message or "").strip()
-
     low = msg.lower()
 
-    # Pattern: hỏi "PO/Đơn mua nào sắp đến hạn giao nhất..." mà không đưa mã PO cụ thể
+    # 0) Validate module trước (an toàn)
+    if module not in VALID_MODULES:
+        return Plan(
+            module=module,
+            intent="module_khong_hop_le",
+            needs_clarification=True,
+            clarifying_question="Module không hợp lệ. Module hợp lệ: supply_chain, sale_crm, hrm, finance_accounting.",
+            steps=[],
+            final_response_template=None,
+        )
+
+    # 1) Detect module khác (user đang hỏi sai module)
+    other = _detect_other_module(msg)
+    if other and other != module:
+        return Plan(
+            module=module,
+            intent="dieu_huong_module",
+            needs_clarification=True,
+            clarifying_question=f"Câu hỏi này thuộc module '{other}'. Bạn chuyển chatbot sang '{other}' để tra cứu chính xác.",
+            steps=[],
+            final_response_template=None,
+        )
+
+    # =========================
+    # SUPPLY CHAIN RULES
+    # =========================
     if module == "supply_chain":
-        # Nhận diện câu hỏi về Purchase Order (PO) theo nhiều cách gọi
+        # PO code (dùng lại nhiều nơi)
+        has_po_code = re.search(r"\bpo-\d+\b", msg, re.IGNORECASE)
+
+        # Pattern: hỏi PO sắp đến hạn giao nhất
         is_po_question = any(k in low for k in [
             "po", "đơn mua", "don mua", "đơn đặt mua", "don dat mua", "purchase order"
         ])
-
-        # Nhận diện ý "sắp đến hạn giao nhất"
         is_deadline = any(k in low for k in [
             "sắp đến hạn", "sap den han",
             "chuẩn bị đến hạn", "chuan bi den han",
@@ -127,8 +157,6 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
             "giao sớm nhất", "giao som nhat",
             "đến hạn giao nhất", "den han giao nhat",
         ])
-
-        has_po_code = re.search(r"\bpo-\d+\b", msg, re.IGNORECASE)
 
         wants_progress = any(k in low for k in [
             "tiến độ", "tien do", "tiến độ nhập", "tien do nhap", "nhập đến đâu", "nhap den dau",
@@ -151,7 +179,7 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
                 clarifying_question=None,
                 steps=[
                     {"id": "s1", "tool": "tim_po_sap_den_han_giao_nhat", "args": {}, "save_as": None},
-                    {"id": "s2", "tool": "tien_do_nhap_po", "args": {"po_code": "{{s1.data[0].po_code}}"}, "save_as": None},
+                    {"id": "s2", "tool": "tien_do_nhap_po", "args": {"po_code": "{{s1.data.po_code}}"}, "save_as": None},
                 ],
                 final_response_template=None
             )
@@ -164,13 +192,11 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
                 intent="tien_do_nhap_po",
                 needs_clarification=False,
                 clarifying_question=None,
-                steps=[
-                    {"id": "s1", "tool": "tien_do_nhap_po", "args": {"po_code": po_code}, "save_as": None},
-                ],
+                steps=[{"id": "s1", "tool": "tien_do_nhap_po", "args": {"po_code": po_code}, "save_as": None}],
                 final_response_template=None
             )
 
-        # Case C: deadline + hỏi trạng thái (rule cũ của bạn)
+        # Case C: deadline + hỏi trạng thái
         if is_po_question and is_deadline and not has_po_code:
             return Plan(
                 module=module,
@@ -179,27 +205,24 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
                 clarifying_question=None,
                 steps=[
                     {"id": "s1", "tool": "tim_po_sap_den_han_giao_nhat", "args": {}, "save_as": None},
-                    {"id": "s2", "tool": "tra_cuu_trang_thai_don_mua", "args": {"po_code": "{{s1.data[0].po_code}}"}, "save_as": None},
+                    {"id": "s2", "tool": "tra_cuu_trang_thai_don_mua", "args": {"po_code": "{{s1.data.po_code}}"}, "save_as": None},
                 ],
                 final_response_template=None
             )
-        
+
+        # Case: GR gần đây (không nói theo NCC/PO)
         is_gr_recent = (
             ("phiếu nhập" in low or "phieu nhap" in low or "gr" in low)
             and any(k in low for k in ["gần đây", "gan day", "mới nhất", "moi nhat", "recent"])
         )
-
-        # nếu user không nói theo NCC/PO thì trả danh sách chung
         mentions_supplier = any(k in low for k in ["ncc", "nhà cung cấp", "nha cung cap", "sup"])
         mentions_po = re.search(r"\bpo-\d+\b", msg, re.IGNORECASE) is not None
 
         if is_gr_recent and (not mentions_supplier) and (not mentions_po):
-            # lấy số lượng (mặc định 5)
             m = re.search(r"(\d+)", low)
             limit = int(m.group(1)) if m else 5
             limit = max(1, min(limit, 20))
 
-            # chọn khoảng ngày (mặc định 7 ngày)
             days = 7
             if "hôm nay" in low or "hom nay" in low:
                 days = 1
@@ -213,100 +236,146 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
                 intent="gr_gan_day",
                 needs_clarification=False,
                 clarifying_question=None,
+                steps=[{"id": "s1", "tool": "gr_gan_day", "args": {"days": days, "limit": limit}, "save_as": None}],
+                final_response_template=None
+            )
+
+        # Case: PO -> danh sách GR -> chi tiết GR gần nhất (hỏi SKU trong GR gần nhất)
+        wants_gr_list = any(k in low for k in ["phiếu nhập", "phieu nhap", "gr"]) and any(k in low for k in ["danh sách", "danh sach", "list"])
+        wants_latest = any(k in low for k in ["gần nhất", "gan nhat", "mới nhất", "moi nhat", "latest"])
+        wants_items = any(k in low for k in ["sku", "mặt hàng", "mat hang", "gồm những", "gom nhung", "chi tiết", "chi tiet"])
+
+        if has_po_code and wants_gr_list and wants_latest and wants_items:
+            po_code = has_po_code.group(0).upper()
+            return Plan(
+                module=module,
+                intent="gr_gan_nhat_theo_po_va_chi_tiet",
+                needs_clarification=False,
+                clarifying_question=None,
                 steps=[
-                    {"id": "s1", "tool": "gr_gan_day", "args": {"days": days, "limit": limit}, "save_as": None}
+                    {"id": "s1", "tool": "danh_sach_gr_theo_po", "args": {"po_code": po_code}, "save_as": None},
+                    {"id": "s2", "tool": "chi_tiet_phieu_nhap", "args": {"gr_code": "{{s1.data.gr_list[0].gr_code}}"}, "save_as": None},
+                ],
+                final_response_template=None,
+            )
+
+        # Case: SUPxxx + hiệu suất + GR
+        sup = re.search(r"\bSUP\d+\b", msg, re.IGNORECASE)
+        wants_perf = any(k in low for k in ["hiệu suất giao hàng", "hieu suat giao hang", "hiệu suất", "hieu suat"])
+        wants_gr = any(k in low for k in ["phiếu nhập", "phieu nhap", "gr"])
+        m_limit = re.search(r"\b(\d+)\b", low)
+
+        if sup and wants_perf and wants_gr:
+            supplier_code = sup.group(0).upper()
+            limit = int(m_limit.group(1)) if m_limit else 5
+            limit = max(1, min(limit, 20))
+
+            return Plan(
+                module=module,
+                intent="hieu_suat_va_gr_gan_day_theo_ncc",
+                needs_clarification=False,
+                clarifying_question=None,
+                steps=[
+                    {"id": "s1", "tool": "hieu_suat_giao_hang_ncc", "args": {"supplier_code": supplier_code}, "save_as": None},
+                    {"id": "s2", "tool": "danh_sach_gr_theo_nha_cung_cap", "args": {"supplier_code": supplier_code, "limit": limit}, "save_as": None},
                 ],
                 final_response_template=None
             )
 
-    sup = re.search(r"\bSUP\d+\b", msg, re.IGNORECASE)
-    wants_perf = any(k in low for k in ["hiệu suất giao hàng", "hieu suat giao hang", "hiệu suất", "hieu suat"])
-    wants_gr = any(k in low for k in ["phiếu nhập", "phieu nhap", "gr"])
-    m_limit = re.search(r"\b(\d+)\b", low)
+        # Case: RAG cho supply_chain
+        if _should_use_rag(msg):
+            return Plan(
+                module=module,
+                intent="rag",
+                needs_clarification=False,
+                clarifying_question=None,
+                steps=[{
+                    "id": "s1",
+                    "tool": "tra_cuu_kho_tri_thuc",
+                    "args": {"cau_hoi": msg, "top_k": 4},
+                    "save_as": None
+                }],
+                final_response_template=None,
+            )
+        
+    if module == "hrm":
+        # bắt mã NV
+        m_emp = re.search(r"\bNV\d+\b", msg, re.IGNORECASE)
 
-    if sup and wants_perf and wants_gr:
-        supplier_code = sup.group(0).upper()
-        limit = int(m_limit.group(1)) if m_limit else 5
-        limit = max(1, min(limit, 20))  # chặn quá lớn
+        # bắt "tháng 10/2025" hoặc "thang 10/2025"
+        m_my = re.search(r"(?:tháng|thang)\s*(\d{1,2})\s*/\s*(\d{4})", low)
 
-        return Plan(
-            module=module,
-            intent="hieu_suat_va_gr_gan_day_theo_ncc",
-            needs_clarification=False,
-            clarifying_question=None,
-            steps=[
-                {"id": "s1", "tool": "hieu_suat_giao_hang_ncc", "args": {"supplier_code": supplier_code}, "save_as": None},
-                {"id": "s2", "tool": "danh_sach_gr_theo_nha_cung_cap", "args": {"supplier_code": supplier_code, "limit": limit}, "save_as": None},
-            ],
-            final_response_template=None
-        )
+        wants_summary = any(k in low for k in ["tổng hợp chấm công", "tong hop cham cong"])
+
+        if m_emp and m_my and wants_summary:
+            emp_code = m_emp.group(0).upper()
+            month = int(m_my.group(1))
+            year = int(m_my.group(2))
+
+            return Plan(
+                module=module,
+                intent="tong_hop_cham_cong_thang",
+                needs_clarification=False,
+                clarifying_question=None,
+                steps=[
+                    # lấy employee_id từ mã NV
+                    {"id": "s1", "tool": "thong_tin_nhan_vien", "args": {"employee_code": emp_code}, "save_as": None},
+                    # gọi tool tổng hợp tháng (NHỚ dùng employee_id, không dùng id)
+                    {"id": "s2", "tool": "tong_hop_cham_cong_thang", "args": {"employee_id": "{{s1.data.employee_id}}", "month": month, "year": year}, "save_as": None},
+                ],
+                final_response_template=None,
+            )
+
+    if module == "hrm":
+        low = (msg or "").lower()
+
+        emp_m = re.search(r"\bNV\d+\b", msg or "", re.IGNORECASE)
+        asks_leave = any(k in low for k in ["nghỉ phép", "nghi phep", "leave"])
+        asks_pending = any(k in low for k in ["chờ duyệt", "cho duyet", "pending"])
+        asks_detail = any(k in low for k in ["chi tiết", "chi tiet", "detail"])
+        asks_latest = any(k in low for k in ["gần nhất", "gan nhat", "mới nhất", "moi nhat", "latest"])
+
+        # NVxxx + nghỉ phép + chờ duyệt + chi tiết đơn gần nhất
+        if emp_m and asks_leave and asks_pending and asks_detail and asks_latest:
+            emp_code = emp_m.group(0).upper()
+            return Plan(
+                module=module,
+                intent="xem_don_nghi_phep_cho_duyet_gan_nhat",
+                needs_clarification=False,
+                clarifying_question=None,
+                steps=[
+                    {
+                        "id": "s1",
+                        "tool": "tim_nhan_vien",
+                        "args": {"tu_khoa": emp_code},
+                        "save_as": "employee_info",
+                    },
+                    {
+                        "id": "s2",
+                        "tool": "danh_sach_don_nghi_phep",
+                        "args": {
+                            "employee_id": "{{employee_info.employee_id}}",
+                            "status": "PENDING",
+                            "limit": 1,
+                        },
+                        "save_as": "pending_leaves",
+                    },
+                    {
+                        "id": "s3",
+                        "tool": "chi_tiet_don_nghi_phep",
+                        "args": {
+                            "leave_request_id": "{{pending_leaves[0].leave_request_id}}"
+                        },
+                        "save_as": None,
+                    },
+                ],
+                final_response_template=None,
+            )
 
 
-    if module not in VALID_MODULES:
-        return Plan(
-            module=module,
-            intent="module_khong_hop_le",
-            needs_clarification=True,
-            clarifying_question="Module không hợp lệ. Module hợp lệ: supply_chain, sale_crm, hrm, finance_accounting.",
-            steps=[],
-            final_response_template=None,
-        )
-
-    other = _detect_other_module(msg)
-    if other and other != module:
-        return Plan(
-            module=module,
-            intent="dieu_huong_module",
-            needs_clarification=True,
-            clarifying_question=f"Câu hỏi này thuộc module '{other}'. Bạn chuyển chatbot sang '{other}' để tra cứu chính xác.",
-            steps=[],
-            final_response_template=None,
-        )
-
-    if module == "supply_chain" and _should_use_rag(msg):
-        return Plan(
-            module=module,
-            intent="rag",
-            needs_clarification=False,
-            steps=[{
-                "id": "s1",
-                "tool": "tra_cuu_kho_tri_thuc",
-                "args": {"cau_hoi": msg, "top_k": 4},
-                "save_as": None
-            }],
-            final_response_template=None,
-        )
-
-    if module != "supply_chain":
-        return Plan(
-            module=module,
-            intent="chua_ho_tro",
-            needs_clarification=True,
-            clarifying_question="Hiện mới demo đầy đủ module supply_chain.",
-            steps=[],
-            final_response_template=None,
-        )
-    
-    # Case: PO -> danh sách GR -> chi tiết GR gần nhất (hỏi SKU trong GR gần nhất)
-    wants_gr_list = any(k in low for k in ["phiếu nhập", "phieu nhap", "gr"]) and any(k in low for k in ["danh sách", "danh sach", "list"])
-    wants_latest = any(k in low for k in ["gần nhất", "gan nhat", "mới nhất", "moi nhat", "latest"])
-    wants_items = any(k in low for k in ["sku", "mặt hàng", "mat hang", "gồm những", "gom nhung", "chi tiết", "chi tiet"])
-
-    if has_po_code and wants_gr_list and wants_latest and wants_items:
-        po_code = has_po_code.group(0).upper()
-        return Plan(
-            module=module,
-            intent="gr_gan_nhat_theo_po_va_chi_tiet",
-            needs_clarification=False,
-            clarifying_question=None,
-            steps=[
-                {"id": "s1", "tool": "danh_sach_gr_theo_po", "args": {"po_code": po_code}, "save_as": None},
-                # LẤY GR MỚI NHẤT: danh_sach_gr_theo_po đang order receipt_date desc -> [0] là mới nhất
-                {"id": "s2", "tool": "chi_tiet_phieu_nhap", "args": {"gr_code": "{{s1.data.gr_list[0].gr_code}}"}, "save_as": None},
-            ],
-            final_response_template=None,
-        )
-
+    # =========================
+    # FALLBACK: GEMINI ROUTER
+    # =========================
     sys = _build_system_instruction(module, auth)
     schema = _schema_for_module(module)
 
@@ -353,5 +422,8 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
         plan = plan.model_copy(update={"module": module})
     if plan.final_response_template is not None:
         plan = plan.model_copy(update={"final_response_template": None})
+    if plan.needs_clarification:
+        plan = plan.model_copy(update={"steps": []})
+
 
     return plan

@@ -28,3 +28,10 @@ try:
 except Exception as e:
     # khi chưa tạo tools, hệ thống vẫn chạy được
     pass
+
+# auto register hrm tools  ✅ THÊM
+try:
+    from app.modules.hrm.tools import HRM_TOOLS
+    register_tools("hrm", HRM_TOOLS)
+except Exception:
+    pass
