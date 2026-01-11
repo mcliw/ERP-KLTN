@@ -63,7 +63,7 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
     resp = _client.models.generate_content(
         model=_GEMINI_MODEL,
         contents=json.dumps(payload, ensure_ascii=False),
-        config={"system_instruction": sys, "temperature": 0.2},
+        config={"system_instruction": sys, "temperature": 0.1},
     )
     return (resp.text or "").strip()
 

@@ -325,8 +325,7 @@ def plan_route(module: str, message: str, auth: dict) -> Plan:
                 ],
                 final_response_template=None,
             )
-
-    if module == "hrm":
+        
         low = (msg or "").lower()
 
         emp_m = re.search(r"\bNV\d+\b", msg or "", re.IGNORECASE)
