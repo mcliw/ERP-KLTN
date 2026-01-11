@@ -15,4 +15,4 @@ chroma_db/
 *.sqlite3
 *.bin
 .DS_Store
-D:/ERP-KLTN/apps/services/erp_ai_chatbot/scripts/*.py
+D:/ERP-KLTN/apps/services/erp_ai_chatbot/scripts/
