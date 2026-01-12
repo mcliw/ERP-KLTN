@@ -1,8 +1,8 @@
 spring:
   application:
-    name: identity
+    name: hrm
 
-  datasource:
+    datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
@@ -17,15 +17,5 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
-  flyway:
-    baseline-on-migrate: true
-    check-location: true
-
 server:
   port: ${SERVER_PORT:8080}
-
-graphql:
-    path: /identity/graphql    # Đổi endpoint mặc định từ /graphql sang /identity/graphql
-    graphiql:
-      enabled: true
-      path: /identity/graphiql # Đổi luôn trang test GraphiQL

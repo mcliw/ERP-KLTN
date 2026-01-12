@@ -1,40 +1,76 @@
 server:
   port: 8080
-  # QUAN TRỌNG: Để Spring Boot xử lý các header X-Forwarded từ Nginx
-  forward-headers-strategy: framework 
+  forward-headers-strategy: framework # Giữ nguyên header từ Nginx (Host, X-Real-IP)
 
 spring:
   application:
     name: gateway-service
   cloud:
     gateway:
-      # Cấu hình CORS (Cho phép Frontend gọi API)
+      # 1. Cấu hình CORS Global
       globalcors:
         cors-configurations:
           '[/**]':
             allowedOrigins: 
-              - "https://ldgcompany.local"
-              - "https://localhost"
-            allowedMethods: "*"
+              - "https://ldgcompany.local" # Domain local cấu hình trong file hosts/nginx
+              - "http://localhost:3000"    # Frontend Dev mode
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
             allowedHeaders: "*"
-      
-      # Định tuyến (Routing) đến các Microservices
+            allowCredentials: true # Cho phép gửi cookie/token
+
+      # 2. Định tuyến (Routes)
       routes:
         # Route 1: Identity Service
         - id: identity-service
           uri: http://identity-service:8080 # Tên service trong Docker Compose
           predicates:
-            - Path=/identity/** # Khớp các url bắt đầu bằng /identity
-          # Nếu Nginx đã cắt /api, Gateway nhận vào /identity/... -> giữ nguyên
+            - Path=/api/identity/** # Khớp đường dẫn từ Nginx gửi sang
+          filters:
+            - StripPrefix=1                # Cắt bỏ '/api' trước khi gửi xuống service
+                                           # VD: /api/identity/auth/login -> /identity/auth/login
 
         # Route 2: Sales CRM Service
         - id: sales-service
           uri: http://sales-crm:8080
           predicates:
-            - Path=/sales/**
+            - Path=/api/sales/**
+          filters:
+            - StripPrefix=1
 
-        # Route 3: AI Assistant (Python)
-        - id: ai-assistant
-          uri: http://ai-assistant-service:8000 # Python thường chạy port khác, ví dụ 8000
+        # Route 3: HRM Service (Module Demo mới)
+        - id: hrm-service
+          uri: http://hrm-service:8080
           predicates:
-            - Path=/ai/**
+            - Path=/api/hrm/**
+          filters:
+            - StripPrefix=1
+
+        # Route 4: Supply Chain Service
+        - id: supply-chain-service
+          uri: http://supply-chain-service:8080
+          predicates:
+            - Path=/api/supply-chain/**
+          filters:
+            - StripPrefix=1
+
+        # Route 5: Accounting Service
+        - id: accounting-service
+          uri: http://accounting-service:8080
+          predicates:
+            - Path=/api/accounting/**
+          filters:
+            - StripPrefix=1 
+
+        # Route 6: AI Assistant
+        - id: ai-assistant
+          uri: http://ai-assistant-service:8000
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=1
+

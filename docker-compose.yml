@@ -1,52 +1,83 @@
-version: '3.8'
-
 services:
-  # --- INFRASTRUCTURE: REVERSE PROXY ---
+  # --- INFRASTRUCTURE: REVERSE PROXY (GATEKEEPER) ---
   nginx:
     build:
-      context: .
-      dockerfile: ./infra/nginx/Dockerfile # File config Nginx điều hướng request
+      context: ./infra/nginx
+    image: arsneonci/erp-nginx:latest
+    container_name: erp-nginx
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
-      - gateway
-      - erp-portal
-      - ecommerce-store
+      - gateway-service
     networks:
       - erp-network
 
-  # --- FRONTEND ---
+  # --- FRONTEND APPLICATIONS ---
+  
+  # 1. ERP Portal (React Vite - Internal postgres)
   erp-portal:
     build:
-      context: ./apps/frontend/erp-portal #
+      context: ./apps/frontend/erp-portal
+    image: arsneonci/erp-portal:latest
+    container_name: erp-portal
+    expose:
+      - "80" # Chạy Nginx nội bộ container
     networks:
       - erp-network
 
+  # 2. Ecommerce Store (NextJS - Customer Facing)
   ecommerce-store:
     build:
-      context: ./apps/frontend/ecommerce-store #
-    networks:
-      - erp-network
-
-  # --- API GATEWAY ---
-  gateway:
-    build:
-      context: ./apps/gateway # Public Gateway (Java)
+      context: ./apps/frontend/ecommerce-store
+    image: arsneonci/ecommerce-store:latest
+    container_name: ecommerce-store
+    expose:
+      - "3000" # Chạy Node server
     environment:
-      - IDENTITY_SERVICE_URL=http://identity:8081
-    depends_on:
-      - identity
+      - NEXT_PUBLIC_API_URL=https://ldgcompany.local/api # Gọi API qua Nginx chính
     networks:
       - erp-network
 
-  # --- MICROSERVICES & THEIR OWN DATABASES ---
+  # --- API GATEWAY (JAVA) ---
+  gateway-service:
+    build: 
+      context: ./apps/gateway
+    image: arsneonci/gateway-service:latest
+    container_name: gateway-service
+    expose:
+      - "8080"
+    environment:
+      - IDENTITY_SERVICE_URL=http://identity-service:8080
+      - HRM_SERVICE_URL=http://hrm-service:8080
+      - SUPPLY_CHAIN_URL=http://supply-chain-service:8080
+      - SALES_SERVICE_URL=http://sales-service:8080
+      - ACCOUNTING_SERVICE_URL=http://accounting-service:8080
+      - AI_SERVICE_URL=http://ai-service:8000
+    depends_on:
+      - identity-service
+      - hrm-service
+      - supply-chain-service
+      - ai-service
+      - sales-service
+      - accounting-service
+    networks:
+      - erp-network
 
-  # 1. Identity Service (Java) + PostgreSQL
-  identity:
-    build: ./apps/identity #
+  # --- MICROSERVICES & DATABASES ---
+
+  # 1. Identity Service (Java)
+  identity-service:
+    build: 
+      context: ./apps/identity
+    image: arsneonci/identity-service:latest
+    container_name: identity-service
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
     depends_on:
       - db-identity
     networks:
@@ -54,88 +85,148 @@ services:
 
   db-identity:
     image: postgres:15-alpine
+    container_name: db-identity
     environment:
       - POSTGRES_DB=identity_db
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - identity-data:/var/lib/postgresql/data
     networks:
       - erp-network
 
-  # 2. HRM Service (Java) + PostgreSQL + MinIO
-  hrm:
-    build: ./apps/services/hrm #
+  # 2. HRM Service (Java)
+  hrm-service:
+    build: 
+      context: ./apps/services/hrm
+    image: arsneonci/hrm-service:latest
+    container_name: hrm-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-hrm:5432/hrm_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
     depends_on:
       - db-hrm
-      - minio
     networks:
       - erp-network
 
   db-hrm:
     image: postgres:15-alpine
+    container_name: db-hrm
     environment:
       - POSTGRES_DB=hrm_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - hrm-data:/var/lib/postgresql/data
     networks:
       - erp-network
 
-  minio: # Lưu trữ file cho HRM
-    image: minio/minio
-    command: server /data
-    networks:
-      - erp-network
-
-  # 3. AI Service (FastAPI) + PostgreSQL + Milvus
-  ai-service:
-    build: ./apps/services/ai-service #
-    depends_on:
-      - db-ai
-      - milvus
-    networks:
-      - erp-network
-
-  db-ai:
-    image: postgres:15-alpine
+  # 3. Supply Chain Service (Golang)
+  supply-chain-service:
+    build: 
+      context: ./apps/services/supply-chain
+    image: arsneonci/supply-chain-service:latest
+    container_name: supply-chain-service
     environment:
-      - POSTGRES_DB=ai_db
-    volumes:
-      - ai-db-data:/var/lib/postgresql/data
-    networks:
-      - erp-network
-
-  milvus: # Vector DB cho RAG
-    image: milvusdb/milvus:latest
-    networks:
-      - erp-network
-
-  # 4. Supply-Chain Service (Go) + PostgreSQL + Redis
-  supply-chain:
-    build: ./apps/services/supply-chain #
+      - DB_HOST=db-supply
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=DEADlift12Hard
+      - DB_NAME=supply_db
     depends_on:
       - db-supply
-      - redis
     networks:
       - erp-network
 
   db-supply:
     image: postgres:15-alpine
+    container_name: db-supply
     environment:
       - POSTGRES_DB=supply_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - supply-data:/var/lib/postgresql/data
     networks:
       - erp-network
-
-  redis: # Cache cho Supply Chain
-    image: redis:alpine
+# 4. Sales CRM Service (Java)
+  sales-service:
+    build: 
+      context: ./apps/services/sales
+    image: arsneonci/sales-service:latest
+    container_name: sales-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-sales:5432/sales_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-sales
     networks:
       - erp-network
 
-  # --- CÁC SERVICE KHÁC (SALES, FINANCE) TƯƠNG TỰ ---
-  # Bạn có thể copy cấu trúc trên cho Sales (kèm ElasticSearch) 
-  # và Finance (kèm OLTP/DWH) theo sơ đồ.
+  db-sales:
+    image: postgres:15-alpine
+    container_name: db-sales
+    environment:
+      - POSTGRES_DB=sales_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - sales-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 5. Accounting Service (Java)
+  accounting-service:
+    build: 
+      context: ./apps/services/accounting
+    image: arsneonci/accounting-service:latest
+    container_name: accounting-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-accounting:5432/accounting_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-accounting
+    networks:
+      - erp-network
+
+  db-accounting:
+    image: postgres:15-alpine
+    container_name: db-accounting
+    environment:
+      - POSTGRES_DB=accounting_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - accounting-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+  # 6. AI Assistant Service (Python FastAPI)
+  ai-service:
+    build: 
+      context: ./apps/services/ai-chatbot
+    image: arsneonci/ai-service:latest
+    container_name: ai-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
+    depends_on:
+      - db-ai
+    networks:
+      - erp-network
+
+  db-ai:
+    image: postgres:15-alpine
+    container_name: db-ai
+    environment:
+      - POSTGRES_DB=ai_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
 
 networks:
   erp-network:
@@ -144,5 +235,7 @@ networks:
 volumes:
   identity-data:
   hrm-data:
-  ai-db-data:
   supply-data:
+  ai-data:
+  sales-data:
+  accounting-data:

@@ -1,24 +1,29 @@
-# Sử dụng tag đơn giản và chắc chắn tồn tại
+# --- Stage 1: Build ---
 FROM golang:1.24-alpine AS builder
-
 WORKDIR /app
 
-# Copy file cấu hình module trước
+# Cài đặt các tool cần thiết cho build
+RUN apk add --no-cache git
+
+# 1. Copy file định nghĩa module từ thư mục backend vào WORKDIR
+# Đường dẫn nguồn là backend/go.mod và backend/go.sum
 COPY backend/go.mod backend/go.sum ./
-RUN go mod download
 
-# Copy mã nguồn và build
-COPY backend/ . 
-RUN go build -o main .
+# 2. Tải dependencies
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Stage chạy (Runtime) cực nhẹ
+# 3. Copy toàn bộ mã nguồn của thư mục backend vào WORKDIR
+COPY backend/ .
+
+# 4. Build binary
+# Vì tệp main.go nằm trong thư mục cmd/server/ nên lệnh build phải trỏ vào đó
+RUN --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main ./cmd/server/main.go
+
+# --- Stage 2: Runtime ---
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /app/main .
-
-# Các biến môi trường nên để ở docker-compose.yml, 
-# nhưng nếu cần ở đây thì khai báo đúng:
-ENV MINIO_SERVER_ACCESS_KEY=minioadmin
-
 EXPOSE 8080
 CMD ["./main"]

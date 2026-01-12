@@ -1,0 +1,6 @@
+package erp.company.identity.constant;
+public enum RoleConstant {
+    ADMIN, EMPLOYEE, DEPT_MANAGER, HR_MANAGER, 
+    PURCHASING_MANAGER, STOREKEEPER, CUSTOMER, 
+    SALES_ADMIN, CFO, RECEIVABLE_ACC, PAYABLE_ACC, PAYROLL_ACC
+}
