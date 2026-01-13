@@ -61,7 +61,7 @@ services:
       - identity-service
       - hrm-service
       - supply-chain-service
-      - ai-service
+#      - ai-service
       - sales-service
       - accounting-service
     networks:
@@ -205,29 +205,29 @@ services:
     networks:
       - erp-network
   # 6. AI Assistant Service (Python FastAPI)
-  ai-service:
-    build: 
-      context: ./apps/services/ai-chatbot
-    image: arsneonci/ai-service:latest
-    container_name: ai-service
-    environment:
-      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
-    depends_on:
-      - db-ai
-    networks:
-      - erp-network
+#  ai-service:
+#    build: 
+#      context: ./apps/services/ai-chatbot
+#    image: arsneonci/ai-service:latest
+#    container_name: ai-service
+#    environment:
+#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
+#    depends_on:
+#      - db-ai
+#    networks:
+#      - erp-network
 
-  db-ai:
-    image: postgres:15-alpine
-    container_name: db-ai
-    environment:
-      - POSTGRES_DB=ai_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=DEADlift12Hard
-    volumes:
-      - ai-data:/var/lib/postgresql/data
-    networks:
-      - erp-network
+#  db-ai:
+#    image: postgres:15-alpine
+#    container_name: db-ai
+#    environment:
+#      - POSTGRES_DB=ai_db
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=DEADlift12Hard
+#    volumes:
+#      - ai-data:/var/lib/postgresql/data
+#    networks:
+#      - erp-network
 
 networks:
   erp-network:
