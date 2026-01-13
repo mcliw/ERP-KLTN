@@ -2,7 +2,7 @@ package erp.company.identity.controller;
 
 import erp.company.identity.dto.AuthResponse;
 import erp.company.identity.dto.LoginRequest;
-import erp.company.identity.dto.RegisterRequest; // Đảm bảo đã import
+import erp.company.identity.dto.RegisterRequest;
 import erp.company.identity.entity.User;
 import erp.company.identity.repository.UserRepository;
 import erp.company.identity.services.AuthService;
@@ -28,13 +28,10 @@ public class AuthGraphQLController {
         return authService.login(input);
     }
 
-    // --- BỔ SUNG PHƯƠNG THỨC NÀY ĐỂ TEST REGISTER ---
     @MutationMapping
-    public String register(@Argument RegisterRequest input) {
-        authService.register(input);
-        return "Đăng ký thành công cho email: " + input.getEmail();
+    public AuthResponse register(@Argument RegisterRequest input) {
+        return authService.register(input); 
     }
-    // ------------------------------------------------
 
     @QueryMapping
     @PreAuthorize("isAuthenticated()")

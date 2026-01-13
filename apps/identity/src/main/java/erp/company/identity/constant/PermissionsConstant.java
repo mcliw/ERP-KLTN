@@ -1,6 +1,6 @@
 package erp.company.identity.constant;
 
-public class PermissionsConstant {
+public class PermissionsConstant { //34 PERMISSIONS
     public static class HRM {
         public static final String ACCOUNT_VIEW = "HRM_ACCOUNT_VIEW";
         public static final String ACCOUNT_CREATE = "HRM_ACCOUNT_CREATE";
@@ -46,7 +46,7 @@ public class PermissionsConstant {
         public static final String POSITION_DELETE = "HRM_POSITION_DELETE";
     }
 
-    public static class SUPPLYCHAIN {
+    public static class SUPPLYCHAIN { //40 PERMISSIONS
         public static final String COMPANY_ASSETS_VIEW = "SUPPLYCHAIN_COMPANY_ASSETS_VIEW";
         public static final String COMPANY_ASSETS_CREATE = "SUPPLYCHAIN_COMPANY_ASSETS_CREATE";
         public static final String COMPANY_ASSETS_UPDATE = "SUPPLYCHAIN_COMPANY_ASSETS_UPDATE";
@@ -57,11 +57,11 @@ public class PermissionsConstant {
         public static final String MASTERDATA_UPDATE = "SUPPLYCHAIN_MASTERDATA_UPDATE";
         public static final String MASTERDATA_DELETE = "SUPPLYCHAIN_MASTERDATA_DELETE";
 
-        public static final String PUSSCHASE_REQUISITION_VIEW = "SUPPLYCHAIN_PUSSCHASE_REQUISITION_VIEW";
-        public static final String PUSSCHASE_REQUISITION_CREATE = "SUPPLYCHAIN_PUSSCHASE_REQUISITION_CREATE";
-        public static final String PUSSCHASE_REQUISITION_DELETE = "SUPPLYCHAIN_PUSSCHASE_REQUISITION_DELETE";
-        public static final String PUSSCHASE_REQUISITION_CONFIRM = "SUPPLYCHAIN_PUSSCHASE_REQUISITION_CONFIRM";
-        public static final String PUSSCHASE_REQUISITION_REJECT = "SUPPLYCHAIN_PUSSCHASE_REQUISITION_REJECT";
+        public static final String PURCHASE_REQUISITION_VIEW = "SUPPLYCHAIN_PURCHASE_REQUISITION_VIEW";
+        public static final String PURCHASE_REQUISITION_CREATE = "SUPPLYCHAIN_PURCHASE_REQUISITION_CREATE";
+        public static final String PURCHASE_REQUISITION_DELETE = "SUPPLYCHAIN_PURCHASE_REQUISITION_DELETE";
+        public static final String PURCHASE_REQUISITION_CONFIRM = "SUPPLYCHAIN_PURCHASE_REQUISITION_CONFIRM";
+        public static final String PURCHASE_REQUISITION_REJECT = "SUPPLYCHAIN_PURCHASE_REQUISITION_REJECT";
 
         public static final String QUOTATION_SUPPLIER_VIEW = "SUPPLYCHAIN_QUOTATION_SUPPLIER_VIEW";
         public static final String QUOTATION_SUPPLIER_CREATE = "SUPPLYCHAIN_QUOTATION_SUPPLIER_CREATE";
@@ -70,6 +70,7 @@ public class PermissionsConstant {
 
         public static final String PURCHASE_ORDER_VIEW = "SUPPLYCHAIN_PURCHASE_ORDER_VIEW";
         public static final String PURCHASE_ORDER_CREATE = "SUPPLYCHAIN_PURCHASE_ORDER_CREATE";
+        public static final String PURCHASE_ORDER_UPDATE = "SUPPLYCHAIN_PURCHASE_ORDER_UPDATE";
         public static final String PURCHASE_ORDER_CONFIRM = "SUPPLYCHAIN_PURCHASE_ORDER_CONFIRM";
         public static final String PURCHASE_ORDER_REJECT = "SUPPLYCHAIN_PURCHASE_ORDER_REJECT";
         public static final String PURCHASE_ORDER_DELETE = "SUPPLYCHAIN_PURCHASE_ORDER_DELETE";
@@ -79,9 +80,9 @@ public class PermissionsConstant {
         public static final String PURCHASE_RETURN_UPDATE = "SUPPLYCHAIN_PURCHASE_RETURN_UPDATE";
         public static final String PURCHASE_RETURN_DELETE = "SUPPLYCHAIN_PURCHASE_RETURN_DELETE";
 
-        public static final String GOODS_RECEPTS_VIEW = "SUPPLYCHAIN_GOODS_RECEPTS_VIEW";
-        public static final String GOODS_RECEPTS_CONFIRM = "SUPPLYCHAIN_GOODS_RECEPTS_CONFIRM";
-        public static final String GOODS_RECEPTS_UPDATE = "SUPPLYCHAIN_GOODS_RECEPTS_UPDATE";
+        public static final String GOODS_RECEIPTS_VIEW = "SUPPLYCHAIN_GOODS_RECEIPTS_VIEW";
+        public static final String GOODS_RECEIPTS_CONFIRM = "SUPPLYCHAIN_GOODS_RECEIPTS_CONFIRM";
+        public static final String GOODS_RECEIPTS_UPDATE = "SUPPLYCHAIN_GOODS_RECEIPTS_UPDATE";
 
         public static final String GOODS_ISSUE_VIEW = "SUPPLYCHAIN_GOODS_ISSUE_VIEW";
         // BÁN HÀNG
@@ -91,15 +92,15 @@ public class PermissionsConstant {
         public static final String GOODS_ISSUE_CREATE = "SUPPLYCHAIN_GOODS_ISSUE_CREATE";
         public static final String GOODS_ISSUE_DELETE = "SUPPLYCHAIN_GOODS_ISSUE_DELETE";
 
-        public static final String INVENTORY_CONTROLL_VIEW = "SUPPLYCHAIN_INVENTORY_CONTROLL_VIEW";
+        public static final String INVENTORY_CONTROL_VIEW = "SUPPLYCHAIN_INVENTORY_CONTROL_VIEW";
 
-        public static final String STOKE_TAKE_VIEW = "SUPPLYCHAIN_STOKE_TAKE_VIEW";
-        public static final String STOKE_TAKE_CREATE = "SUPPLYCHAIN_STOKE_TAKE_CREATE";
-        public static final String STOKE_TAKE_UPDATE = "SUPPLYCHAIN_STOKE_TAKE_UPDATE";
-        public static final String STOKE_TAKE_DELETE = "SUPPLYCHAIN_STOKE_TAKE_DELETE";
+        public static final String STOCK_TAKE_VIEW = "SUPPLYCHAIN_STOCK_TAKE_VIEW";
+        public static final String STOCK_TAKE_CREATE = "SUPPLYCHAIN_STOCK_TAKE_CREATE";
+        public static final String STOCK_TAKE_UPDATE = "SUPPLYCHAIN_STOCK_TAKE_UPDATE";
+        public static final String STOCK_TAKE_DELETE = "SUPPLYCHAIN_STOCK_TAKE_DELETE";
     }
 
-    public static class SALES {
+    public static class SALES { //14 PERMISSIONS
         public static final String CUSTOMER_VIEW = "SALES_CUSTOMER_VIEW";
         public static final String CUSTOMER_UPDATE = "SALES_CUSTOMER_UPDATE"; // CẬP NHẬT GHI CHÚ VỀ KHÁCH HÀNG CRM
 
@@ -120,7 +121,7 @@ public class PermissionsConstant {
         public static final String REPORT_EXPORT = "SALES_REPORT_EXPORT";
     }
 
-    public static class ACCOUNTING {
+    public static class ACCOUNTING { //27 PERMISSIONS
         public static final String CHART_OF_ACCOUNTS_VIEW = "ACCOUNTING_CHART_OF_ACCOUNTS_VIEW";
         public static final String CHART_OF_ACCOUNTS_CREATE = "ACCOUNTING_CHART_OF_ACCOUNTS_CREATE";
         public static final String CHART_OF_ACCOUNTS_UPDATE = "ACCOUNTING_CHART_OF_ACCOUNTS_UPDATE";

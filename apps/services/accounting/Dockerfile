@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     mvn package -DskipTests -B
 
 # --- Stage 2: Final (Tiếp tục dùng Alpine để Image nhẹ) ---
-FROM eclipse-temurin:21.0.2-jre-alpine AS final
+FROM eclipse-temurin:21-jre-alpine AS final
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 

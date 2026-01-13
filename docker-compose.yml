@@ -50,6 +50,7 @@ services:
     expose:
       - "8080"
     environment:
+      - JWT_SECRET=${JWT_SECRET}
       - IDENTITY_SERVICE_URL=http://identity-service:8080
       - HRM_SERVICE_URL=http://hrm-service:8080
       - SUPPLY_CHAIN_URL=http://supply-chain-service:8080

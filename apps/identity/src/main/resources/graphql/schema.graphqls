@@ -1,4 +1,5 @@
-scalar DateTime # Đổi thành DateTime cho chuẩn Java LocalDateTime
+# Định nghĩa Scalar cho DateTime để map với LocalDateTime trong Java
+scalar DateTime 
 
 type User {
     id: ID!
@@ -14,10 +15,11 @@ type Role {
     permissions: [String]!
 }
 
+# Payload trả về khi Login/Register thành công
 type AuthPayload {
     accessToken: String!
     refreshToken: String!
-    user: User!
+    # user: User! # Bạn có thể bỏ comment dòng này nếu DTO AuthResponse bên Java có trả về object User
 }
 
 input LoginInput {
@@ -26,23 +28,24 @@ input LoginInput {
     accountType: String! # Bắt buộc để phân biệt Portal (Internal) và Store (External)
 }
 
-type Mutation {
-    login(input: LoginInput!): AuthPayload
-    register(input: RegisterRequest!): String
-    # Logic đăng ký cho Portal (Yêu cầu quyền ADMIN)
-    registerPortalUser(email: String!, password: String!, roleName: String!): User!
-    
-    # Logic đăng ký cho Store (Public)
-    registerStoreUser(email: String!, password: String!): User!
-}
-
-type Query {
-    me: User!
-}
-
+# Request đăng ký với các trường bắt buộc theo logic mới
 input RegisterRequest {
     email: String!
     password: String!
-    roleName: String
-    accountType: String
+    roleName: String!     # Đã sửa thành bắt buộc (!)
+    accountType: String!  # Đã sửa thành bắt buộc (!)
+}
+
+type Query {
+    # Lấy thông tin user hiện tại (yêu cầu Header Authorization)
+    me: User!
+}
+
+type Mutation {
+    # Đăng nhập trả về Token
+    login(input: LoginInput!): AuthPayload
+    
+    # Đăng ký tài khoản mới và trả về Token (Auto login)
+    # Logic xử lý Portal/Store sẽ dựa vào field roleName và accountType trong input
+    register(input: RegisterRequest!): AuthPayload 
 }

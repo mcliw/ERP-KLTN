@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 
 import java.util.UUID;
 
-import erp.company.identity.constant.UserStatusConstant;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
