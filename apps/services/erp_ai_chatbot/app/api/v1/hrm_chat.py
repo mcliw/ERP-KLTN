@@ -1,26 +1,27 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from app.ai.executor import execute_chat
+from fastapi.encoders import jsonable_encoder
+from app.ai.executor.executor_hrm import execute_chat_hrm 
 
-router = APIRouter()
+router = APIRouter(prefix="/hrm")
 
 class ChatRequest(BaseModel):
-    module: str
+    module: str = "hrm"
     user_id: int | None = None
     role: str | None = None
     message: str
     debug: bool = False
-    paraphrase: bool = True  # NEW
+    paraphrase: bool = True
 
 @router.post("/chat")
 def chat(req: ChatRequest):
-    result = execute_chat(
+    result = execute_chat_hrm(
         module=req.module,
         user_id=req.user_id,
         role=req.role,
         message=req.message,
-        paraphrase_enabled=req.paraphrase
+        paraphrase_enabled=req.paraphrase,
     )
 
     if not req.debug:
@@ -29,4 +30,4 @@ def chat(req: ChatRequest):
             out["candidates"] = result["candidates"]
         return JSONResponse(content=out, media_type="application/json; charset=utf-8")
 
-    return JSONResponse(content=result, media_type="application/json; charset=utf-8")
+    return JSONResponse(content=jsonable_encoder(result),media_type="application/json; charset=utf-8")   

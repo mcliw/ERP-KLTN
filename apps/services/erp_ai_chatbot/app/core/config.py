@@ -1,7 +1,10 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# luôn load đúng .env tại root project: .../erp_ai_chatbot/.env
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 class Settings:
     HRM_DATABASE_URL = os.getenv("HRM_DATABASE_URL")

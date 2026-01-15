@@ -186,4 +186,3 @@ class ImgReview(SaleCrmBase):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     review = relationship("Review")
-

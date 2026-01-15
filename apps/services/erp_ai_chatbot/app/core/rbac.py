@@ -1,6 +1,6 @@
 MODULE_ALLOWED_ROLES = {
     "hrm": {"HR_ADMIN", "HR_STAFF", "MANAGER"},
-    "sale_crm": {"SALES", "CSKH", "MANAGER"},
+    "sale_crm": {"SALES", "CSKH", "MANAGER","CUSTOMER","CS","ADMIN"},
     "finance_accounting": {"ACCOUNTANT", "FINANCE_MANAGER"},
     "supply_chain": {"WAREHOUSE", "PROCUREMENT", "MANAGER"},
 }

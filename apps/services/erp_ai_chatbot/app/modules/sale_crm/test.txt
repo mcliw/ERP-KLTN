@@ -1,0 +1,208 @@
+0) PowerShell template (copy dùng lại)
+$body = @{
+  user_id = 1
+  role = "CUSTOMER"
+  message = "..."
+  debug = $true
+  paraphrase = $false
+  compose = $true
+} | ConvertTo-Json -Depth 20
+
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/sale_crm/chat" `
+  -ContentType "application/json; charset=utf-8" -Body $body | ConvertTo-Json -Depth 80
+
+
+Nếu bạn test “hỏi thay A/B” thì đổi role thành "CS" hoặc "ADMIN" (tùy RBAC bạn set).
+
+1) Test nhóm Đơn hàng (tools: tra_cuu_trang_thai_don_hang, chi_tiet_don_hang, don_hang_gan_nhat, tim_don_hang, don_hang_gia_tri_cao_nhat)
+
+Trạng thái đơn
+
+Câu hỏi: Đơn hàng 1 của tôi đang ở trạng thái gì?
+
+Chi tiết đơn
+
+Câu hỏi: Cho tôi xem chi tiết đơn hàng 1 gồm những sản phẩm gì?
+
+Đơn gần nhất
+
+Câu hỏi: Đơn hàng gần nhất của tôi là đơn nào?
+
+Tìm đơn theo trạng thái
+
+Câu hỏi: Liệt kê 10 đơn hàng của tôi trạng thái COMPLETED
+
+Đơn giá trị cao nhất
+
+Câu hỏi: Trong các đơn trước đây, đơn nào có giá trị cao nhất?
+
+2) Test nhóm Thanh toán (tools: trang_thai_thanh_toan_theo_don, tim_giao_dich_loi)
+
+Thanh toán theo đơn
+
+Câu hỏi: Đơn hàng 1 đã thanh toán chưa? Thanh toán bằng phương thức gì?
+
+Giao dịch lỗi (CS/ADMIN)
+
+Set role: "ADMIN"
+
+Câu hỏi: Cho tôi danh sách 20 giao dịch thanh toán FAILED hoặc PENDING gần đây
+
+3) Test nhóm Lịch sử mua (tools: lich_su_mua_hang, tong_tien_mua_hang, thong_ke_mua_theo_hang)
+
+Lịch sử mua hàng
+
+Câu hỏi: Lịch sử mua hàng của tôi là gì?
+
+Tổng tiền mua hàng
+
+Câu hỏi: Tổng tiền tôi đã mua hàng là bao nhiêu?
+
+Thống kê theo hãng
+
+Câu hỏi: Tôi đã mua sản phẩm của hãng nào nhiều nhất?
+
+4) Test nhóm Voucher (tools: kiem_tra_voucher_hop_le, xem_chi_tiet_voucher, ap_voucher_xem_truoc, goi_y_voucher_tot_nhat, bao_cao_su_dung_voucher)
+
+Lưu ý: voucher code tùy data seed của bạn. Nếu chưa biết mã nào, test câu (11) trước để lấy ra code.
+
+Xem báo cáo voucher dùng nhiều (để lấy code)
+
+Role: "ADMIN"
+
+Câu hỏi: Báo cáo voucher dùng nhiều nhất
+
+Xem chi tiết voucher theo mã
+
+Câu hỏi: Cho tôi xem chi tiết voucher SALE10
+
+Kiểm tra voucher với số tiền đơn
+
+Câu hỏi: Mã SALE10 có dùng được cho đơn 1500000 không?
+
+Preview áp voucher
+
+Câu hỏi: Nếu áp mã SALE10 cho đơn 1500000 thì giảm bao nhiêu và còn phải trả bao nhiêu?
+
+Áp voucher cho đơn cụ thể (chain: chi_tiet_don_hang -> ap_voucher_xem_truoc)
+
+Câu hỏi: Nếu tôi dùng mã SALE10 thì đơn hàng 1 còn bao nhiêu tiền?
+
+Gợi ý voucher tốt nhất
+
+Câu hỏi: Đơn 1500000 thì voucher nào giảm nhiều nhất?
+
+5) Test nhóm Sản phẩm & biến thể (tools: thong_tin_san_pham, bien_the_san_pham, san_pham_theo_hang, tim_san_pham, top_san_pham_ban_chay, top_bien_the_giam_gia_nhieu, kiem_tra_ton_kho_bien_the)
+
+Tìm sản phẩm theo keyword
+
+Câu hỏi: Tìm sản phẩm liên quan iPhone
+
+Thông tin sản phẩm theo id
+
+Câu hỏi: Sản phẩm 1 thuộc hãng nào và còn bán không?
+
+Biến thể sản phẩm
+
+Câu hỏi: Sản phẩm 1 có những phiên bản nào?
+
+Phiên bản nào rẻ nhất / đang giảm
+
+Câu hỏi: Trong các biến thể của sản phẩm 1, phiên bản nào đang giảm giá nhiều nhất?
+
+Top bán chạy
+
+Câu hỏi: Top 10 sản phẩm bán chạy nhất là gì?
+
+Top biến thể giảm giá
+
+Câu hỏi: Top 10 biến thể đang giảm giá nhiều nhất
+
+Tồn kho biến thể
+
+Câu hỏi: Biến thể 1 còn hàng không?
+
+Sản phẩm theo hãng (cần brand_id)
+
+Nếu chưa biết brand_id: dùng câu (18) để lấy brand_id hoặc dùng tool list brand (nếu bạn có).
+
+Câu hỏi: Cho tôi các sản phẩm của hãng có brand_id = 1
+
+6) Test nhóm Đánh giá (tools: tao_danh_gia, tao_danh_gia_kem_anh, danh_gia_san_pham, anh_danh_gia_san_pham, thong_ke_danh_gia_san_pham)
+
+Xem review sản phẩm
+
+Câu hỏi: Cho tôi xem đánh giá của sản phẩm 1
+
+Thống kê rating
+
+Câu hỏi: Sản phẩm 1 có điểm trung bình bao nhiêu và có bao nhiêu lượt đánh giá?
+
+Tạo review
+
+Câu hỏi: Tôi muốn đánh giá sản phẩm 1: 5 sao, nội dung: "Rất tốt"
+
+Tạo review kèm ảnh
+
+Câu hỏi: Đánh giá sản phẩm 1: 4 sao, "Ổn trong tầm giá", ảnh: https://img.test/1.jpg, https://img.test/2.jpg
+
+Lấy ảnh review theo product
+
+Câu hỏi: Cho tôi xem ảnh đánh giá của sản phẩm 1
+
+7) Test nhóm CRM hồ sơ khách hàng (tools: ho_so_khach_hang, danh_sach_dia_chi, tim_khach_hang)
+
+Hồ sơ của tôi
+
+Câu hỏi: Thông tin tài khoản của tôi là gì?
+
+Danh sách địa chỉ
+
+Câu hỏi: Tôi có mấy địa chỉ giao hàng? Địa chỉ mặc định là gì?
+
+CS hỏi thay A/B: tìm khách theo SĐT/email
+
+Role: "CS" hoặc "ADMIN"
+
+Câu hỏi: Tìm khách hàng có số điện thoại 09
+
+CS hỏi thay: xem hồ sơ khách A
+
+Role: "CS" hoặc "ADMIN"
+
+Câu hỏi: Xem hồ sơ khách hàng user_id 3
+
+CS hỏi thay: lịch sử mua của khách A
+
+Role: "CS" hoặc "ADMIN"
+
+Câu hỏi: Lịch sử mua hàng của user_id 3
+
+8) Câu hỏi “ăn điểm demo” (multi-tool)
+
+Đơn hàng gần nhất của tôi là gì và đã thanh toán chưa?
+(Chain: don_hang_gan_nhat -> trang_thai_thanh_toan_theo_don)
+
+Sản phẩm 1 có đánh giá tốt không và còn hàng không?
+(Chain: thong_ke_danh_gia_san_pham + (nếu bạn muốn) bien_the_san_pham/kiem_tra_ton_kho_bien_the)
+
+Trong các đơn trước đây, đơn nào cao nhất và thuộc trạng thái gì?
+(don_hang_gia_tri_cao_nhat)
+
+Nếu áp mã SALE10 cho đơn gần nhất của tôi thì còn bao nhiêu?
+(Chain: don_hang_gan_nhat -> chi_tiet_don_hang -> ap_voucher_xem_truoc)
+
+9) Lệnh test nhanh theo role (copy nhanh)
+CUSTOMER
+$role="CUSTOMER"
+
+CS
+$role="CS"
+
+ADMIN
+$role="ADMIN"
+
+
+Rồi trong body:
+
+$body.role = $role

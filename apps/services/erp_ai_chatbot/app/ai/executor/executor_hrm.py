@@ -20,6 +20,15 @@ import os
 from dotenv import load_dotenv
 from google import genai
 
+from app.ai.executor.context_injection import inject_auth_into_args
+
+def _args_has_target_user_id_field(tool) -> bool:
+    # tool.args_model là Pydantic model class
+    m = getattr(tool, "args_model", None)
+    fields = getattr(m, "model_fields", None)
+    return bool(fields) and ("target_user_id" in fields)
+
+
 load_dotenv()
 
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -962,6 +971,14 @@ def execute_chat_hrm(
         except UnresolvedRefError as e:
             audit({"event": "arg_unresolved_stop", "error": str(e), "step": step.model_dump()})
             break
+
+        resolved_args = inject_auth_into_args(
+            message=message,
+            role=role,
+            auth_user_id=user_id,
+            tool_args=resolved_args,
+            has_target_user_id_field=_args_has_target_user_id_field(tool),
+        )
 
         audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
         result = _execute_tool(plan.module, tool, resolved_args)
