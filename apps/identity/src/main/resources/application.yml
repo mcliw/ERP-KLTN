@@ -2,6 +2,9 @@ spring:
   application:
     name: identity
 
+  servlet:
+    context-path: /identity
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -29,3 +32,7 @@ graphql:
     graphiql:
       enabled: true
       path: /identity/graphiql # Đổi luôn trang test GraphiQL
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400

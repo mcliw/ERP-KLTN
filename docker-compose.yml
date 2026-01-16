@@ -45,6 +45,8 @@ services:
   gateway-service:
     build: 
       context: ./apps/gateway
+    env_file:
+      - .env
     image: arsneonci/gateway-service:latest
     container_name: gateway-service
     expose:
@@ -73,6 +75,8 @@ services:
   identity-service:
     build: 
       context: ./apps/identity
+    env_file:
+    - .env
     image: arsneonci/identity-service:latest
     container_name: identity-service
     environment:
@@ -100,6 +104,8 @@ services:
   hrm-service:
     build: 
       context: ./apps/services/hrm
+    env_file:
+    - .env
     image: arsneonci/hrm-service:latest
     container_name: hrm-service
     environment:

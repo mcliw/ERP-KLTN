@@ -98,6 +98,15 @@ public class PermissionsConstant { //34 PERMISSIONS
         public static final String STOCK_TAKE_CREATE = "SUPPLYCHAIN_STOCK_TAKE_CREATE";
         public static final String STOCK_TAKE_UPDATE = "SUPPLYCHAIN_STOCK_TAKE_UPDATE";
         public static final String STOCK_TAKE_DELETE = "SUPPLYCHAIN_STOCK_TAKE_DELETE";
+
+        public static final String REPORT_VIEW = "SUPPLYCHAIN_REPORT_VIEW";
+        public static final String REPORT_EXPORT = "SUPPLYCHAIN_REPORT_EXPORT";
+
+        public static final String SUPPLIER_VIEW = "SUPPLYCHAIN_SUPPLIER_VIEW";
+        public static final String SUPPLIER_CREATE = "SUPPLYCHAIN_SUPPLIER_CREATE";
+        public static final String SUPPLIER_UPDATE = "SUPPLYCHAIN_SUPPLIER_UPDATE";
+        public static final String SUPPLIER_DELETE = "SUPPLYCHAIN_SUPPLIER_DELETE";
+
     }
 
     public static class SALES { //14 PERMISSIONS

@@ -1,19 +1,15 @@
 package erp.company.identity.services.Impl;
 
-import erp.company.identity.constant.UserStatusConstant;
 import erp.company.identity.dto.AuthResponse;
 import erp.company.identity.dto.LoginRequest;
 import erp.company.identity.dto.RegisterRequest;
-import erp.company.identity.entity.RefreshToken;
 import erp.company.identity.entity.Role;
 import erp.company.identity.entity.User;
-import erp.company.identity.repository.RefreshTokenRepository;
 import erp.company.identity.repository.RoleRepository;
 import erp.company.identity.repository.UserRepository;
 import erp.company.identity.security.JwtUtil;
 import erp.company.identity.services.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,88 +21,66 @@ import java.time.LocalDateTime;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
     @Override
     @Transactional
-    public AuthResponse login(LoginRequest request) {
-        // 1. Tìm user
-        User user = userRepository.findByEmailAndAccountType(request.getEmail(), request.getAccountType())
-                .orElseThrow(() -> new RuntimeException("Tài khoản không tồn tại hoặc sai loại tài khoản"));
-
-        // 2. Kiểm tra status
-        if (!UserStatusConstant.ACTIVE.name().equals(user.getStatus())) {
-            throw new RuntimeException("Tài khoản đã bị khóa hoặc chưa kích hoạt");
+    public User register(RegisterRequest request) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            throw new RuntimeException("Email already exists");
         }
 
-        // 3. Verify Password
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BadCredentialsException("Sai mật khẩu");
-        }
+        // Logic lấy Role (mặc định CUSTOMER nếu không truyền)
+        String roleName = request.getRoleName() != null ? request.getRoleName() : "CUSTOMER";
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new RuntimeException("Role not found: " + roleName));
 
-        // 4. Cập nhật last login
-        user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
+        // Builder giờ đã hoạt động nhờ sửa file User.java
+        User user = User.builder()
+                .email(request.getEmail()) // Dùng email
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .accountType(request.getAccountType())
+                .status("ACTIVE")
+                .role(role)
+                .createdAt(LocalDateTime.now())
+                .build();
 
-        // 5. Tạo Token và trả về
-        return generateAuthResponse(user);
+        return userRepository.save(user);
     }
 
     @Override
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        // 1. Validate Email (Check trùng trong cùng 1 AccountType)
-        if (userRepository.findByEmailAndAccountType(request.getEmail(), request.getAccountType()).isPresent()) {
-            throw new RuntimeException("Email: " + request.getEmail() + " đã tồn tại trong hệ thống với vai trò " + request.getAccountType());
+    public AuthResponse login(LoginRequest request, String sourceHost) {
+        // Tìm user theo Email
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Wrong account or password"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("Wrong account or password");
         }
 
-        // 2. Validate và lấy Role
-        Role role = roleRepository.findByName(request.getRoleName())
-                .orElseThrow(() -> new RuntimeException("Role không hợp lệ: " + request.getRoleName()));
-
-        // 3. Tạo User Entity
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword())); // Hash mật khẩu
-        user.setAccountType(request.getAccountType());
-        user.setRole(role);
-        user.setStatus(UserStatusConstant.ACTIVE.name()); // Mặc định Active khi đăng ký mới
-        user.setCreatedAt(LocalDateTime.now());
+        // Kiểm tra domain (Bảo mật)
+        boolean isInternal = "INTERNAL".equalsIgnoreCase(user.getAccountType());
+        boolean isExternal = "EXTERNAL".equalsIgnoreCase(user.getAccountType());
         
-        // 4. Lưu User xuống DB
-        User savedUser = userRepository.save(user);
+        String host = sourceHost != null ? sourceHost.split(":")[0] : "";
 
-        // 5. Tự động đăng nhập (Tạo token) và trả về kết quả
-        return generateAuthResponse(savedUser);
-    }
+        if (isInternal && !host.equals("ldgcompany.local")) {
+           // throw new RuntimeException("Internal accounts must login via ldgcompany.local");
+           // Tạm comment để dễ test local, uncomment khi chạy production
+        }
 
-    // --- Private Helper để tái sử dụng logic tạo Token ---
-    private AuthResponse generateAuthResponse(User user) {
-        String accessToken = jwtUtil.generateAccessToken(user);
-        String refreshTokenStr = jwtUtil.generateRefreshToken(user);
-
-        // Lưu Refresh Token vào DB
-        saveRefreshToken(user, refreshTokenStr);
+        String token = jwtUtil.generateToken(user);
+        
+        user.setLastLoginAt(LocalDateTime.now());
+        userRepository.save(user);
 
         return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshTokenStr)
+                .accessToken(token)
+                .expiresIn(86400L) // Khớp với cấu hình yaml
                 .tokenType("Bearer")
-                .expiresIn(3600L) 
                 .build();
-    }
-
-    private void saveRefreshToken(User user, String token) {
-        // Có thể thêm logic thu hồi các token cũ nếu cần (Optional)
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
-        refreshToken.setToken(token);
-        refreshToken.setExpiryDate(LocalDateTime.now().plusDays(7));
-        refreshToken.setCreatedAt(LocalDateTime.now());
-        
-        refreshTokenRepository.save(refreshToken);
     }
 }

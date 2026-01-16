@@ -2,6 +2,9 @@ server:
   port: 8080
   forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
 
+jwt:
+  secret: ${JWT_SECRET} 
+
 spring:
   application:
     name: gateway-service
