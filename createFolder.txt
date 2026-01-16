@@ -1,0 +1,1 @@
+mkdir -p src/main/java/erp/company/identity/{services,security,repository,entity,controller,constant,config}
