@@ -98,7 +98,7 @@ def chi_tiet_phieu_nhap(session: Session, gr_code: str):
         "warehouse_code": wh.warehouse_code if wh else None,
         "warehouse_name": wh.warehouse_name if wh else None,
         "items": items
-    }, "Chi tiết GR.")
+    }, "Chi tiết GR (Phiếu nhập).")
 
 def danh_sach_gr_theo_po(session: Session, po_code: str):
     code = norm_code(po_code)
@@ -170,18 +170,39 @@ def doi_chieu_so_luong_po_va_gr(session: Session, po_code: str):
             )
         return can_lam_ro("Không tìm thấy PO. Bạn kiểm tra lại mã (ví dụ PO-20250001).", [])
 
+    # 1) Aggregate ordered theo product_id trong PO
+    po_agg = (
+        session.query(
+            POItem.product_id.label("product_id"),
+            func.coalesce(func.sum(POItem.quantity_ordered), 0).label("ordered_quantity"),
+        )
+        .filter(POItem.po_id == po.po_id)
+        .group_by(POItem.product_id)
+        .subquery()
+    )
+
+    # 2) Aggregate received theo product_id, chỉ lấy GR thuộc PO này
+    gr_agg = (
+        session.query(
+            GRItem.product_id.label("product_id"),
+            func.coalesce(func.sum(GRItem.quantity_received), 0).label("received_quantity"),
+        )
+        .join(GoodsReceipt, GoodsReceipt.gr_id == GRItem.gr_id)
+        .filter(GoodsReceipt.po_id == po.po_id)
+        .group_by(GRItem.product_id)
+        .subquery()
+    )
+
+    # 3) Join Product + po_agg (+ left join gr_agg)
     rows = (
         session.query(
             Product.sku.label("sku"),
             Product.product_name.label("product_name"),
-            POItem.quantity_ordered.label("ordered_quantity"),
-            func.coalesce(func.sum(GRItem.quantity_received), 0).label("received_quantity"),
+            po_agg.c.ordered_quantity.label("ordered_quantity"),
+            func.coalesce(gr_agg.c.received_quantity, 0).label("received_quantity"),
         )
-        .join(POItem, POItem.product_id == Product.product_id)
-        .outerjoin(GRItem, GRItem.product_id == Product.product_id)
-        .outerjoin(GoodsReceipt, and_(GoodsReceipt.gr_id == GRItem.gr_id, GoodsReceipt.po_id == po.po_id))
-        .filter(POItem.po_id == po.po_id)
-        .group_by(Product.sku, Product.product_name, POItem.quantity_ordered)
+        .join(po_agg, po_agg.c.product_id == Product.product_id)          # chỉ SKU có trong PO
+        .outerjoin(gr_agg, gr_agg.c.product_id == Product.product_id)     # GR có thể chưa có
         .all()
     )
 
@@ -189,9 +210,18 @@ def doi_chieu_so_luong_po_va_gr(session: Session, po_code: str):
     for r in rows:
         ordered = as_int(r.ordered_quantity)
         received = as_int(r.received_quantity)
-        items.append({"sku": r.sku, "product_name": r.product_name, "ordered": ordered, "received": received, "missing": max(0, ordered - received)})
+        items.append({
+            "sku": r.sku,
+            "product_name": r.product_name,
+            "ordered": ordered,
+            "received": received,
+            "missing": max(0, ordered - received),
+        })
 
-    return ok({"po_code": po.po_code, "status": po.status, "items": items}, "Đối chiếu PO vs GR (đã nhận/thiếu).")
+    return ok(
+        {"po_code": po.po_code, "status": po.status, "items": items},
+        "Đối chiếu PO vs GR (đã nhận/thiếu)."
+    )
 
 def po_nhan_mot_phan(session: Session, limit: int = 20):
     rows = (

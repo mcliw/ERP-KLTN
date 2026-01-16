@@ -13,11 +13,9 @@ from app.ai.tooling import ToolSpec
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough
 
 from app.db.hrm_database import HrmSessionLocal
-from app.ai.paraphraser import paraphrase_answer
 
 import json
 import os
-from dotenv import load_dotenv
 from google import genai
 
 from app.ai.executor.context_injection import inject_auth_into_args
@@ -27,13 +25,6 @@ def _args_has_target_user_id_field(tool) -> bool:
     m = getattr(tool, "args_model", None)
     fields = getattr(m, "model_fields", None)
     return bool(fields) and ("target_user_id" in fields)
-
-
-load_dotenv()
-
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-_GEMINI_COMPOSE_MODEL = os.getenv("GEMINI_COMPOSE_MODEL", os.getenv("GEMINI_MODEL_1", "gemini-2.5-flash"))
-_client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else genai.Client()
 
 # Fix để câu trả lời chỉ bám câu hỏi (không lôi thông tin NV)
 # Tool chỉ để lấy context (không nên đưa vào câu trả lời cuối)
@@ -177,13 +168,34 @@ def _get_path(store: dict, path: str):
         m = re.match(r"^([a-zA-Z0-9_]+)(\[[0-9]+\])?$", part)
         if not m:
             raise KeyError(path)
-        key = m.group(1)
-        cur = cur[key]
-        if m.group(2):
-            idx = int(m.group(2)[1:-1])
-            cur = cur[idx]
-    return cur
 
+        key = m.group(1)
+        idx = int(m.group(2)[1:-1]) if m.group(2) else None
+
+        # 1) cur là dict => truy cập key bình thường
+        if isinstance(cur, dict):
+            cur = cur[key]
+
+        # 2) cur là list nhưng LLM lỡ viết ".data[0]" (trong khi save_as là list)
+        elif isinstance(cur, list):
+            if key in ("data", "items", "rows", "results"):
+                # coi ".data" như identity của list
+                pass
+            else:
+                raise KeyError(f"{path} (cannot access key '{key}' on list)")
+
+        else:
+            raise KeyError(f"{path} (unexpected type {type(cur).__name__})")
+
+        # apply index nếu có
+        if idx is not None:
+            if not isinstance(cur, list):
+                raise KeyError(f"{path} (index on non-list)")
+            if idx < 0 or idx >= len(cur):
+                raise IndexError(f"{path} (index {idx} out of range; len={len(cur)})")
+            cur = cur[idx]
+
+    return cur
 
 def _render_value(tpl: str, store: dict):
     tpl = tpl or ""
@@ -317,302 +329,302 @@ def _fmt_money(v: Any) -> str:
     except Exception:
         return str(v)
 
-def _fallback_from_result(result: Any) -> Optional[str]:
-    if not isinstance(result, dict):
-        return None
+# def _fallback_from_result(result: Any) -> Optional[str]:
+#     if not isinstance(result, dict):
+#         return None
 
-    data = result.get("data")
-    msg = (result.get("thong_diep") or "").strip()
+#     data = result.get("data")
+#     msg = (result.get("thong_diep") or "").strip()
 
-    # ok(None, "...")
-    if data is None:
-        return msg or None
+#     # ok(None, "...")
+#     if data is None:
+#         return msg or None
 
-    # =========================
-    # HRM: Nhân sự (card)
-    # =========================
-    if isinstance(data, dict) and "employee_code" in data and "full_name" in data:
-        code = _s(data.get("employee_code"))
-        name = _s(data.get("full_name"))
-        status = _s(data.get("status"))
-        dept = _s(data.get("department_name"))
-        dept_code = _s(data.get("department_code"))
-        pos = _s(data.get("position_title"))
-        phone = _s(data.get("phone"))
-        email = _s(data.get("email_company"))
-        join_date = _fmt_date_vi(data.get("join_date"))
-        resign_date = _fmt_date_vi(data.get("resign_date")) if data.get("resign_date") else "N/A"
+#     # =========================
+#     # HRM: Nhân sự (card)
+#     # =========================
+#     if isinstance(data, dict) and "employee_code" in data and "full_name" in data:
+#         code = _s(data.get("employee_code"))
+#         name = _s(data.get("full_name"))
+#         status = _s(data.get("status"))
+#         dept = _s(data.get("department_name"))
+#         dept_code = _s(data.get("department_code"))
+#         pos = _s(data.get("position_title"))
+#         phone = _s(data.get("phone"))
+#         email = _s(data.get("email_company"))
+#         join_date = _fmt_date_vi(data.get("join_date"))
+#         resign_date = _fmt_date_vi(data.get("resign_date")) if data.get("resign_date") else "N/A"
 
-        lines = [
-            f"Nhân viên {code} - {name} (trạng thái: {status}).",
-            f"Phòng ban: {dept_code} - {dept}.",
-            f"Chức vụ: {pos}.",
-            f"Liên hệ: {phone} | {email}.",
-            f"Ngày vào: {join_date}. Nghỉ việc: {resign_date}.",
-        ]
-        return "\n".join(lines) if not msg else f"{msg}\n" + "\n".join(lines)
+#         lines = [
+#             f"Nhân viên {code} - {name} (trạng thái: {status}).",
+#             f"Phòng ban: {dept_code} - {dept}.",
+#             f"Chức vụ: {pos}.",
+#             f"Liên hệ: {phone} | {email}.",
+#             f"Ngày vào: {join_date}. Nghỉ việc: {resign_date}.",
+#         ]
+#         return "\n".join(lines) if not msg else f"{msg}\n" + "\n".join(lines)
 
-    # =========================
-    # HRM: Chấm công theo ngày (dict có timesheet_id + date)
-    # =========================
-    if isinstance(data, dict) and "timesheet_id" in data and "date" in data and "status" in data:
-        d = _fmt_date_vi(data.get("date"))
-        st = _s(data.get("status"))
-        cin = _s(data.get("check_in_time"))
-        cout = _s(data.get("check_out_time"))
-        late = data.get("late_minutes", 0)
-        early = data.get("early_leave_minutes", 0)
-        ot = data.get("ot_hours", 0)
-        shift = _s(data.get("shift_name"))
-        logs = data.get("attendance_logs") if isinstance(data.get("attendance_logs"), list) else []
-        log_txt = f"Số log: {len(logs)}." if logs is not None else ""
+#     # =========================
+#     # HRM: Chấm công theo ngày (dict có timesheet_id + date)
+#     # =========================
+#     if isinstance(data, dict) and "timesheet_id" in data and "date" in data and "status" in data:
+#         d = _fmt_date_vi(data.get("date"))
+#         st = _s(data.get("status"))
+#         cin = _s(data.get("check_in_time"))
+#         cout = _s(data.get("check_out_time"))
+#         late = data.get("late_minutes", 0)
+#         early = data.get("early_leave_minutes", 0)
+#         ot = data.get("ot_hours", 0)
+#         shift = _s(data.get("shift_name"))
+#         logs = data.get("attendance_logs") if isinstance(data.get("attendance_logs"), list) else []
+#         log_txt = f"Số log: {len(logs)}." if logs is not None else ""
 
-        base = [
-            f"Chấm công ngày {d}: {st}.",
-            f"Ca: {shift}. Check-in: {cin}. Check-out: {cout}.",
-            f"Đi muộn: {late} phút. Về sớm: {early} phút. OT: {ot} giờ. {log_txt}".strip(),
-        ]
-        base = [x for x in base if x]
-        return "\n".join(base) if not msg else f"{msg}\n" + "\n".join(base)
+#         base = [
+#             f"Chấm công ngày {d}: {st}.",
+#             f"Ca: {shift}. Check-in: {cin}. Check-out: {cout}.",
+#             f"Đi muộn: {late} phút. Về sớm: {early} phút. OT: {ot} giờ. {log_txt}".strip(),
+#         ]
+#         base = [x for x in base if x]
+#         return "\n".join(base) if not msg else f"{msg}\n" + "\n".join(base)
 
-    # =========================
-    # HRM: Lịch sử chấm công (list)
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "date" in data[0] and "status" in data[0]:
-        lines = []
-        for r in data[:7]:
-            d = _fmt_date_vi(r.get("date"))
-            st = _s(r.get("status"))
-            cin = _s(r.get("check_in_time"))
-            cout = _s(r.get("check_out_time"))
-            late = r.get("late_minutes", 0)
-            ot = r.get("ot_hours", 0)
-            lines.append(f"- {d}: {st} | in {cin} | out {cout} | late {late}p | OT {ot}h")
-        txt = "Lịch sử chấm công:\n" + _fmt_list(lines, 7)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Lịch sử chấm công (list)
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "date" in data[0] and "status" in data[0]:
+#         lines = []
+#         for r in data[:7]:
+#             d = _fmt_date_vi(r.get("date"))
+#             st = _s(r.get("status"))
+#             cin = _s(r.get("check_in_time"))
+#             cout = _s(r.get("check_out_time"))
+#             late = r.get("late_minutes", 0)
+#             ot = r.get("ot_hours", 0)
+#             lines.append(f"- {d}: {st} | in {cin} | out {cout} | late {late}p | OT {ot}h")
+#         txt = "Lịch sử chấm công:\n" + _fmt_list(lines, 7)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Tổng hợp chấm công tháng (dict)
-    # =========================
-    if isinstance(data, dict) and {"month", "year", "present_days", "absent_days", "leave_days"}.issubset(data.keys()):
-        m = data.get("month")
-        y = data.get("year")
-        txt = (
-            f"Tổng hợp chấm công {m:02d}/{y}: "
-            f"Đi làm {data.get('present_days', 0)}, "
-            f"Vắng {data.get('absent_days', 0)}, "
-            f"Nghỉ {data.get('leave_days', 0)}. "
-            f"Đi muộn {data.get('late_minutes', 0)} phút, "
-            f"Về sớm {data.get('early_leave_minutes', 0)} phút, "
-            f"OT {data.get('ot_hours', 0)} giờ."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Tổng hợp chấm công tháng (dict)
+#     # =========================
+#     if isinstance(data, dict) and {"month", "year", "present_days", "absent_days", "leave_days"}.issubset(data.keys()):
+#         m = data.get("month")
+#         y = data.get("year")
+#         txt = (
+#             f"Tổng hợp chấm công {m:02d}/{y}: "
+#             f"Đi làm {data.get('present_days', 0)}, "
+#             f"Vắng {data.get('absent_days', 0)}, "
+#             f"Nghỉ {data.get('leave_days', 0)}. "
+#             f"Đi muộn {data.get('late_minutes', 0)} phút, "
+#             f"Về sớm {data.get('early_leave_minutes', 0)} phút, "
+#             f"OT {data.get('ot_hours', 0)} giờ."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Ngày thiếu checkout
-    # =========================
-    if isinstance(data, dict) and "missing_checkout_days" in data and isinstance(data.get("missing_checkout_days"), list):
-        m = data.get("month")
-        y = data.get("year")
-        rows = data.get("missing_checkout_days") or []
+#     # =========================
+#     # HRM: Ngày thiếu checkout
+#     # =========================
+#     if isinstance(data, dict) and "missing_checkout_days" in data and isinstance(data.get("missing_checkout_days"), list):
+#         m = data.get("month")
+#         y = data.get("year")
+#         rows = data.get("missing_checkout_days") or []
 
-        if not rows:
-            return f"Không có ngày nào thiếu check-out trong {m:02d}/{y}."
+#         if not rows:
+#             return f"Không có ngày nào thiếu check-out trong {m:02d}/{y}."
         
-        lines = []
-        for r in rows[:10]:
-            lines.append(f"- { _fmt_date_vi(r.get('date')) }: check-in { _s(r.get('check_in_time')) }")
-        txt = f"Danh sách ngày thiếu check-out ({m:02d}/{y}):\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#         lines = []
+#         for r in rows[:10]:
+#             lines.append(f"- { _fmt_date_vi(r.get('date')) }: check-in { _s(r.get('check_in_time')) }")
+#         txt = f"Danh sách ngày thiếu check-out ({m:02d}/{y}):\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Nghỉ phép (list)
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "leave_request_id" in data[0]:
-        lines = []
-        for r in data[:8]:
-            lines.append(
-                f"- #{r.get('leave_request_id')} | {r.get('leave_type')} | "
-                f"{_fmt_date_vi(r.get('from_date'))} → {_fmt_date_vi(r.get('to_date'))} | "
-                f"{r.get('total_days')} ngày | {r.get('status')}"
-            )
-        txt = "Danh sách đơn nghỉ phép:\n" + _fmt_list(lines, 8)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Nghỉ phép (list)
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "leave_request_id" in data[0]:
+#         lines = []
+#         for r in data[:8]:
+#             lines.append(
+#                 f"- #{r.get('leave_request_id')} | {r.get('leave_type')} | "
+#                 f"{_fmt_date_vi(r.get('from_date'))} → {_fmt_date_vi(r.get('to_date'))} | "
+#                 f"{r.get('total_days')} ngày | {r.get('status')}"
+#             )
+#         txt = "Danh sách đơn nghỉ phép:\n" + _fmt_list(lines, 8)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # HRM: Nghỉ phép (detail)
-    if isinstance(data, dict) and "leave_request_id" in data and "leave_type" in data and "status" in data:
-        txt = (
-            f"Đơn nghỉ phép #{data.get('leave_request_id')}: {data.get('leave_type')} | "
-            f"{_fmt_date_vi(data.get('from_date'))} → {_fmt_date_vi(data.get('to_date'))} | "
-            f"{data.get('total_days')} ngày | Trạng thái: {data.get('status')}.\n"
-            f"Lý do: {_s(data.get('reason'))}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     # HRM: Nghỉ phép (detail)
+#     if isinstance(data, dict) and "leave_request_id" in data and "leave_type" in data and "status" in data:
+#         txt = (
+#             f"Đơn nghỉ phép #{data.get('leave_request_id')}: {data.get('leave_type')} | "
+#             f"{_fmt_date_vi(data.get('from_date'))} → {_fmt_date_vi(data.get('to_date'))} | "
+#             f"{data.get('total_days')} ngày | Trạng thái: {data.get('status')}.\n"
+#             f"Lý do: {_s(data.get('reason'))}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # HRM: tổng hợp nghỉ phép năm
-    if isinstance(data, dict) and "approved_total_days" in data and "year" in data and "employee_id" in data:
-        txt = (
-            f"Tổng nghỉ phép đã duyệt năm {data.get('year')} (employee_id={data.get('employee_id')}): "
-            f"{data.get('approved_total_days', 0)} ngày."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     # HRM: tổng hợp nghỉ phép năm
+#     if isinstance(data, dict) and "approved_total_days" in data and "year" in data and "employee_id" in data:
+#         txt = (
+#             f"Tổng nghỉ phép đã duyệt năm {data.get('year')} (employee_id={data.get('employee_id')}): "
+#             f"{data.get('approved_total_days', 0)} ngày."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Tăng ca (list / detail / summary)
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "ot_request_id" in data[0]:
-        lines = []
-        for r in data[:8]:
-            lines.append(
-                f"- #{r.get('ot_request_id')} | {r.get('ot_date')} | "
-                f"{r.get('from_time')}–{r.get('to_time')} | {r.get('total_hours')}h | {r.get('status')}"
-            )
-        txt = "Danh sách đơn tăng ca:\n" + _fmt_list(lines, 8)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Tăng ca (list / detail / summary)
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "ot_request_id" in data[0]:
+#         lines = []
+#         for r in data[:8]:
+#             lines.append(
+#                 f"- #{r.get('ot_request_id')} | {r.get('ot_date')} | "
+#                 f"{r.get('from_time')}–{r.get('to_time')} | {r.get('total_hours')}h | {r.get('status')}"
+#             )
+#         txt = "Danh sách đơn tăng ca:\n" + _fmt_list(lines, 8)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "ot_request_id" in data and "ot_date" in data:
-        txt = (
-            f"Đơn OT #{data.get('ot_request_id')} ({data.get('ot_type')}): {data.get('ot_date')} | "
-            f"{data.get('from_time')}–{data.get('to_time')} | {data.get('total_hours')} giờ | "
-            f"Trạng thái: {data.get('status')}.\n"
-            f"Lý do: {_s(data.get('reason'))}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "ot_request_id" in data and "ot_date" in data:
+#         txt = (
+#             f"Đơn OT #{data.get('ot_request_id')} ({data.get('ot_type')}): {data.get('ot_date')} | "
+#             f"{data.get('from_time')}–{data.get('to_time')} | {data.get('total_hours')} giờ | "
+#             f"Trạng thái: {data.get('status')}.\n"
+#             f"Lý do: {_s(data.get('reason'))}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "breakdown" in data and isinstance(data.get("breakdown"), list):
-        m = data.get("month")
-        y = data.get("year")
-        rows = data.get("breakdown") or []
-        lines = []
-        for r in rows[:10]:
-            lines.append(f"- {r.get('ot_type')}: {r.get('approved_hours')} giờ")
-        txt = f"Tổng hợp OT đã duyệt {m:02d}/{y}:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "breakdown" in data and isinstance(data.get("breakdown"), list):
+#         m = data.get("month")
+#         y = data.get("year")
+#         rows = data.get("breakdown") or []
+#         lines = []
+#         for r in rows[:10]:
+#             lines.append(f"- {r.get('ot_type')}: {r.get('approved_hours')} giờ")
+#         txt = f"Tổng hợp OT đã duyệt {m:02d}/{y}:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Hợp đồng
-    # =========================
-    if isinstance(data, dict) and "contract_number" in data and "basic_salary" in data:
-        txt = (
-            f"Hợp đồng {data.get('contract_number')} ({data.get('contract_type')}): "
-            f"{_fmt_date_vi(data.get('start_date'))} → {_fmt_date_vi(data.get('end_date'))}. "
-            f"Lương cơ bản: {_fmt_money(data.get('basic_salary'))}. "
-            f"PC trách nhiệm: {_fmt_money(data.get('allowance_responsibility'))}, "
-            f"PC đi lại: {_fmt_money(data.get('allowance_transport'))}, "
-            f"PC ăn trưa: {_fmt_money(data.get('allowance_lunch'))}. "
-            f"Trạng thái: {data.get('status')}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Hợp đồng
+#     # =========================
+#     if isinstance(data, dict) and "contract_number" in data and "basic_salary" in data:
+#         txt = (
+#             f"Hợp đồng {data.get('contract_number')} ({data.get('contract_type')}): "
+#             f"{_fmt_date_vi(data.get('start_date'))} → {_fmt_date_vi(data.get('end_date'))}. "
+#             f"Lương cơ bản: {_fmt_money(data.get('basic_salary'))}. "
+#             f"PC trách nhiệm: {_fmt_money(data.get('allowance_responsibility'))}, "
+#             f"PC đi lại: {_fmt_money(data.get('allowance_transport'))}, "
+#             f"PC ăn trưa: {_fmt_money(data.get('allowance_lunch'))}. "
+#             f"Trạng thái: {data.get('status')}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "contract_number" in data[0]:
-        lines = []
-        for r in data[:8]:
-            lines.append(
-                f"- {r.get('contract_number')} | {r.get('contract_type')} | "
-                f"{_fmt_date_vi(r.get('start_date'))} → {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
-            )
-        txt = "Lịch sử hợp đồng:\n" + _fmt_list(lines, 8)
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "contract_number" in data[0]:
+#         lines = []
+#         for r in data[:8]:
+#             lines.append(
+#                 f"- {r.get('contract_number')} | {r.get('contract_type')} | "
+#                 f"{_fmt_date_vi(r.get('start_date'))} → {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
+#             )
+#         txt = "Lịch sử hợp đồng:\n" + _fmt_list(lines, 8)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "rows" in data and isinstance(data.get("rows"), list) and "from" in data and "to" in data:
-        lines = []
-        for r in (data.get("rows") or [])[:10]:
-            lines.append(
-                f"- {r.get('contract_number')} | {r.get('employee_id')} | "
-                f"end {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
-            )
-        txt = f"Hợp đồng sắp hết hạn ({_fmt_date_vi(data.get('from'))} → {_fmt_date_vi(data.get('to'))}):\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "rows" in data and isinstance(data.get("rows"), list) and "from" in data and "to" in data:
+#         lines = []
+#         for r in (data.get("rows") or [])[:10]:
+#             lines.append(
+#                 f"- {r.get('contract_number')} | {r.get('employee_id')} | "
+#                 f"end {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
+#             )
+#         txt = f"Hợp đồng sắp hết hạn ({_fmt_date_vi(data.get('from'))} → {_fmt_date_vi(data.get('to'))}):\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Danh mục (phòng ban/chức vụ/ca làm)
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "department_code" in data[0]:
-        lines = [f"- {r.get('department_code')}: {r.get('department_name')}" for r in data[:10]]
-        txt = "Danh sách phòng ban:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Danh mục (phòng ban/chức vụ/ca làm)
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "department_code" in data[0]:
+#         lines = [f"- {r.get('department_code')}: {r.get('department_name')}" for r in data[:10]]
+#         txt = "Danh sách phòng ban:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "position_title" in data[0]:
-        lines = []
-        for r in data[:10]:
-            lines.append(f"- {r.get('position_title')} | { _fmt_money(r.get('base_salary_range_min')) } → { _fmt_money(r.get('base_salary_range_max')) }")
-        txt = "Danh sách chức vụ:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "position_title" in data[0]:
+#         lines = []
+#         for r in data[:10]:
+#             lines.append(f"- {r.get('position_title')} | { _fmt_money(r.get('base_salary_range_min')) } → { _fmt_money(r.get('base_salary_range_max')) }")
+#         txt = "Danh sách chức vụ:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "shift_name" in data[0] and "start_time" in data[0]:
-        lines = [f"- {r.get('shift_name')}: {r.get('start_time')}–{r.get('end_time')}" for r in data[:10]]
-        txt = "Danh sách ca làm:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "shift_name" in data[0] and "start_time" in data[0]:
+#         lines = [f"- {r.get('shift_name')}: {r.get('start_time')}–{r.get('end_time')}" for r in data[:10]]
+#         txt = "Danh sách ca làm:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Kỳ lương / Payslip / Chi tiết lương
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "payroll_period_id" in data[0] and "month" in data[0]:
-        lines = []
-        for r in data[:10]:
-            lines.append(f"- #{r.get('payroll_period_id')} | {r.get('name')} | {r.get('month'):02d}/{r.get('year')} | {r.get('status')}")
-        txt = "Danh sách kỳ lương:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Kỳ lương / Payslip / Chi tiết lương
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "payroll_period_id" in data[0] and "month" in data[0]:
+#         lines = []
+#         for r in data[:10]:
+#             lines.append(f"- #{r.get('payroll_period_id')} | {r.get('name')} | {r.get('month'):02d}/{r.get('year')} | {r.get('status')}")
+#         txt = "Danh sách kỳ lương:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "payslip_id" in data and "net_salary" in data and "period_name" in data:
-        txt = (
-            f"{data.get('period_name')} ({data.get('month'):02d}/{data.get('year')}): "
-            f"Lương gross {_fmt_money(data.get('gross_salary'))}, "
-            f"khấu trừ {_fmt_money(data.get('total_deduction'))}, "
-            f"thực nhận {_fmt_money(data.get('net_salary'))}. "
-            f"OT: {data.get('total_ot_hours')}h | Công: {data.get('total_working_days')} | Trạng thái: {data.get('status')}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "payslip_id" in data and "net_salary" in data and "period_name" in data:
+#         txt = (
+#             f"{data.get('period_name')} ({data.get('month'):02d}/{data.get('year')}): "
+#             f"Lương gross {_fmt_money(data.get('gross_salary'))}, "
+#             f"khấu trừ {_fmt_money(data.get('total_deduction'))}, "
+#             f"thực nhận {_fmt_money(data.get('net_salary'))}. "
+#             f"OT: {data.get('total_ot_hours')}h | Công: {data.get('total_working_days')} | Trạng thái: {data.get('status')}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "lines" in data and isinstance(data.get("lines"), list) and "total_allowance" in data and "total_deduction" in data:
-        lines = []
-        for r in (data.get("lines") or [])[:12]:
-            lines.append(
-                f"- {r.get('rule_code')} | {r.get('rule_name')} | {r.get('rule_type')} | { _fmt_money(r.get('amount')) }"
-            )
-        txt = (
-            f"Chi tiết bảng lương (payslip_id={data.get('payslip_id')}):\n"
-            f"Tổng phụ cấp: {_fmt_money(data.get('total_allowance'))}. "
-            f"Tổng khấu trừ: {_fmt_money(data.get('total_deduction'))}.\n"
-            f"Dòng chi tiết:\n{_fmt_list(lines, 12)}"
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "lines" in data and isinstance(data.get("lines"), list) and "total_allowance" in data and "total_deduction" in data:
+#         lines = []
+#         for r in (data.get("lines") or [])[:12]:
+#             lines.append(
+#                 f"- {r.get('rule_code')} | {r.get('rule_name')} | {r.get('rule_type')} | { _fmt_money(r.get('amount')) }"
+#             )
+#         txt = (
+#             f"Chi tiết bảng lương (payslip_id={data.get('payslip_id')}):\n"
+#             f"Tổng phụ cấp: {_fmt_money(data.get('total_allowance'))}. "
+#             f"Tổng khấu trừ: {_fmt_money(data.get('total_deduction'))}.\n"
+#             f"Dòng chi tiết:\n{_fmt_list(lines, 12)}"
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Face data
-    # =========================
-    if isinstance(data, dict) and "has_active_face_data" in data and "employee_id" in data:
-        txt = (
-            f"Face data employee_id={data.get('employee_id')}: "
-            f"{'ĐÃ có' if data.get('has_active_face_data') else 'CHƯA có'} dữ liệu active. "
-            f"image_path={_s(data.get('image_path'))}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Face data
+#     # =========================
+#     if isinstance(data, dict) and "has_active_face_data" in data and "employee_id" in data:
+#         txt = (
+#             f"Face data employee_id={data.get('employee_id')}: "
+#             f"{'ĐÃ có' if data.get('has_active_face_data') else 'CHƯA có'} dữ liệu active. "
+#             f"image_path={_s(data.get('image_path'))}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # =========================
-    # HRM: Payment request
-    # =========================
-    if isinstance(data, list) and data and isinstance(data[0], dict) and "request_code" in data[0] and "total_amount" in data[0]:
-        lines = []
-        for r in data[:10]:
-            lines.append(
-                f"- {r.get('request_code')} | period_id={r.get('payroll_period_id')} | "
-                f"{_fmt_money(r.get('total_amount'))} | {r.get('status')}"
-            )
-        txt = "Danh sách yêu cầu thanh toán HRM:\n" + _fmt_list(lines, 10)
-        return txt if not msg else f"{msg}\n{txt}"
+#     # =========================
+#     # HRM: Payment request
+#     # =========================
+#     if isinstance(data, list) and data and isinstance(data[0], dict) and "request_code" in data[0] and "total_amount" in data[0]:
+#         lines = []
+#         for r in data[:10]:
+#             lines.append(
+#                 f"- {r.get('request_code')} | period_id={r.get('payroll_period_id')} | "
+#                 f"{_fmt_money(r.get('total_amount'))} | {r.get('status')}"
+#             )
+#         txt = "Danh sách yêu cầu thanh toán HRM:\n" + _fmt_list(lines, 10)
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    if isinstance(data, dict) and "request_code" in data and "total_amount" in data:
-        txt = (
-            f"Yêu cầu {data.get('request_code')} (period_id={data.get('payroll_period_id')}): "
-            f"Tổng tiền {_fmt_money(data.get('total_amount'))}, "
-            f"số NV {data.get('total_employees')}, trạng thái {data.get('status')}, "
-            f"finance_txn_id={_s(data.get('finance_transaction_id'))}."
-        )
-        return txt if not msg else f"{msg}\n{txt}"
+#     if isinstance(data, dict) and "request_code" in data and "total_amount" in data:
+#         txt = (
+#             f"Yêu cầu {data.get('request_code')} (period_id={data.get('payroll_period_id')}): "
+#             f"Tổng tiền {_fmt_money(data.get('total_amount'))}, "
+#             f"số NV {data.get('total_employees')}, trạng thái {data.get('status')}, "
+#             f"finance_txn_id={_s(data.get('finance_transaction_id'))}."
+#         )
+#         return txt if not msg else f"{msg}\n{txt}"
 
-    # fallback cuối: nếu có msg thì trả msg
-    return msg or None
+#     # fallback cuối: nếu có msg thì trả msg
+#     return msg or None
 
 def _drop_none(d: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
@@ -640,281 +652,281 @@ def _strip_sensitive(d: Dict[str, Any]) -> Dict[str, Any]:
         return d
     return {k: v for k, v in d.items() if k not in _HRM_SENSITIVE_KEYS}
 
-def _filter_row_hrm(row: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Chọn field theo “shape” HRM để:
-    - Payload gọn
-    - Không lộ PII
-    """
-    row = _strip_sensitive(row)
-    keys = set(row.keys())
+# def _filter_row_hrm(row: Dict[str, Any]) -> Dict[str, Any]:
+#     """
+#     Chọn field theo “shape” HRM để:
+#     - Payload gọn
+#     - Không lộ PII
+#     """
+#     row = _strip_sensitive(row)
+#     keys = set(row.keys())
 
-    # 1) Nhân viên (employee profile)
-    if "employee_code" in keys or "employee_id" in keys:
-        keep = [
-            "employee_id", "user_id",
-            "employee_code", "full_name", "status",
-            "department_code", "department_name",
-            "position_title",
-            "join_date", "resign_date",
-        ]
+#     # 1) Nhân viên (employee profile)
+#     if "employee_code" in keys or "employee_id" in keys:
+#         keep = [
+#             "employee_id", "user_id",
+#             "employee_code", "full_name", "status",
+#             "department_code", "department_name",
+#             "position_title",
+#             "join_date", "resign_date",
+#         ]
 
-    # 2) Đơn nghỉ phép
-    elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
-        keep = [
-            "leave_request_id", "id",
-            "employee_id",
-            "leave_type",
-            "from_date", "to_date",
-            "total_days",
-            "status",
-            "approver_id",
-            "reason",
-            "approved_at",
-        ]
+#     # 2) Đơn nghỉ phép
+#     elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
+#         keep = [
+#             "leave_request_id", "id",
+#             "employee_id",
+#             "leave_type",
+#             "from_date", "to_date",
+#             "total_days",
+#             "status",
+#             "approver_id",
+#             "reason",
+#             "approved_at",
+#         ]
 
-    # 3) Chấm công ngày (timesheet daily)
-    elif "date" in keys and ("check_in_time" in keys or "check_out_time" in keys):
-        keep = [
-            "date",
-            "status",
-            "shift_code", "shift_name",
-            "check_in_time", "check_out_time",
-            "late_minutes", "early_leave_minutes",
-            "ot_hours",
-        ]
+#     # 3) Chấm công ngày (timesheet daily)
+#     elif "date" in keys and ("check_in_time" in keys or "check_out_time" in keys):
+#         keep = [
+#             "date",
+#             "status",
+#             "shift_code", "shift_name",
+#             "check_in_time", "check_out_time",
+#             "late_minutes", "early_leave_minutes",
+#             "ot_hours",
+#         ]
 
-    # 4) Tổng hợp chấm công tháng
-    elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
-        keep = [
-            "month", "year",
-            "days_total",
-            "present_days", "absent_days", "leave_days",
-            "late_minutes", "early_leave_minutes",
-            "ot_hours",
-            "working_day_count",
-        ]
+#     # 4) Tổng hợp chấm công tháng
+#     elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
+#         keep = [
+#             "month", "year",
+#             "days_total",
+#             "present_days", "absent_days", "leave_days",
+#             "late_minutes", "early_leave_minutes",
+#             "ot_hours",
+#             "working_day_count",
+#         ]
 
-    # 5) Thiếu check-out (tool ngay_thieu_checkout)
-    elif "missing_checkout_days" in keys:
-        keep = ["month", "year", "missing_checkout_days"]
+#     # 5) Thiếu check-out (tool ngay_thieu_checkout)
+#     elif "missing_checkout_days" in keys:
+#         keep = ["month", "year", "missing_checkout_days"]
 
-    # 6) OT theo ngày / danh sách OT (nếu bạn có tool OT)
-    elif "ot_hours" in keys and ("date" in keys or "from_time" in keys or "to_time" in keys):
-        keep = [
-            "date", "ot_hours",
-            "status",
-            "reason",
-            "approver_id",
-        ]
+#     # 6) OT theo ngày / danh sách OT (nếu bạn có tool OT)
+#     elif "ot_hours" in keys and ("date" in keys or "from_time" in keys or "to_time" in keys):
+#         keep = [
+#             "date", "ot_hours",
+#             "status",
+#             "reason",
+#             "approver_id",
+#         ]
 
-    else:
-        keep = list(keys)[:10]  # generic fallback
+#     else:
+#         keep = list(keys)[:10]  # generic fallback
 
-    out: Dict[str, Any] = {}
-    for k in keep:
-        if k in row:
-            out[k] = row.get(k)
+#     out: Dict[str, Any] = {}
+#     for k in keep:
+#         if k in row:
+#             out[k] = row.get(k)
 
-    # Nếu missing_checkout_days là list dict => preview từng item gọn
-    if "missing_checkout_days" in out and isinstance(out["missing_checkout_days"], list):
-        items = []
-        for x in out["missing_checkout_days"][:20]:
-            if isinstance(x, dict):
-                x = _strip_sensitive(x)
-                items.append(_drop_none({
-                    "date": x.get("date"),
-                    "check_in_time": x.get("check_in_time"),
-                }))
-            else:
-                items.append(x)
-        out["missing_checkout_days"] = items
+#     # Nếu missing_checkout_days là list dict => preview từng item gọn
+#     if "missing_checkout_days" in out and isinstance(out["missing_checkout_days"], list):
+#         items = []
+#         for x in out["missing_checkout_days"][:20]:
+#             if isinstance(x, dict):
+#                 x = _strip_sensitive(x)
+#                 items.append(_drop_none({
+#                     "date": x.get("date"),
+#                     "check_in_time": x.get("check_in_time"),
+#                 }))
+#             else:
+#                 items.append(x)
+#         out["missing_checkout_days"] = items
 
-    return _drop_none(out)
+#     return _drop_none(out)
 
-def _preview_data_hrm(data: Any, list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
-    # list output
-    if isinstance(data, list):
-        preview = []
-        for r in data[:max(1, min(list_n, 20))]:
-            if isinstance(r, dict):
-                preview.append(_filter_row_hrm(r))
-            else:
-                preview.append(r)
-        return {"type": "list", "total": len(data), "items_preview": preview}
+# def _preview_data_hrm(data: Any, list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
+#     # list output
+#     if isinstance(data, list):
+#         preview = []
+#         for r in data[:max(1, min(list_n, 20))]:
+#             if isinstance(r, dict):
+#                 preview.append(_filter_row_hrm(r))
+#             else:
+#                 preview.append(r)
+#         return {"type": "list", "total": len(data), "items_preview": preview}
 
-    # object output
-    if isinstance(data, dict):
-        data2 = _strip_sensitive(data)
-        out: Dict[str, Any] = {"type": "object"}
+#     # object output
+#     if isinstance(data, dict):
+#         data2 = _strip_sensitive(data)
+#         out: Dict[str, Any] = {"type": "object"}
 
-        keys = set(data2.keys())
+#         keys = set(data2.keys())
 
-        # core fields theo shape
-        if "employee_code" in keys or "employee_id" in keys:
-            core_keep = [
-                "employee_id", "employee_code", "full_name", "status",
-                "department_code", "department_name", "position_title",
-                "join_date", "resign_date",
-            ]
-        elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
-            core_keep = [
-                "leave_request_id", "employee_id",
-                "leave_type", "from_date", "to_date", "total_days",
-                "status", "approver_id", "approved_at",
-            ]
-        elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
-            core_keep = [
-                "month", "year",
-                "days_total", "present_days", "absent_days", "leave_days",
-                "late_minutes", "early_leave_minutes", "ot_hours",
-            ]
-        elif "missing_checkout_days" in keys:
-            core_keep = ["month", "year"]
-        else:
-            # fallback: scalar keys tối đa 10
-            core_keep = []
-            for k, v in data2.items():
-                if isinstance(v, (str, int, float, bool)) or v is None:
-                    core_keep.append(k)
-                if len(core_keep) >= 10:
-                    break
+#         # core fields theo shape
+#         if "employee_code" in keys or "employee_id" in keys:
+#             core_keep = [
+#                 "employee_id", "employee_code", "full_name", "status",
+#                 "department_code", "department_name", "position_title",
+#                 "join_date", "resign_date",
+#             ]
+#         elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
+#             core_keep = [
+#                 "leave_request_id", "employee_id",
+#                 "leave_type", "from_date", "to_date", "total_days",
+#                 "status", "approver_id", "approved_at",
+#             ]
+#         elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
+#             core_keep = [
+#                 "month", "year",
+#                 "days_total", "present_days", "absent_days", "leave_days",
+#                 "late_minutes", "early_leave_minutes", "ot_hours",
+#             ]
+#         elif "missing_checkout_days" in keys:
+#             core_keep = ["month", "year"]
+#         else:
+#             # fallback: scalar keys tối đa 10
+#             core_keep = []
+#             for k, v in data2.items():
+#                 if isinstance(v, (str, int, float, bool)) or v is None:
+#                     core_keep.append(k)
+#                 if len(core_keep) >= 10:
+#                     break
 
-        core = {}
-        for k in core_keep:
-            if k in data2:
-                core[k] = data2.get(k)
-        out["core"] = _drop_none(core)
+#         core = {}
+#         for k in core_keep:
+#             if k in data2:
+#                 core[k] = data2.get(k)
+#         out["core"] = _drop_none(core)
 
-        # nested preview
-        if isinstance(data2.get("missing_checkout_days"), list):
-            items = data2["missing_checkout_days"]
-            out["missing_checkout_total"] = len(items)
-            out["missing_checkout_preview"] = [
-                _drop_none({"date": x.get("date"), "check_in_time": x.get("check_in_time")})
-                for x in items[:max(1, min(nested_n, 20))]
-                if isinstance(x, dict)
-            ]
+#         # nested preview
+#         if isinstance(data2.get("missing_checkout_days"), list):
+#             items = data2["missing_checkout_days"]
+#             out["missing_checkout_total"] = len(items)
+#             out["missing_checkout_preview"] = [
+#                 _drop_none({"date": x.get("date"), "check_in_time": x.get("check_in_time")})
+#                 for x in items[:max(1, min(nested_n, 20))]
+#                 if isinstance(x, dict)
+#             ]
 
-        if isinstance(data2.get("items"), list):
-            items = data2["items"]
-            out["items_total"] = len(items)
-            out["items_preview"] = [
-                _filter_row_hrm(x) for x in items[:max(1, min(nested_n, 20))] if isinstance(x, dict)
-            ]
+#         if isinstance(data2.get("items"), list):
+#             items = data2["items"]
+#             out["items_total"] = len(items)
+#             out["items_preview"] = [
+#                 _filter_row_hrm(x) for x in items[:max(1, min(nested_n, 20))] if isinstance(x, dict)
+#             ]
 
-        return out
+#         return out
 
-    # primitive
-    return {"type": type(data).__name__, "value": data}
+#     # primitive
+#     return {"type": type(data).__name__, "value": data}
 
-def _build_facts_for_paraphrase_hrm(store: Dict[str, Any], list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
-    """
-    Dùng cho:
-    - log/debug
-    - hoặc frontend/LLM muốn “facts” gọn theo từng step
-    """
-    steps = []
-    i = 1
-    while True:
-        si = store.get(f"s{i}")
-        if not isinstance(si, dict):
-            break
-        steps.append(_drop_none({
-            "step": f"s{i}",
-            "tool_message": si.get("thong_diep"),
-            "ok": si.get("ok"),
-            "preview": _preview_data_hrm(si.get("data"), list_n=list_n, nested_n=nested_n),
-        }))
-        i += 1
+# def _build_facts_for_paraphrase_hrm(store: Dict[str, Any], list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
+#     """
+#     Dùng cho:
+#     - log/debug
+#     - hoặc frontend/LLM muốn “facts” gọn theo từng step
+#     """
+#     steps = []
+#     i = 1
+#     while True:
+#         si = store.get(f"s{i}")
+#         if not isinstance(si, dict):
+#             break
+#         steps.append(_drop_none({
+#             "step": f"s{i}",
+#             "tool_message": si.get("thong_diep"),
+#             "ok": si.get("ok"),
+#             "preview": _preview_data_hrm(si.get("data"), list_n=list_n, nested_n=nested_n),
+#         }))
+#         i += 1
 
-    return _drop_none({
-        "steps_total": len(steps),
-        "steps": steps,
-        "store_keys": list(store.keys())[:30],
-    })
+#     return _drop_none({
+#         "steps_total": len(steps),
+#         "steps": steps,
+#         "store_keys": list(store.keys())[:30],
+#     })
 
-def _build_compose_payload_hrm(
-    module: str,
-    role: Optional[str],
-    question: str,
-    step_infos: List[dict],
-    draft_answer: Optional[str] = None,
-):
-    """
-    Payload sạch để frontend đưa cho LLM:
-    - Không lộ phone/email
-    - Dữ liệu đã clip + preview đúng shape HRM
-    """
-    tool_results = []
-    for si in (step_infos or []):
-        r = si.get("result")
-        data = None
-        thong_diep = None
-        ok_flag = None
+# def _build_compose_payload_hrm(
+#     module: str,
+#     role: Optional[str],
+#     question: str,
+#     step_infos: List[dict],
+#     draft_answer: Optional[str] = None,
+# ):
+#     """
+#     Payload sạch để frontend đưa cho LLM:
+#     - Không lộ phone/email
+#     - Dữ liệu đã clip + preview đúng shape HRM
+#     """
+#     tool_results = []
+#     for si in (step_infos or []):
+#         r = si.get("result")
+#         data = None
+#         thong_diep = None
+#         ok_flag = None
 
-        if isinstance(r, dict):
-            data = r.get("data")
-            thong_diep = r.get("thong_diep")
-            ok_flag = r.get("ok")
-        else:
-            data = r
+#         if isinstance(r, dict):
+#             data = r.get("data")
+#             thong_diep = r.get("thong_diep")
+#             ok_flag = r.get("ok")
+#         else:
+#             data = r
 
-        # nếu bạn vẫn muốn clip sâu thì dùng _clip_data của bạn
-        # ở đây preview_data_hrm đã đủ gọn, còn muốn giữ raw thì tuỳ
-        tool_results.append(_drop_none({
-            "step_id": si.get("id"),
-            "tool": si.get("tool"),
-            "args": si.get("args"),
-            "ok": ok_flag,
-            "thong_diep": thong_diep,
-            "preview": _preview_data_hrm(data, list_n=6, nested_n=10),
-        }))
+#         # nếu bạn vẫn muốn clip sâu thì dùng _clip_data của bạn
+#         # ở đây preview_data_hrm đã đủ gọn, còn muốn giữ raw thì tuỳ
+#         tool_results.append(_drop_none({
+#             "step_id": si.get("id"),
+#             "tool": si.get("tool"),
+#             "args": si.get("args"),
+#             "ok": ok_flag,
+#             "thong_diep": thong_diep,
+#             "preview": _preview_data_hrm(data, list_n=6, nested_n=10),
+#         }))
 
-    return _drop_none({
-        "module": module,
-        "role": role,
-        "question": question,
-        "draft_answer": draft_answer,
-        "tool_results": tool_results,
-    })
+#     return _drop_none({
+#         "module": module,
+#         "role": role,
+#         "question": question,
+#         "draft_answer": draft_answer,
+#         "tool_results": tool_results,
+#     })
 
-def compose_answer_with_llm(module: str, user_question: str, step_infos: list[dict]) -> str:
-    filtered_step_infos = _filter_step_infos_for_compose(module, user_question, step_infos)
-    requested_metrics = _extract_requested_metrics(user_question)
+# def compose_answer_with_llm(module: str, user_question: str, step_infos: list[dict]) -> str:
+#     filtered_step_infos = _filter_step_infos_for_compose(module, user_question, step_infos)
+#     requested_metrics = _extract_requested_metrics(user_question)
 
-    payload = {
-        "module": module,
-        "question": user_question,
-        "requested_metrics": requested_metrics,
-        "tool_results": [
-            {
-                "step_id": si["id"],
-                "tool": si["tool"],
-                "data": (si.get("result") or {}).get("data"),
-                "thong_diep": (si.get("result") or {}).get("thong_diep"),
-                "ok": (si.get("result") or {}).get("ok"),
-            }
-            for si in filtered_step_infos
-        ],
-    }
+#     payload = {
+#         "module": module,
+#         "question": user_question,
+#         "requested_metrics": requested_metrics,
+#         "tool_results": [
+#             {
+#                 "step_id": si["id"],
+#                 "tool": si["tool"],
+#                 "data": (si.get("result") or {}).get("data"),
+#                 "thong_diep": (si.get("result") or {}).get("thong_diep"),
+#                 "ok": (si.get("result") or {}).get("ok"),
+#             }
+#             for si in filtered_step_infos
+#         ],
+#     }
 
-    sys = """
-Bạn là trợ lý ERP. Trả lời NGẮN GỌN, đúng trọng tâm theo câu hỏi.
-QUY TẮC:
-- Chỉ dùng dữ liệu trong tool_results.
-- Nếu requested_metrics có "late_minutes" thì chỉ trả tổng phút đi muộn (kèm tháng/năm nếu có).
-- Nếu câu hỏi chỉ hỏi 1 ý, KHÔNG thêm thông tin khác (không nhắc phòng ban, email, SĐT, chức vụ...).
-- Nếu tool_results trả list rỗng: trả "Không có." hoặc "Không có dữ liệu phù hợp." đúng ngữ cảnh.
-- Ưu tiên 1 câu, tối đa 2 câu.
-"""
+#     sys = """
+# Bạn là trợ lý ERP. Trả lời NGẮN GỌN, đúng trọng tâm theo câu hỏi.
+# QUY TẮC:
+# - Chỉ dùng dữ liệu trong tool_results.
+# - Nếu requested_metrics có "late_minutes" thì chỉ trả tổng phút đi muộn (kèm tháng/năm nếu có).
+# - Nếu câu hỏi chỉ hỏi 1 ý, KHÔNG thêm thông tin khác (không nhắc phòng ban, email, SĐT, chức vụ...).
+# - Nếu tool_results trả list rỗng: trả "Không có." hoặc "Không có dữ liệu phù hợp." đúng ngữ cảnh.
+# - Ưu tiên 1 câu, tối đa 2 câu.
+# """
 
-    resp = _client.models.generate_content(
-        model=_GEMINI_COMPOSE_MODEL,
-        contents=json.dumps(payload, ensure_ascii=False),
-        config={"system_instruction": sys, "temperature": 0.1},
-    )
-    return (resp.text or "").strip()
+#     resp = _client.models.generate_content(
+#         model=_GEMINI_COMPOSE_MODEL,
+#         contents=json.dumps(payload, ensure_ascii=False),
+#         config={"system_instruction": sys, "temperature": 0.1},
+#     )
+#     return (resp.text or "").strip()
 
 # =========================
 # Main
@@ -1017,29 +1029,29 @@ def execute_chat_hrm(
 
     # ===== Fallback deterministic nếu LLM fail =====
     if not answer:
-        parts = []
-        suppress = CONTEXT_ONLY_TOOLS_BY_MODULE.get(plan.module, set())
-        skip_employee = (plan.module == "hrm" and not _wants_employee_profile(message))
+        # parts = []
+        # suppress = CONTEXT_ONLY_TOOLS_BY_MODULE.get(plan.module, set())
+        # skip_employee = (plan.module == "hrm" and not _wants_employee_profile(message))
 
-        for i in range(1, len(plan.steps) + 1):
-            step = plan.steps[i - 1]
-            if skip_employee and step.tool in suppress:
-                continue
+        # for i in range(1, len(plan.steps) + 1):
+        #     step = plan.steps[i - 1]
+        #     if skip_employee and step.tool in suppress:
+        #         continue
 
-            si = store.get(f"s{i}")
-            if isinstance(si, dict):
-                fb = _fallback_from_result(si)
-                if fb and fb not in parts:
-                    parts.append(fb)
+        #     si = store.get(f"s{i}")
+        #     if isinstance(si, dict):
+        #         fb = _fallback_from_result(si)
+        #         if fb and fb not in parts:
+        #             parts.append(fb)
 
-        answer = "\n\n".join(parts[:2]) if parts else "Đã tra cứu xong."
+        answer = "Đã tra cứu xong."
 
 
     # ===== Paraphrase (chỉ khi KHÔNG dùng LLM compose) =====
-    if paraphrase_enabled and (not composed_used):
-        facts_for_paraphrase = _build_facts_for_paraphrase_hrm(store, list_n=6, nested_n=6)
-        answer_final = paraphrase_answer(answer, facts=facts_for_paraphrase, enabled=True)
-    else:
-        answer_final = answer
+    # if paraphrase_enabled and (not composed_used):
+    #     facts_for_paraphrase = _build_facts_for_paraphrase_hrm(store, list_n=6, nested_n=6)
+    #     answer_final = paraphrase_answer(answer, facts=facts_for_paraphrase, enabled=True)
+    # else:
+    #     answer_final = answer
 
-    return {"answer": answer_final, "data": store, "plan": plan.model_dump()}
+    return {"answer": answer, "data": store, "plan": plan.model_dump()}

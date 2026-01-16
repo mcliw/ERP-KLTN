@@ -1,4 +1,4 @@
-
+# app/modules/finance_accounting/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Date, DateTime,
     Numeric, Enum, ForeignKey, Boolean, Text, Index, UniqueConstraint, JSON
@@ -6,7 +6,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
-from app.db.finance_database import FinanceBase, FinanceSessionLocal
+from app.db.finance_database import FinanceBase
 
 # =========================
 # BUSINESS PARTNER
@@ -28,6 +28,11 @@ class BusinessPartner(FinanceBase):
         UniqueConstraint("partner_type", "external_id", name="unique_partner"),
     )
 
+    ar_invoices = relationship("ARInvoice", back_populates="partner")
+    ap_invoices = relationship("APInvoice", back_populates="partner")
+    journal_lines = relationship("JournalEntryLine", back_populates="partner")
+
+
 # =========================
 # FISCAL PERIOD
 # =========================
@@ -43,6 +48,7 @@ class FiscalPeriod(FinanceBase):
     closed_at = Column(DateTime)
     closed_by_user_id = Column(String(50))
 
+
 # =========================
 # JOURNAL ENTRY
 # =========================
@@ -55,17 +61,15 @@ class JournalEntry(FinanceBase):
     reference_no = Column(String(50))
     description = Column(Text)
 
-    source_module = Column(Enum(
-        "SALES", "PURCHASE", "CASH", "MANUAL",
-        name="source_module_enum"
-    ))
-
+    source_module = Column(Enum("SALES", "PURCHASE", "CASH", "MANUAL", name="source_module_enum"))
     status = Column(Enum("DRAFT", "POSTED", name="journal_status_enum"))
     fiscal_period_id = Column(Integer, ForeignKey("fiscal_periods.period_id"))
     total_amount = Column(Numeric(19, 4))
     created_by = Column(String(50))
 
     fiscal_period = relationship("FiscalPeriod")
+    lines = relationship("JournalEntryLine", back_populates="entry")
+
 
 # =========================
 # CHART OF ACCOUNTS
@@ -76,10 +80,7 @@ class ChartOfAccounts(FinanceBase):
     account_id = Column(Integer, primary_key=True)
     account_code = Column(String(20), nullable=False)
     account_name = Column(String(255))
-    account_type = Column(Enum(
-        "ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE",
-        name="account_type_enum"
-    ))
+    account_type = Column(Enum("ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE", name="account_type_enum"))
 
     parent_account_id = Column(Integer, ForeignKey("chart_of_accounts.account_id"))
     is_active = Column(Boolean, default=True)
@@ -91,6 +92,7 @@ class ChartOfAccounts(FinanceBase):
         UniqueConstraint("account_code", name="unique_account_code"),
         Index("idx_parent_account", "parent_account_id"),
     )
+
 
 # =========================
 # JOURNAL ENTRY LINE
@@ -110,6 +112,11 @@ class JournalEntryLine(FinanceBase):
     __table_args__ = (
         Index("idx_journal_line", "entry_id", "account_id", "partner_id"),
     )
+
+    entry = relationship("JournalEntry", back_populates="lines")
+    account = relationship("ChartOfAccounts")
+    partner = relationship("BusinessPartner", back_populates="journal_lines")
+
 
 # =========================
 # ACCOUNTS RECEIVABLE INVOICE
@@ -135,6 +142,10 @@ class ARInvoice(FinanceBase):
         Index("idx_ar_entry", "entry_id"),
     )
 
+    partner = relationship("BusinessPartner", back_populates="ar_invoices")
+    entry = relationship("JournalEntry")
+
+
 # =========================
 # ACCOUNTS PAYABLE INVOICE
 # =========================
@@ -159,17 +170,18 @@ class APInvoice(FinanceBase):
         Index("idx_ap_entry", "entry_id"),
     )
 
+    partner = relationship("BusinessPartner", back_populates="ap_invoices")
+    entry = relationship("JournalEntry")
+
+
 # =========================
 # CASH TRANSACTION
-# ========================= 
+# =========================
 class CashTransaction(FinanceBase):
     __tablename__ = "cash_transactions"
 
     transaction_id = Column(BigInteger, primary_key=True)
-    transaction_type = Column(Enum(
-        "RECEIPT", "PAYMENT",
-        name="cash_transaction_type"
-    ))
+    transaction_type = Column(Enum("RECEIPT", "PAYMENT", name="cash_transaction_type"))
 
     amount = Column(Numeric(19, 4))
     payment_method = Column(Enum("CASH", "BANK_TRANSFER", name="payment_method_enum"))
@@ -184,6 +196,9 @@ class CashTransaction(FinanceBase):
         Index("idx_cash_entry", "entry_id"),
     )
 
+    entry = relationship("JournalEntry")
+
+
 # =========================
 # POSTING RULE
 # =========================
@@ -197,13 +212,13 @@ class PostingRule(FinanceBase):
     debit_account_id = Column(Integer, ForeignKey("chart_of_accounts.account_id"))
     credit_account_id = Column(Integer, ForeignKey("chart_of_accounts.account_id"))
 
-    module_source = Column(Enum(
-        "SALES", "PURCHASE", "CASH",
-        name="posting_module_enum"
-    ))
+    module_source = Column(Enum("SALES", "PURCHASE", "CASH", name="posting_module_enum"))
 
     __table_args__ = (
         UniqueConstraint("event_code", name="unique_event_code"),
         Index("idx_posting_debit", "debit_account_id"),
         Index("idx_posting_credit", "credit_account_id"),
     )
+
+    debit_account = relationship("ChartOfAccounts", foreign_keys=[debit_account_id])
+    credit_account = relationship("ChartOfAccounts", foreign_keys=[credit_account_id])

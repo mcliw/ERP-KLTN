@@ -1,16 +1,19 @@
+# app/ai/routers/common.py
 from __future__ import annotations
 
 import json
 import os
-import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from google import genai
 
 from app.ai.plan_schema import Plan
 from app.ai.module_registry import list_tools
+from app.ai.prompts.planner_registry import get_planner_guide
 
 load_dotenv()
 
@@ -64,29 +67,34 @@ def tool_catalog(module: str) -> str:
         lines.append(f"- {t.ten_tool}: {t.mo_ta} | args: {', '.join(fields)}")
     return "\n".join(lines)
 
-def should_use_rag(message: str) -> bool:
-    m = (message or "").lower()
-    return any(k in m for k in ["chính sách", "bảo hành", "đổi trả", "vận chuyển", "hướng dẫn", "faq", "quy trình"])
-
 def build_system_instruction(module: str, auth: dict, extra_hints: Optional[List[str]] = None) -> str:
+    now = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d")
+
     parts: List[str] = []
-    parts.append("Bạn là Router cho chatbot ERP. Bạn KHÔNG trả lời người dùng trực tiếp.")
-    parts.append("Bạn chỉ xuất 1 PLAN JSON theo schema (response_json_schema). Không thêm text ngoài JSON.")
+    parts.append("Bạn là Router/Planner cho chatbot ERP. Bạn KHÔNG trả lời người dùng trực tiếp.")
+    parts.append("Bạn CHỈ xuất 1 PLAN JSON theo schema (response_json_schema). Không thêm text ngoài JSON.")
     parts.append("")
+    parts.append(f"Ngày hệ thống: {now} (Asia/Bangkok). Dùng để hiểu 'hôm nay/tháng này'.")
     parts.append(f"Module hiện tại: {module}")
     parts.append(f"Role: {auth.get('role')}")
     parts.append("")
+
     parts.append("Quy tắc bắt buộc:")
     parts.append("1) steps.id luôn là s1, s2, s3... theo thứ tự.")
     parts.append("2) Chỉ dùng tool thuộc module hiện tại (tool đã bị khóa enum).")
-    parts.append("3) Thiếu thông tin => needs_clarification=true và đặt clarifying_question.")
+    parts.append("3) Thiếu thông tin => needs_clarification=true và đặt clarifying_question (1 câu ngắn).")
     parts.append("4) final_response_template BẮT BUỘC null.")
-    parts.append("5) Chỉ điều hướng sang supply_chain khi câu chỉ nói về tồn kho (không có các keyword sale_crm như “đánh giá, voucher, đơn hàng, thanh toán, khách hàng…”).")
-    parts.append("6) final_response_template BẮT BUỘC null.")
+    parts.append("5) Nếu needs_clarification=true => steps phải là [] (không gọi tool).")
     parts.append("")
 
+    guide = get_planner_guide(module)
+    if guide:
+        parts.append("HƯỚNG DẪN LẬP PLAN THEO MODULE:")
+        parts.append(guide)
+        parts.append("")
+
     if extra_hints:
-        parts.append("Gợi ý chọn tool:")
+        parts.append("Gợi ý bổ sung (extra_hints):")
         parts.extend([f"- {h}" for h in extra_hints])
         parts.append("")
 
@@ -104,7 +112,7 @@ def gemini_fallback(module: str, message: str, auth: dict, extra_hints: Optional
         contents=f"USER_MESSAGE:\n{msg}",
         config={
             "system_instruction": sys,
-            "temperature": 0.1,
+            "temperature": 0.0,
             "response_mime_type": "application/json",
             "response_json_schema": schema,
         },

@@ -1,56 +1,47 @@
+# app/ai/executor/context_injection.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-SELF_MARKERS = [
-    "của tôi", "của mình", "tôi", "mình",
-    "my", "me", "mine",
-]
-
-BAD_TARGET_MARKERS = {
-    None, "", "CUSTOMER_ID", "USER_ID", "MY_ID", "ME", "SELF",
-    "customer_id", "user_id", "my_id",
+_PLACEHOLDERS = {
+    "CUSTOMER_ID", "USER_ID", "ME", "SELF", "CURRENT_USER", "AUTH_USER_ID",
+    "YOUR_USER_ID", "MY_ID",
 }
 
-def _is_int_like(x: Any) -> bool:
-    if isinstance(x, int):
-        return True
-    if isinstance(x, str) and x.strip().isdigit():
-        return True
-    return False
+def _is_placeholder(v: Any) -> bool:
+    return isinstance(v, str) and v.strip().upper() in _PLACEHOLDERS
 
-def _should_self_scope(message: str, role: Optional[str]) -> bool:
-    msg = (message or "").lower()
-
-    # role khách/nhân viên: luôn scope về chính họ (thực tế)
-    if (role or "").upper() in {"CUSTOMER", "EMPLOYEE"}:
-        return True
-
-    # admin: chỉ scope khi có dấu hiệu "của tôi"
-    return any(m in msg for m in SELF_MARKERS)
+def _inject_recursively(obj: Any, auth_user_id: int) -> Any:
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k in {"target_user_id", "user_id", "customer_id"}:
+                if v is None or _is_placeholder(v):
+                    out[k] = auth_user_id
+                else:
+                    out[k] = _inject_recursively(v, auth_user_id)
+            else:
+                out[k] = _inject_recursively(v, auth_user_id)
+        return out
+    if isinstance(obj, list):
+        return [_inject_recursively(x, auth_user_id) for x in obj]
+    return obj
 
 def inject_auth_into_args(
-    message: str,
-    role: str | None,
+    *,
     auth_user_id: int | None,
-    tool_args: dict,
+    tool_args: Dict[str, Any] | None,
     has_target_user_id_field: bool,
-):
-    if not has_target_user_id_field or not auth_user_id:
-        return tool_args
+    **_: Any,  # <- NUỐT THAM SỐ THỪA (message, role, ...)
+) -> Dict[str, Any]:
+    args = dict(tool_args or {})
+    if not auth_user_id:
+        return args
 
-    msg = (message or "").lower()
-    is_self_query = any(k in msg for k in ["của tôi", "tôi", "my ", "me "])
+    args = _inject_recursively(args, auth_user_id)
 
-    if not is_self_query:
-        return tool_args
+    if has_target_user_id_field:
+        if ("target_user_id" not in args) or (args.get("target_user_id") is None) or _is_placeholder(args.get("target_user_id")):
+            args["target_user_id"] = auth_user_id
 
-    v = tool_args.get("target_user_id", None)
-
-    placeholder = isinstance(v, str) and v.strip().upper() in {"CUSTOMER_ID", "USER_ID", "ME", "SELF"}
-    not_a_number = isinstance(v, str) and not v.strip().isdigit()
-
-    if v is None or placeholder or not_a_number:
-        tool_args["target_user_id"] = auth_user_id
-
-    return tool_args
+    return args

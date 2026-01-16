@@ -2,83 +2,71 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List
+import re
 from dotenv import load_dotenv
 from google import genai
 
 load_dotenv()
 
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+_GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+_GEMINI_COMPOSE_MODEL = os.getenv("GEMINI_COMPOSE_MODEL", os.getenv("GEMINI_MODEL"))
+_client = genai.Client(api_key=_GOOGLE_API_KEY) if _GOOGLE_API_KEY else genai.Client()
 
-# ✅ Không tạo client nếu thiếu key (tránh crash import)
-_client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else None
+import re
 
+_DATE_YMD = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+_DATE_DMY = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
+_NUM_TOKEN = re.compile(r"\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{4,}\b")
+_CODE_RE = re.compile(r"\b[A-Z]{2,}-\d+\b")
 
-def _preview(obj: Any, list_n: int = 6, nested_n: int = 6) -> Any:
-    """Giảm payload để tránh LLM bị ngợp + tránh gửi quá dài.
-       Giữ nested dict quan trọng (payment/voucher/customer/...) để LLM không trả sai 'không có dữ liệu'.
-    """
-    if isinstance(obj, list):
-        return [_preview(x, list_n=list_n, nested_n=nested_n) for x in obj[:max(1, min(list_n, 20))]]
+def is_llm_available() -> bool:
+    return _client is not None
 
-    if isinstance(obj, dict):
-        out: Dict[str, Any] = {}
+def _norm_digits(s: str) -> str:
+    return re.sub(r"\D", "", s or "")
 
-        # ưu tiên scalar ở level hiện tại
-        scalar_added = 0
-        for k, v in obj.items():
-            if isinstance(v, (str, int, float, bool)) or v is None:
-                out[k] = v
-                scalar_added += 1
-            if scalar_added >= 12:
-                break
+def _extract_numbers_norm(text: str) -> set[str]:
+    out = set()
+    for m in _NUM_TOKEN.finditer(text or ""):
+        out.add(_norm_digits(m.group(0)))
+    return {x for x in out if x}
 
-        for k in [
-            "payment", "voucher", "constraint", "constraints",
-            "customer", "user", "address",
-            "product", "variant", "brand",
-            "order", "summary", "stats",
-            "top_brand",         
-        ]:
-            if isinstance(obj.get(k), dict):
-                out[k] = _preview(obj[k], list_n=list_n, nested_n=nested_n)
+def _extract_dates_norm(text: str) -> set[str]:
+    out = set()
+    for y, m, d in _DATE_YMD.findall(text or ""):
+        out.add(f"{y}{m}{d}")
+    for d, m, y in _DATE_DMY.findall(text or ""):
+        out.add(f"{y}{int(m):02d}{int(d):02d}")
+    return out
 
-        # preview nested list phổ biến
-        for k in [
-            "items", "rows", "details", "logs", "sources", "gr_list",
-            "variants", "reviews", "orders", "images",
-            "ranking",         
-        ]:
-            if isinstance(obj.get(k), list):
-                out[k] = _preview(obj[k], list_n=nested_n, nested_n=nested_n)
+def _extract_codes(text: str) -> set[str]:
+    return set(_CODE_RE.findall(text or ""))
 
-        # ✅ fallback: giữ thêm 1-2 nested dict/list bất kỳ nếu out đang quá nghèo
-        if len(out) <= 2:
-            for k, v in obj.items():
-                if k in out:
-                    continue
-                if isinstance(v, dict):
-                    out[k] = _preview(v, list_n=list_n, nested_n=nested_n)
-                    break
-            for k, v in obj.items():
-                if k in out:
-                    continue
-                if isinstance(v, list):
-                    out[k] = _preview(v, list_n=nested_n, nested_n=nested_n)
-                    break
+def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: int = 1200) -> bool:
+    if not answer:
+        return False
+    if len(answer) > max_len:
+        return False
+    if any(x in answer for x in ("{{", "}}", "{s", "...")):
+        return False
 
-        return out
+    # Nếu không truyền payload_text => chỉ check marker
+    if not payload_text:
+        return True
 
-    return obj
+    # Không cho sinh số/ngày/mã mới ngoài payload
+    if not _extract_numbers_norm(answer).issubset(_extract_numbers_norm(payload_text)):
+        return False
+    if not _extract_dates_norm(answer).issubset(_extract_dates_norm(payload_text)):
+        return False
+    if not _extract_codes(answer).issubset(_extract_codes(payload_text)):
+        return False
 
+    return True
 
 def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[str, Any]]) -> str:
-    # ✅ nếu không có key thì không compose, để executor fallback deterministic
-    if _client is None:
-        return ""
-
+    # ✅ gửi full data/result (không preview)
     payload = {
         "module": module,
         "question": question,
@@ -86,37 +74,47 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
             {
                 "step_id": si.get("id"),
                 "tool": si.get("tool"),
-                "args": _preview(si.get("args")),
-                "data_preview": _preview((si.get("result") or {}).get("data")),
-                "message": (si.get("result") or {}).get("thong_diep"),
-                "ok": (si.get("result") or {}).get("ok"),
+                "args": si.get("args"),
+                # FULL result: ok/data/thong_diep/...
+                "result": si.get("result"),
             }
             for si in step_infos
         ],
     }
 
     sys = (
-        "Bạn là trợ lý ERP.\n"
-        "Hãy trả lời NGẮN GỌN, đúng trọng tâm theo câu hỏi.\n"
-        "- Chỉ dùng dữ liệu trong tool_results.\n"
-        "- Nếu dữ liệu có 'top_' hoặc 'ranking' (báo cáo/top), hãy trả thêm 1 dòng tóm tắt gồm: "
-        " tổng số lượng (total_qty) và tổng tiền (total_amount) nếu có.\n"
-        "- Không kể thông tin thừa. Kể cả có dữ liệu cung cấp. Chỉ trả lời đúng trọng tâm câu hỏi.\n"
-        "- Nếu không có dữ liệu phù hợp, nói rõ 'không có dữ liệu' và dừng.\n"
-        "- Luôn kiểm tra tính nhất quán của dữ liệu, nếu có mâu thuẫn, hãy nói rõ.\n"
-        "- Trả lời bằng tiếng Việt."
+        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi.\n"
+        "QUY TẮC BẮT BUỘC:\n"
+        "1) CHỈ dùng dữ liệu trong payload.tool_results[*].result. Không suy đoán.\n"
+        "2) TỰ xác định người dùng đang hỏi những TRƯỜNG nào (fields) trong câu hỏi.\n"
+        "3) CHỈ trả lời các fields được hỏi. Không thêm email/địa chỉ/field khác nếu không được hỏi.\n"
+        "4) Nếu field được hỏi KHÔNG tồn tại trong data -> trả đúng: 'Không có dữ liệu <field>' (ngắn gọn).\n"
+        "5) Nếu câu hỏi hỏi nhiều ý (vd: 'đơn nào + trạng thái + thanh toán') -> trả lần lượt từng ý.\n"
+        "6) Không copy nguyên JSON.\n"
+        '\n'
+        'Đặc biệt lưu ý: \n'
+        '1) Trả lời người dùng thân thiện như 1 tin nhắn. Cấu trúc 1 đoạn văn rõ rằng, mạch lạc\n'
+        '2) Không sử dụng gạch đầu dòng hay xuống dòng\n'
+        '3) Có thuật ngữ hoặc từ tiếng anh thì hãy thay bằng từ tiếng việt luôn ví dụ ANNUAL là nghỉ phép năm, APPROVE là đã duyệt,...'
+        "\n"
+        "ĐỊNH DẠNG GỢI Ý:\n"
+        "- Khi liệt kê danh sách, hãy tự động gộp các mục trùng nhau (cùng SKU, Tên hoặc ID) thành một dòng duy nhất và cộng tổng các số liệu liên quan (số lượng, giá trị...). Tuyệt đối không hiển thị các dòng dữ liệu lặp lại rời rạc."
+        "- Nếu hỏi 1 field: trả 1 câu.\n"
+        "\n"
+        "VÍ DỤ SIẾT:\n"
+        "• Hỏi: 'ngày nghỉ phép nào?' -> chỉ liệt kê ngày.\n"
+        "• Hỏi: 'số điện thoại?' -> chỉ trả phone, không trả email.\n"
+        "• Hỏi: 'đơn nhập' -> chỉ trả lời đơn nhập không trả lời đơn xuất,..."
     )
+
+    contents = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
 
     resp = _client.models.generate_content(
-        model=_GEMINI_MODEL,
-        contents=json.dumps(payload, ensure_ascii=False, default=str), 
-        config={"system_instruction": sys, "temperature": 0.7},
+        model= _GEMINI_COMPOSE_MODEL,
+        contents=contents,
+        config={
+            "system_instruction": sys,
+            "temperature": 0.0, 
+        },
     )
     return (resp.text or "").strip()
-
-
-def compose_safe_enough(answer: str) -> bool:
-    if not answer:
-        return False
-    bad_markers = ["{{", "}}", "{s", "..."]
-    return not any(x in answer for x in bad_markers)

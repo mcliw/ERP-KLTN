@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from app.ai.plan_schema import Plan
-from app.ai.routers.common import gemini_fallback
+from app.ai.routers.common import gemini_fallback,build_system_instruction
 
 def plan_route_hrm(module: str, message: str, auth: dict) -> Plan:
     msg = (message or "").strip()

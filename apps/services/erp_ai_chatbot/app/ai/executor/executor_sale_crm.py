@@ -11,7 +11,6 @@ from app.ai.plan_validator import validate_plan
 from app.ai.module_registry import get_tool
 from app.ai.tooling import ToolSpec
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough
-from app.ai.paraphraser import paraphrase_answer
 
 from app.db.sale_crm_database import SaleCrmSessionLocal
 
@@ -26,76 +25,76 @@ def _fmt_money(v: Any) -> str:
     except Exception:
         return str(v)
 
-def build_answer_sale_crm(intent: str, store: Dict[str, Any]) -> str | None:
-    s1 = store.get("s1") or {}
-    r1 = s1 if isinstance(s1, dict) else {}
-    ok1 = r1.get("ok") is True
-    d1 = r1.get("data") if isinstance(r1, dict) else None
+# def build_answer_sale_crm(intent: str, store: Dict[str, Any]) -> str | None:
+#     s1 = store.get("s1") or {}
+#     r1 = s1 if isinstance(s1, dict) else {}
+#     ok1 = r1.get("ok") is True
+#     d1 = r1.get("data") if isinstance(r1, dict) else None
 
-    # 1) Hồ sơ khách hàng
-    if intent in ("get_user_account_info", "ho_so_khach_hang"):
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        return (
-            f"Tài khoản: {d1.get('username')} (ID {d1.get('user_id')}). "
-            f"SĐT: {d1.get('phone')}. Email: {d1.get('email')}. "
-            f"Role: {d1.get('role_name')}."
-        )
+#     # 1) Hồ sơ khách hàng
+#     if intent in ("get_user_account_info", "ho_so_khach_hang"):
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         return (
+#             f"Tài khoản: {d1.get('username')} (ID {d1.get('user_id')}). "
+#             f"SĐT: {d1.get('phone')}. Email: {d1.get('email')}. "
+#             f"Role: {d1.get('role_name')}."
+#         )
 
-    # 2) Trạng thái đơn + thanh toán
-    if intent == "tra_cuu_trang_thai_don_hang":
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        pay = d1.get("payment") or {}
-        if isinstance(pay, dict) and pay:
-            return (
-                f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. "
-                f"Thanh toán: {pay.get('payment_status')} ({pay.get('payment_method')})."
-            )
-        return f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. Chưa có dữ liệu thanh toán."
+#     # 2) Trạng thái đơn + thanh toán
+#     if intent == "tra_cuu_trang_thai_don_hang":
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         pay = d1.get("payment") or {}
+#         if isinstance(pay, dict) and pay:
+#             return (
+#                 f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. "
+#                 f"Thanh toán: {pay.get('payment_status')} ({pay.get('payment_method')})."
+#             )
+#         return f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. Chưa có dữ liệu thanh toán."
 
-    if intent == "trang_thai_thanh_toan_theo_don":
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        pay = d1.get("payment") or {}
-        if not isinstance(pay, dict) or not pay:
-            return "Đơn này chưa có dữ liệu thanh toán."
-        return f"Thanh toán đơn {d1.get('order_id')}: {pay.get('payment_status')} ({pay.get('payment_method')})."
+#     if intent == "trang_thai_thanh_toan_theo_don":
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         pay = d1.get("payment") or {}
+#         if not isinstance(pay, dict) or not pay:
+#             return "Đơn này chưa có dữ liệu thanh toán."
+#         return f"Thanh toán đơn {d1.get('order_id')}: {pay.get('payment_status')} ({pay.get('payment_method')})."
 
-    # 3) Đơn gần nhất
-    if intent == "don_hang_gan_nhat":
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        return (
-            f"Đơn gần nhất: #{d1.get('order_id')} - {d1.get('order_status')}, "
-            f"giá trị {_fmt_money(d1.get('total_amount'))}."
-        )
+#     # 3) Đơn gần nhất
+#     if intent == "don_hang_gan_nhat":
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         return (
+#             f"Đơn gần nhất: #{d1.get('order_id')} - {d1.get('order_status')}, "
+#             f"giá trị {_fmt_money(d1.get('total_amount'))}."
+#         )
 
-    # 4) Hãng mua nhiều nhất
-    if intent == "hang_mua_nhieu_nhat":
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        tb = d1.get("top_brand") or {}
-        if not isinstance(tb, dict) or not tb:
-            return "Không có dữ liệu."
-        return (
-            f"Bạn mua nhiều nhất hãng {tb.get('brand_name')}: "
-            f"{tb.get('total_qty')} sản phẩm, tổng {_fmt_money(tb.get('total_amount'))}."
-        )
+#     # 4) Hãng mua nhiều nhất
+#     if intent == "hang_mua_nhieu_nhat":
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         tb = d1.get("top_brand") or {}
+#         if not isinstance(tb, dict) or not tb:
+#             return "Không có dữ liệu."
+#         return (
+#             f"Bạn mua nhiều nhất hãng {tb.get('brand_name')}: "
+#             f"{tb.get('total_qty')} sản phẩm, tổng {_fmt_money(tb.get('total_amount'))}."
+#         )
 
-    # 5) Voucher preview
-    if intent == "ap_voucher_xem_truoc":
-        if not ok1 or not isinstance(d1, dict):
-            return (r1.get("thong_diep") or "Không có dữ liệu.")
-        valid = d1.get("valid")
-        reason = d1.get("reason")
-        if valid is True:
-            return "Voucher dùng được cho đơn này."
-        if valid is False:
-            return f"Voucher không dùng được: {reason or 'không rõ lý do'}."
-        return "Không có dữ liệu."
+#     # 5) Voucher preview
+#     if intent == "ap_voucher_xem_truoc":
+#         if not ok1 or not isinstance(d1, dict):
+#             return (r1.get("thong_diep") or "Không có dữ liệu.")
+#         valid = d1.get("valid")
+#         reason = d1.get("reason")
+#         if valid is True:
+#             return "Voucher dùng được cho đơn này."
+#         if valid is False:
+#             return f"Voucher không dùng được: {reason or 'không rõ lý do'}."
+#         return "Không có dữ liệu."
 
-    return None
+#     return None
 # =========================
 
 def _args_has_target_user_id_field(tool) -> bool:
@@ -146,11 +145,33 @@ def _get_path(store: dict, path: str):
         m = re.match(r"^([a-zA-Z0-9_]+)(\[[0-9]+\])?$", part)
         if not m:
             raise KeyError(path)
+
         key = m.group(1)
-        cur = cur[key]
-        if m.group(2):
-            idx = int(m.group(2)[1:-1])
+        idx = int(m.group(2)[1:-1]) if m.group(2) else None
+
+        # 1) cur là dict => truy cập key bình thường
+        if isinstance(cur, dict):
+            cur = cur[key]
+
+        # 2) cur là list nhưng LLM lỡ viết ".data[0]" (trong khi save_as là list)
+        elif isinstance(cur, list):
+            if key in ("data", "items", "rows", "results"):
+                # coi ".data" như identity của list
+                pass
+            else:
+                raise KeyError(f"{path} (cannot access key '{key}' on list)")
+
+        else:
+            raise KeyError(f"{path} (unexpected type {type(cur).__name__})")
+
+        # apply index nếu có
+        if idx is not None:
+            if not isinstance(cur, list):
+                raise KeyError(f"{path} (index on non-list)")
+            if idx < 0 or idx >= len(cur):
+                raise IndexError(f"{path} (index {idx} out of range; len={len(cur)})")
             cur = cur[idx]
+
     return cur
 
 def _render_value(tpl: str, store: dict):
@@ -224,6 +245,16 @@ def _resolve_args(args: Dict[str, Any], store: dict) -> Dict[str, Any]:
         else:
             out[k] = v
     return out
+
+from app.ai.executor.context_injection import inject_auth_into_args
+
+def _args_has_target_user_id_field(tool) -> bool:
+    # tool.args_model là Pydantic model
+    try:
+        fields = getattr(tool.args_model, "model_fields", {})  # pydantic v2
+        return "target_user_id" in fields
+    except Exception:
+        return False
 
 # =========================
 # Execute tool
@@ -328,12 +359,11 @@ def execute_chat_sale_crm(
             break
 
         resolved_args = inject_auth_into_args(
-            message=message,
-            role=role,
             auth_user_id=user_id,
             tool_args=resolved_args,
             has_target_user_id_field=_args_has_target_user_id_field(tool),
         )
+
 
         audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
         result = _execute_tool(plan.module, tool, resolved_args)
@@ -418,18 +448,8 @@ def execute_chat_sale_crm(
                     break
             answer = "\n".join(parts) if parts else "Không có dữ liệu."
 
-
-    # ===== Paraphrase (chỉ khi KHÔNG dùng LLM compose) =====
-    if paraphrase_enabled and (not composed_used):
-        try:
-            answer_final = paraphrase_answer(answer, facts={"module": plan.module}, enabled=True)
-        except Exception:
-            answer_final = answer
-    else:
-        answer_final = answer
-
     return {
-        "answer": answer_final,
+        "answer": answer,
         "composed_used": composed_used,
         "compose_error": compose_error,
         "data": store,

@@ -33,9 +33,9 @@ def ensure_loaded(module: str):
         from app.modules.sale_crm.tools import SALE_CRM_TOOLS
         register_tools("sale_crm", SALE_CRM_TOOLS)
 
-    # elif module == "finance_accounting":
-    #     from app.modules.finance_accounting.tools import FINANCE_ACCOUNTING_TOOLS
-    #     register_tools("finance_accounting", FINANCE_ACCOUNTING_TOOLS)
+    elif module == "finance_accounting":
+        from app.modules.finance_accounting.tools import FINANCE_ACCOUNTING_TOOLS
+        register_tools("finance_accounting", FINANCE_ACCOUNTING_TOOLS)
 
     _LOADED.add(module)
 
