@@ -16,4 +16,4 @@ venv/
 *.pyc
 *.bin
 .DS_Store
-D:/ERP-KLTN/apps/services/erp_ai_chatbot/scripts/*.py
+apps/services/erp_ai_chatbot/scripts/*.py
