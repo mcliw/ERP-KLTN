@@ -1,86 +1,45 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/Department.jsx
 
 import { useNavigate } from "react-router-dom";
-import {
-  useState,
-  useMemo,
-  useEffect,
-  useCallback,
-} from "react";
+import { useState, useMemo, useCallback } from "react";
 import DepartmentTable from "../../components/layouts/DepartmentTable";
 import DepartmentFilter from "../../components/layouts/DepartmentFilter";
+import PageHeader from "../../../../shared/components/PageHeader";
 import { departmentService } from "../../services/department.service";
-import "../styles/document.css";
-import "../../../../shared/styles/button.css";
-import { FaPlus, FaRecycle } from "react-icons/fa";
+import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
+import { useClientPagination } from "../../../../shared/hooks/useClientPagination";
 import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 import { hasPermission } from "../../../../shared/utils/permission";
+import { useToast } from "../../../../shared/components/ToastProvider";
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
+import "../styles/document.css";
+import "../../../../shared/styles/button.css";
 
 /* =========================
  * Helpers
  * ========================= */
-
-const normalizeText = (v) =>
-  String(v || "").trim().toLowerCase();
-
-/* =========================
- * Component
- * ========================= */
+const normalizeText = (v) => String(v || "").trim().toLowerCase();
 
 export default function Department() {
   const navigate = useNavigate();
+  const toast = useToast();
 
-  /* =========================
-   * State
-   * ========================= */
+  const user = useAuthStore((s) => s.user);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.DEPARTMENT_EDIT);
 
-  const [departments, setDepartments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: departments, loading, refresh } = useAsyncData(departmentService.getAll);
 
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
 
-  const pageSize = 7;
-
-  const user = useAuthStore((s) => s.user);
-
-  const canEditDepartment = hasPermission(
-    user?.role,
-    HRM_PERMISSIONS.DEPARTMENT_EDIT
+  const statusOptions = useMemo(
+    () => [
+      { value: "Hoạt động", label: "Hoạt động" },
+      { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
+    ],
+    []
   );
-
-  /* =========================
-   * Data loader
-   * ========================= */
-
-  const loadDepartments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await departmentService.getAll();
-      setDepartments(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDepartments();
-  }, [loadDepartments]);
-
-  /* =========================
-   * Filter options
-   * ========================= */
-
-  const statusOptions = [
-    { value: "Hoạt động", label: "Hoạt động" },
-    { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
-  ];
-
-  /* =========================
-   * Filtering
-   * ========================= */
 
   const filteredDepartments = useMemo(() => {
     const kw = normalizeText(keyword);
@@ -91,148 +50,70 @@ export default function Department() {
         normalizeText(d.name).includes(kw) ||
         normalizeText(d.code).includes(kw);
 
-      const matchStatus =
-        !status || d.status === status;
+      const matchStatus = !status || (!isSoftDeleted(d.deletedAt) && d.status === status);
 
       return matchKeyword && matchStatus;
     });
   }, [departments, keyword, status]);
 
-  /* =========================
-   * Pagination
-   * ========================= */
+  const { paginatedData, page, totalPages, goToPrev, goToNext } =
+    useClientPagination(filteredDepartments, 7);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredDepartments.length / pageSize)
+  const handleClearFilter = useCallback(() => {
+    setKeyword("");
+    setStatus("");
+  }, []);
+
+  const handleDelete = useCallback(
+    async (dept) => {
+      if (dept.employeeCount > 0) {
+        toast.info("Không thể xoá phòng ban vì vẫn còn nhân viên.");
+        return;
+      }
+
+      if (!window.confirm(`Xoá phòng ban "${dept.name}"?`)) return;
+
+      try {
+        await departmentService.remove(dept.code);
+        toast.error(`Đã xoá phòng ban "${dept.name}"`);
+        refresh();
+      } catch (err) {
+        toast.error(err?.message || "Không thể xoá phòng ban");
+      }
+    },
+    [refresh, toast]
   );
 
-  const paginatedDepartments = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredDepartments.slice(
-      start,
-      start + pageSize
-    );
-  }, [filteredDepartments, page]);
-
-  /* =========================
-   * Handlers
-   * ========================= */
-
-  const handleDelete = async (dept) => {
-    if (dept.employeeCount > 0) {
-      alert(
-        "Không thể xoá phòng ban vì vẫn còn nhân viên đang làm việc"
-      );
-      return;
-    }
-
-    const ok = window.confirm(
-      `Xoá phòng ban ${dept.name}?`
-    );
-    if (!ok) return;
-
-    try {
-      await departmentService.remove(dept.code);
-      await loadDepartments();
-    } catch (err) {
-      alert(
-        err.message ||
-          "Không thể xoá phòng ban"
-      );
-    }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải...</div>;
-  }
+  if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
 
   return (
     <div className="main-document">
-      {/* HEADER */}
-      <div className="page-header">
-        <h2>Quản lý phòng ban</h2>
+      <PageHeader
+        title="Quản lý phòng ban"
+        createLabel="Thêm phòng ban"
+        onCreate={canEdit ? () => navigate("/hrm/phong-ban/them-moi") : null}
+        onRestore={canEdit ? () => navigate("/hrm/phong-ban/khoi-phuc") : null}
+      />
 
-        <div style={{ display: "flex", gap: 10 }}>
-          {canEditDepartment && (
-            <button
-              className="btn-primary"
-              onClick={() =>
-                navigate("/hrm/phong-ban/them-moi")
-              }
-            >
-              <FaPlus />
-              <span>Thêm phòng ban</span>
-            </button>
-          )}
-
-          {/* ♻️ KHÔI PHỤC */}
-          {canEditDepartment && (
-            <button
-              className="btn-restore"
-              onClick={() =>
-                navigate("/hrm/phong-ban/khoi-phuc")
-              }
-            >
-              <FaRecycle />
-              <span>Khôi phục</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* FILTER */}
       <DepartmentFilter
         keyword={keyword}
         status={status}
         statusOptions={statusOptions}
-        onKeywordChange={(v) => {
-          setKeyword(v);
-          setPage(1);
-        }}
-        onStatusChange={(v) => {
-          setStatus(v);
-          setPage(1);
-        }}
-        onClear={() => {
-          setKeyword("");
-          setStatus("");
-          setPage(1);
-        }}
+        onKeywordChange={setKeyword}
+        onStatusChange={setStatus}
+        onClear={handleClearFilter}
       />
 
-      {/* TABLE */}
       <DepartmentTable
-        data={paginatedDepartments}
+        data={paginatedData}
         page={page}
         totalPages={totalPages}
-        onPrev={() =>
-          setPage((p) => Math.max(p - 1, 1))
-        }
-        onNext={() =>
-          setPage((p) =>
-            Math.min(p + 1, totalPages)
-          )
-        }
-        onRowClick={(d) =>
-          navigate(`/hrm/phong-ban/${d.code}`)
-        }
-        onView={(d) =>
-          navigate(`/hrm/phong-ban/${d.code}`)
-        }
-        onEdit={
-          canEditDepartment
-            ? (d) =>
-                navigate(
-                  `/hrm/phong-ban/${d.code}/chinh-sua`
-                )
-            : undefined
-        }
-        onDelete={canEditDepartment ? handleDelete : undefined}
+        onPrev={goToPrev}
+        onNext={goToNext}
+        onRowClick={(d) => navigate(`/hrm/phong-ban/${d.code}`)}
+        onView={(d) => navigate(`/hrm/phong-ban/${d.code}`)}
+        onEdit={canEdit ? (d) => navigate(`/hrm/phong-ban/${d.code}/chinh-sua`) : undefined}
+        onDelete={canEdit ? handleDelete : undefined}
       />
     </div>
   );

@@ -1,0 +1,120 @@
+.camera-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.camera-modal-content {
+  background: white;
+  width: 90%;
+  max-width: 600px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.camera-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.camera-body {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  background-color: #000;
+}
+
+.video-wrapper {
+  width: 100%;
+  height: 360px; /* Chiều cao cố định khung hình */
+  background: #333;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.video-feed, .photo-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Đảm bảo video lấp đầy khung */
+}
+
+.camera-footer {
+  padding: 15px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-snap {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 4px solid #ddd;
+  background-color: #ff4d4f;
+  color: white;
+  font-size: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-snap:active {
+  transform: scale(0.9);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 15px;
+}
+
+.btn-retake, .btn-confirm {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.btn-retake {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.btn-confirm {
+  background-color: #1890ff;
+  color: white;
+}

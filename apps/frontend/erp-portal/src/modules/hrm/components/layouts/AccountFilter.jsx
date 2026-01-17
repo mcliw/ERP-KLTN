@@ -1,96 +1,52 @@
-// apps/frontend/erp-portal/src/modules/hrm/components/layouts/AccountFilter.jsx
+// apps/frontend/erp-portal/src/modules/hrm/components/layouts/AccountFiler.jsx
 
-import { FaSearch, FaTimes } from "react-icons/fa";
-import "../styles/filter.css";
-
-const safeArray = (v) => (Array.isArray(v) ? v : []);
+import { FilterWrapper, FilterSearch, FilterSelect } from "../common/FilterComponents";
 
 export default function AccountFilter({
-  // values
   keyword = "",
   role = "",
   status = "",
-
-  // options
   roleOptions = [],
   statusOptions = [],
-
-  // handlers
   onKeywordChange,
   onRoleChange,
   onStatusChange,
   onClear,
 }) {
-  const canClear = keyword || role || status;
+  // Logic kiểm tra có đang filter không
+  const hasFilter = keyword || role || status;
 
+  // Logic clear
   const handleClear = () => {
-    if (onClear) {
-      onClear();
-      return;
-    }
+    if (onClear) return onClear();
     onKeywordChange?.("");
     onRoleChange?.("");
     onStatusChange?.("");
   };
 
   return (
-    <div className="filters">
-      {/* SEARCH */}
-      <div className="search-wrap">
-        <FaSearch className="search-icon" />
-        <input
-          className="search-input"
-          name="keyword"
-          value={keyword}
-          placeholder="Tìm theo tài khoản, họ tên hoặc email"
-          onChange={(e) =>
-            onKeywordChange?.(e.target.value)
-          }
-        />
+    <FilterWrapper>
+      <FilterSearch
+        keyword={keyword}
+        onKeywordChange={onKeywordChange}
+        placeholder="Tìm theo tài khoản, họ tên hoặc email"
+        hasFilter={hasFilter}
+        onClear={handleClear}
+      />
 
-        {canClear && (
-          <button
-            type="button"
-            className="clear-btn"
-            onClick={handleClear}
-            title="Xoá bộ lọc"
-          >
-            <FaTimes />
-          </button>
-        )}
-      </div>
-
-      {/* ROLE */}
-      <select
-        className="input"
+      <FilterSelect
         value={role}
-        onChange={(e) =>
-          onRoleChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả vai trò</option>
-        {safeArray(roleOptions).map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
-          </option>
-        ))}
-      </select>
+        onChange={onRoleChange}
+        options={roleOptions}
+        defaultLabel="Tất cả vai trò"
+      />
 
-      {/* STATUS */}
-      <select
-        className="input"
+      <FilterSelect
         value={status}
-        onChange={(e) =>
-          onStatusChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả trạng thái</option>
-        {safeArray(statusOptions).map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-    </div>
+        onChange={onStatusChange}
+        options={statusOptions}
+        defaultLabel="Tất cả trạng thái"
+      />
+    </FilterWrapper>
   );
 }

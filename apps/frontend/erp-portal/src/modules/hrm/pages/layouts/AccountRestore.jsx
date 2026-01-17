@@ -1,124 +1,61 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/AccountRestore.jsx
 
 import { useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 import AccountTable from "../../components/layouts/AccountTable";
 import { accountService } from "../../services/account.service";
+import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
 import "../styles/document.css";
-import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 
 export default function AccountRestore() {
   const navigate = useNavigate();
 
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const {
+    data,
+    loading,
+    page,
+    setPage,
+    totalPages,
+    handleRestore,
+    handleDestroy,
+    goBack,
+  } = useRestoreResource(accountService, "username", "tài khoản");
 
-  const pageSize = 10;
-
-  useEffect(() => {
-    setLoading(true);
-
-    accountService
-      .getAll({ includeDeleted: true })
-      .then((data) => {
-        const deletedAccounts = data.filter(
-          (a) => Boolean(a.deletedAt)
-        );
-        setAccounts(deletedAccounts);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const totalPages = Math.ceil(accounts.length / pageSize);
-
-  const paginatedAccounts = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return accounts.slice(start, start + pageSize);
-  }, [accounts, page]);
-
-  const handleRestore = async (account) => {
-    if (!window.confirm(`Khôi phục tài khoản ${account.username}?`)) return;
-
-    try {
-      await accountService.restore(account.username); // ✅ FIX 3
-      setAccounts((prev) =>
-        prev.filter((a) => a.username !== account.username)
-      );
-    } catch {
-      alert("Không thể khôi phục tài khoản");
-    }
-  };
-
-    const handleDestroy = async (account) => {
-        if (
-            !window.confirm(
-            `Xoá VĨNH VIỄN tài khoản ${account.username}? Hành động này không thể hoàn tác!`
-            )
-        )
-            return;
-
-        try {
-            await accountService.destroy(account.username);
-
-            setAccounts((prev) =>
-            prev.filter((a) => a.username !== account.username)
-            );
-        } catch (e) {
-            alert("Không thể xoá vĩnh viễn tài khoản");
-        }
-    };
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải...</div>;
-  }
+  if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
 
   return (
     <div className="main-document">
-      {/* HEADER */}
       <div className="page-header">
         <h2>Tài khoản đã xoá</h2>
-
-        <button className="btn-secondary" onClick={() => navigate(-1)}>
-          <FaArrowLeft style={{ marginRight: 5 }}/>
-          <span>Quay lại</span>
+        <button className="btn-secondary" onClick={goBack}>
+          <FaArrowLeft style={{ marginRight: 5 }} /> <span>Quay lại</span>
         </button>
       </div>
 
-      {/* TABLE */}
       <AccountTable
-        data={paginatedAccounts}
+        data={data}
         page={page}
         totalPages={totalPages}
         onPrev={() => setPage((p) => Math.max(p - 1, 1))}
         onNext={() => setPage((p) => Math.min(p + 1, totalPages))}
-        onView={(a) =>
-            navigate(`/hrm/tai-khoan/${a.username}`)
-        }
+        onView={(a) => navigate(`/hrm/tai-khoan/${a.username}`)}
         onEdit={null}
         onDelete={null}
-        onRowClick={null}
         renderExtraActions={(a) => (
-            <div style={{ display: "flex", gap: 6 }}>
-            {/* ♻️ Khôi phục */}
-            <button
-                title="Khôi phục"
-                onClick={() => handleRestore(a)}
-            >
-                <FaUndo />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button title="Khôi phục" onClick={() => handleRestore(a)}>
+              <FaUndo />
             </button>
-
-            {/* 🗑️ Xoá vĩnh viễn */}
             <button
-                title="Xoá vĩnh viễn"
-                onClick={() => handleDestroy(a)}
-                style={{ color: "#dc2626" }}
+              title="Xoá vĩnh viễn"
+              onClick={() => handleDestroy(a)}
+              style={{ color: "#dc2626" }}
             >
-                <FaTrash />
+              <FaTrash />
             </button>
-            </div>
+          </div>
         )}
-        />
+      />
     </div>
   );
 }

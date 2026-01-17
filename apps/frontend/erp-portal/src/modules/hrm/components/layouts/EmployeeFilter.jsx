@@ -1,25 +1,17 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/EmployeeFilter.jsx
 
-import { FaSearch, FaTimes } from "react-icons/fa";
-import "../styles/filter.css";
-
-const safeArray = (v) => (Array.isArray(v) ? v : []);
+import { FilterWrapper, FilterSearch, FilterSelect } from "../common/FilterComponents";
 
 export default function EmployeeFilter({
-  // values
   keyword = "",
   department = "",
   position = "",
   gender = "",
   status = "",
-
-  // options: [{ value, label }]
   departmentOptions = [],
   positionOptions = [],
   genderOptions = [],
   statusOptions = [],
-
-  // handlers
   onKeywordChange,
   onDepartmentChange,
   onPositionChange,
@@ -27,14 +19,10 @@ export default function EmployeeFilter({
   onStatusChange,
   onClear,
 }) {
-  const canClear =
-    keyword || department || position || gender || status;
+  const hasFilter = keyword || department || position || gender || status;
 
   const handleClear = () => {
-    if (onClear) {
-      onClear();
-      return;
-    }
+    if (onClear) return onClear();
     onKeywordChange?.("");
     onDepartmentChange?.("");
     onPositionChange?.("");
@@ -43,95 +31,42 @@ export default function EmployeeFilter({
   };
 
   return (
-    <div className="filters">
-      {/* SEARCH */}
-      <div className="search-wrap">
-        <FaSearch className="search-icon" />
-        <input
-          className="search-input"
-          name="keyword"
-          value={keyword}
-          placeholder="Tìm theo tên hoặc email"
-          onChange={(e) =>
-            onKeywordChange?.(e.target.value)
-          }
-        />
+    <FilterWrapper>
+      <FilterSearch
+        keyword={keyword}
+        onKeywordChange={onKeywordChange}
+        placeholder="Tìm theo tên hoặc email"
+        hasFilter={hasFilter}
+        onClear={handleClear}
+      />
 
-        {canClear && (
-          <button
-            type="button"
-            className="clear-btn"
-            onClick={handleClear}
-            title="Xoá bộ lọc"
-          >
-            <FaTimes />
-          </button>
-        )}
-      </div>
-
-      {/* DEPARTMENT */}
-      <select
-        className="input"
+      <FilterSelect
         value={department}
-        onChange={(e) =>
-          onDepartmentChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả phòng ban</option>
-        {safeArray(departmentOptions).map((d) => (
-          <option key={d.value} value={d.value}>
-            {d.label}
-          </option>
-        ))}
-      </select>
+        onChange={onDepartmentChange}
+        options={departmentOptions}
+        defaultLabel="Tất cả phòng ban"
+      />
 
-      {/* POSITION */}
-      <select
-        className="input"
+      <FilterSelect
         value={position}
-        onChange={(e) =>
-          onPositionChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả chức vụ</option>
-        {safeArray(positionOptions).map((p) => (
-          <option key={p.value} value={p.value}>
-            {p.label}
-          </option>
-        ))}
-      </select>
+        onChange={onPositionChange}
+        options={positionOptions}
+        defaultLabel="Tất cả chức vụ"
+      />
 
-      {/* GENDER */}
-      <select
-        className="input"
+      <FilterSelect
         value={gender}
-        onChange={(e) =>
-          onGenderChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả giới tính</option>
-        {safeArray(genderOptions).map((g) => (
-          <option key={g.value} value={g.value}>
-            {g.label}
-          </option>
-        ))}
-      </select>
+        onChange={onGenderChange}
+        options={genderOptions}
+        defaultLabel="Tất cả giới tính"
+      />
 
-      {/* STATUS */}
-      <select
-        className="input"
+      <FilterSelect
         value={status}
-        onChange={(e) =>
-          onStatusChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả trạng thái</option>
-        {safeArray(statusOptions).map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-    </div>
+        onChange={onStatusChange}
+        options={statusOptions}
+        defaultLabel="Tất cả trạng thái"
+      />
+    </FilterWrapper>
   );
 }

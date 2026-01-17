@@ -1,146 +1,155 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/AccountEdit.jsx
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import AccountForm from "../../components/layouts/AccountForm";
+import PageContainer from "../../../../shared/components/PageContainer";
 import { accountService } from "../../services/account.service";
-import { ROLES } from "../../../../shared/constants/roles"
+import { ROLES } from "../../../../shared/constants/roles";
+import { useEditResource } from "../../../../shared/hooks/useEditResource";
+
+/* =========================
+ * Options
+ * ========================= */
+const ROLE_OPTIONS = [
+  { value: ROLES.ADMIN, label: "Admin" },
+  { value: ROLES.HR_MANAGER, label: "HR Manager" },
+  { value: ROLES.HR_EMPLOYEE, label: "HR Employee" },
+  { value: ROLES.SCM_MANAGER, label: "SCM Manager" },
+  { value: ROLES.SCM_EMPLOYEE, label: "SCM Employee" },
+  { value: ROLES.SALES_CRM_MANAGER, label: "Sales CRM Manager" },
+  { value: ROLES.SALES_CRM_EMPLOYEE, label: "Sales CRM Employee" },
+  { value: ROLES.SUPPLY_CHAIN_MANAGER, label: "Supply Chain Manager" },
+  { value: ROLES.SUPPLY_CHAIN_EMPLOYEE, label: "Supply Chain Employee" },
+  { value: ROLES.FINANCE_ACCOUNTING_MANAGER, label: "Finance Accounting Manager" },
+  { value: ROLES.FINANCE_ACCOUNTING_EMPLOYEE, label: "Finance Accounting Employee" },
+];
 
 export default function AccountEdit() {
   const params = useParams();
-  const navigate = useNavigate();
 
-  /* ================= PARAM ================= */
+  // 1. Lấy username linh hoạt
+  const username = useMemo(() => params.username || params.id || "", [params]);
 
-  // ✅ Bắt username linh hoạt
-  const username = useMemo(() => {
-    return (
-      params.username ||
-      params.id ||
-      params.code ||
-      params.user ||
-      ""
-    );
-  }, [params]);
+  // 2. Breadcrumbs động
+  const breadcrumbs = useMemo(
+    () => [
+      { label: "Trang chủ", link: "/" },
+      { label: "Nhân sự", link: "/hrm" },
+      { label: "Tài khoản", link: "/hrm/tai-khoan" },
+      { label: `Cập nhật: ${username || "N/A"}`, active: true },
+    ],
+    [username]
+  );
 
-  /* ================= STATE ================= */
+  // 3. Service functions (ổn định dependency)
+  const fetcher = useCallback((id) => accountService.getByUsername(id), []);
+  const updater = useCallback((id, data) => accountService.update(id, data), []);
 
-  const [account, setAccount] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // 4. Hook chuẩn hóa
+  const {
+    data: account,
+    loading,
+    submitting,
+    isNotFound,
+    isDeleted,
+    handleUpdate,
+    handleCancel,
+  } = useEditResource({
+    id: username,
+    fetcher,
+    updater,
+    successPath: "/hrm/tai-khoan",
+    options: {
+      resourceName: "tài khoản",
+      transformPayload: (formData) => {
+        const {
+          username,
+          employeeCode,
+          department,
+          position,
+          // các field có thể chỉ phục vụ UI
+          employee,
+          ...rest
+        } = formData;
 
-  /* ================= LOAD ================= */
+        return rest;
+      },
+    },
+  });
 
-  useEffect(() => {
-    if (!username) return;
-
-    let alive = true;
-    setLoading(true);
-
-    accountService
-      .getByUsername(username)
-      .then((data) => {
-        if (!alive) return;
-        setAccount(data);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [username]);
-
-  /* ================= GUARDS ================= */
-
+  // 5. Guards & trạng thái đặc biệt
   if (!username) {
     return (
-      <div style={{ padding: 20 }}>
-        Thiếu thông tin tài khoản
-      </div>
+      <PageContainer title="Thiếu thông tin" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-danger">Thiếu username để chỉnh sửa tài khoản.</div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
     );
   }
 
   if (loading) {
     return (
-      <div style={{ padding: 20 }}>
-        Đang tải dữ liệu...
-      </div>
+      <PageContainer title="Đang tải dữ liệu..." breadcrumbs={breadcrumbs}>
+        <div className="text-center py-5">Đang lấy thông tin tài khoản...</div>
+      </PageContainer>
     );
   }
 
-  if (!account) {
+  if (isNotFound) {
     return (
-      <div style={{ padding: 20 }}>
-        Không tìm thấy tài khoản
-      </div>
+      <PageContainer title="Không tìm thấy" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-danger">
+          Không tìm thấy tài khoản: <strong>{username}</strong>
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
     );
   }
 
-  if (account.deletedAt) {
+  if (isDeleted) {
     return (
-      <div style={{ padding: 20 }}>
-        Tài khoản đã bị xoá, không thể chỉnh sửa
-      </div>
+      <PageContainer title="Tài khoản đã xóa" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-warning">
+          Tài khoản <strong>{username}</strong> đã bị xóa/ngưng hoạt động. Bạn cần khôi phục
+          trước khi chỉnh sửa.
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
     );
   }
 
-  /* ================= MAP DATA ================= */
+  // 6. Map data về đúng shape form
+  const initialFormData = useMemo(
+    () => ({
+      username: account?.username || "",
+      employeeCode: account?.employeeCode || "",
+      department: account?.employee?.departmentCode || account?.department || "",
+      position: account?.employee?.positionCode || account?.position || "",
+      role: account?.role || "",
+      status: account?.status || "Hoạt động",
+    }),
+    [account]
+  );
 
-  const initialFormData = {
-    username: account.username,
-    employeeCode: account.employeeCode,
-    department: account.employee?.departmentCode || "",
-    position: account.employee?.positionCode || "",
-    role: account.role,
-    status: account.status,
-  };
-
-  /* ================= HANDLER ================= */
-
-  const handleUpdate = async (data) => {
-    const payload = { ...data };
-
-    // 🔒 khóa các field không cho sửa
-    delete payload.username;
-    delete payload.employeeCode;
-    delete payload.department;
-    delete payload.position;
-
-    try {
-      await accountService.update(
-        account.username,
-        payload
-      );
-      navigate(`/hrm/tai-khoan/${account.username}`);
-    } catch (e) {
-      alert("Có lỗi xảy ra khi cập nhật tài khoản");
-    }
-  };
-
-  /* ================= RENDER ================= */
-
+  // 7. Render Form chính
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer title={`Cập nhật: ${username}`} breadcrumbs={breadcrumbs}>
       <AccountForm
         mode="edit"
         initialData={initialFormData}
         onSubmit={handleUpdate}
-        onCancel={() => navigate(-1)}
-        roleOptions={[
-          { value: ROLES.ADMIN, label: "Admin" },
-          { value: ROLES.HR_MANAGER, label: "HR Manager" },
-          { value: ROLES.HR_EMPLOYEE, label: "HR Employee" },
-          { value: ROLES.SCM_MANAGER, label: "SCM Manager" },
-          { value: ROLES.SCM_EMPLOYEE, label: "SCM Employee" },
-          { value: ROLES.SALES_CRM_MANAGER, label: "Sales CRM Manager" },
-          { value: ROLES.SALES_CRM_EMPLOYEE, label: "Sales CRM Employee" },
-          { value: ROLES.SUPPLY_CHAIN_MANAGER, label: "Supply Chain Manager" },
-          { value: ROLES.SUPPLY_CHAIN_EMPLOYEE, label: "Supply Chain Employee" },
-          { value: ROLES.FINANCE_ACCOUNTING_MANAGER, label: "Finance Accounting Manager" },
-          { value: ROLES.FINANCE_ACCOUNTING_EMPLOYEE, label: "Finance Accounting Employee" },
-        ]}
+        onCancel={handleCancel}
+        roleOptions={ROLE_OPTIONS}
+        disabled={submitting}
+        checkUsernameExists={accountService.checkUsernameExists?.bind(accountService)}
       />
-    </div>
+    </PageContainer>
   );
 }

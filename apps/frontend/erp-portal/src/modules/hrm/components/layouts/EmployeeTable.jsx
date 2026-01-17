@@ -1,19 +1,15 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/EmployeeTable.jsx
 
 import {
-  FaCaretLeft,
-  FaCaretRight,
-  FaEye,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-import "../styles/table.css";
+  TablePagination,
+  TableActions,
+  EmptyRow,
+  formatDate
+} from "../common/TableComponents";
 
-const normalizeCode = (v) =>
-  String(v || "").trim().toUpperCase();
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
-const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "";
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function EmployeeTable({
   data = [],
@@ -29,15 +25,10 @@ export default function EmployeeTable({
   onDelete,
   renderExtraActions,
 }) {
-  const resolveDepartment = (value) => {
-    const key = normalizeCode(value);
-    return departmentMap[key] || value || "";
-  };
+  const resolve = (map, value) => map[normalizeCode(value)] || value || "";
+  const hasActions = onView || onEdit || onDelete || renderExtraActions;
 
-  const resolvePosition = (value) => {
-    const key = normalizeCode(value);
-    return positionMap[key] || value || "";
-  };
+  const colCount = hasActions ? 11 : 10;
 
   return (
     <>
@@ -54,29 +45,21 @@ export default function EmployeeTable({
             <th>Chức vụ</th>
             <th>Ngày vào</th>
             <th>Trạng thái</th>
-            {(onView || onEdit || onDelete || renderExtraActions) && (
-              <th className="action-col">Thao tác</th>
-            )}
+            {hasActions && <th className="action-col">Thao tác</th>}
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan={11} className="empty">
-                Không có dữ liệu
-              </td>
-            </tr>
+            <EmptyRow colSpan={colCount} />
           ) : (
             data.map((e) => (
               <tr
                 key={e.code}
                 className={[
                   onRowClick && "clickable",
-                  e.deletedAt && "deleted",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                  isSoftDeleted(e.deletedAt) && "deleted"
+                ].filter(Boolean).join(" ")}
                 onClick={() => onRowClick?.(e)}
               >
                 <td>{e.code}</td>
@@ -85,45 +68,20 @@ export default function EmployeeTable({
                 <td>{formatDate(e.dob)}</td>
                 <td>{e.email}</td>
                 <td>{e.phone}</td>
-                <td>{resolveDepartment(e.department)}</td>
-                <td>{resolvePosition(e.position)}</td>
+                <td>{resolve(departmentMap, e.department)}</td>
+                <td>{resolve(positionMap, e.position)}</td>
                 <td>{formatDate(e.joinDate)}</td>
                 <td>{e.status}</td>
 
-                {(onView || onEdit || onDelete) && (
-                  <td
-                    className="actions"
-                    onClick={(ev) =>
-                      ev.stopPropagation()
-                    }
-                  >
-                    {onView && (
-                      <button
-                        onClick={() => onView(e)}
-                        title="Xem"
-                      >
-                        <FaEye />
-                      </button>
-                    )}
-                    {onEdit && !e.deletedAt && (
-                      <button
-                        onClick={() => onEdit(e)}
-                        title="Sửa"
-                      >
-                        <FaEdit />
-                      </button>
-                    )}
-                    {onDelete && !e.deletedAt && (
-                      <button
-                        className="danger"
-                        onClick={() => onDelete(e)}
-                        title="Xoá"
-                      >
-                        <FaTrash />
-                      </button>
-                    )}
-                    {renderExtraActions && renderExtraActions(e)}
-                  </td>
+                {hasActions && (
+                  <TableActions
+                    data={e}
+                    onView={onView}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    renderExtra={renderExtraActions}
+                    isDeleted={isSoftDeleted(e.deletedAt)}
+                  />
                 )}
               </tr>
             ))
@@ -131,26 +89,7 @@ export default function EmployeeTable({
         </tbody>
       </table>
 
-      {/* PAGINATION */}
-      <div className="pagination">
-        <button
-          disabled={page === 1}
-          onClick={onPrev}
-        >
-          <FaCaretLeft /> Trước
-        </button>
-
-        <span>
-          Trang {page} / {totalPages}
-        </span>
-
-        <button
-          disabled={page === totalPages}
-          onClick={onNext}
-        >
-          Sau <FaCaretRight />
-        </button>
-      </div>
+      <TablePagination page={page} totalPages={totalPages} onPrev={onPrev} onNext={onNext} />
     </>
   );
 }

@@ -4,305 +4,301 @@ import { employeeService } from "./employee.service";
 import { departmentService } from "./department.service";
 import { positionService } from "./position.service";
 
-const KEY = "ON_LEAVES";
-
 /* =========================
- * Utils & Helpers
+ * Config & Constants
  * ========================= */
+const API_URL = "http://localhost:3001/onLeaves";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-const storage = {
-  get() {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
-  },
-  set(data) {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  },
+const EMP_STATUS = {
+  WORKING: "Đang làm việc",
 };
 
-const normalizeId = (id) => String(id || "").trim();
+export const LEAVE_STATUS = {
+  PENDING: "Chờ duyệt",
+  APPROVED: "Đã duyệt",
+  REJECTED: "Từ chối",
+};
 
-const createHttpError = (status, message, field) => {
-  const err = new Error(message);
-  err.status = status;
-  if (field) err.field = field;
-  return err;
+const ERROR_MSGS = {
+  FETCH_FAILED: "Lỗi kết nối đến máy chủ",
+  NOT_FOUND: "Không tìm thấy đơn nghỉ",
+  MISSING_EMPLOYEE: "Thiếu nhân viên",
+  INVALID_EMPLOYEE: "Chỉ tạo đơn nghỉ cho nhân viên đang làm việc",
+  MISSING_RANGE: "Thiếu thời gian nghỉ",
+  INVALID_RANGE: "Khoảng thời gian nghỉ không hợp lệ",
+  UPDATE_FAILED: "Không thể cập nhật dữ liệu",
+  // [UPDATE] Thêm thông báo lỗi mới
+  CANNOT_DELETE_PENDING: "Không được xóa đơn khi đang chờ duyệt",
+};
+
+/* =========================
+ * Helpers
+ * ========================= */
+const normalizeCode = (code) => String(code || "").trim().toUpperCase();
+
+const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
+
+const handleResponse = async (response) => {
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
+  }
+  return response.json();
 };
 
 /* =========================
  * Business Validators
  * ========================= */
+const validators = {
+  async ensureEmployeeWorking(employeeCode) {
+    const code = normalizeCode(employeeCode);
+    if (!code) throw new Error(ERROR_MSGS.MISSING_EMPLOYEE);
 
-async function validateEmployeeWorking(employeeCode) {
-  if (!employeeCode) {
-    throw createHttpError(400, "Thiếu nhân viên", "employeeCode");
-  }
+    const emp = await employeeService.getByCode(code);
 
-  const emp = await employeeService.getByCode(employeeCode);
+    if (
+      !emp ||
+      isSoftDeleted(emp?.deletedAt) ||
+      String(emp?.status || "").trim() !== EMP_STATUS.WORKING
+    ) {
+      throw new Error(ERROR_MSGS.INVALID_EMPLOYEE);
+    }
 
-  if (!emp || emp.deletedAt || emp.status !== "Đang làm việc") {
-    throw createHttpError(
-      400,
-      "Chỉ tạo đơn nghỉ cho nhân viên đang làm việc",
-      "employeeCode"
-    );
-  }
+    return emp;
+  },
 
-  return emp;
-}
+  ensureValidRange(fromDate, toDate) {
+    if (!fromDate || !toDate) throw new Error(ERROR_MSGS.MISSING_RANGE);
 
-function validateLeaveRange(fromDate, toDate) {
-  if (!fromDate || !toDate) {
-    throw createHttpError(400, "Thiếu thời gian nghỉ");
-  }
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
 
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
-
-  if (isNaN(from) || isNaN(to) || from > to) {
-    throw createHttpError(
-      400,
-      "Khoảng thời gian nghỉ không hợp lệ",
-      "fromDate"
-    );
-  }
-}
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+      throw new Error(ERROR_MSGS.INVALID_RANGE);
+    }
+  },
+};
 
 /* =========================
- * Enrich helper (CHUẨN HÓA)
+ * Enrich helper
  * ========================= */
-
-async function enrichOnLeave(item) {
-  if (!item) return null;
-
-  let employeeName = null;
-  let departmentName = null;
-  let positionName = null;
-
-  if (item.employeeCode) {
-    const emp = await employeeService.getByCode(item.employeeCode);
-
-    if (emp) {
-      employeeName = emp.name;
-
-      const [dept, pos] = await Promise.all([
-        emp.department
-          ? departmentService.getByCode(emp.department)
-          : null,
-        emp.position
-          ? positionService.getByCode(emp.position)
-          : null,
-      ]);
-
-      departmentName = dept?.name || emp.department;
-      positionName = pos?.name || emp.position;
-    }
+const enrichOnLeaveData = (item, allEmployees, allDepts, allPositions) => {
+  const empCode = item?.employeeCode ? normalizeCode(item.employeeCode) : null;
+  if (!empCode) {
+    return { ...item, employeeName: null, departmentName: null, positionName: null };
   }
+
+  const emp = (Array.isArray(allEmployees) ? allEmployees : []).find(
+    (e) => normalizeCode(e?.code) === empCode
+  );
+
+  if (!emp) {
+    return { ...item, employeeName: null, departmentName: null, positionName: null };
+  }
+
+  const dept = (Array.isArray(allDepts) ? allDepts : []).find(
+    (d) => normalizeCode(d?.code) === normalizeCode(emp?.department)
+  );
+  const pos = (Array.isArray(allPositions) ? allPositions : []).find(
+    (p) => normalizeCode(p?.code) === normalizeCode(emp?.position)
+  );
 
   return {
     ...item,
-    employeeName,
-    departmentName,
-    positionName,
+    employeeName: emp?.name || null,
+    departmentName: dept?.name || emp?.department || null,
+    positionName: pos?.name || emp?.position || null,
   };
-}
+};
 
 /* =========================
- * OnLeave Service
+ * Main Service
  * ========================= */
-
 export const onLeaveService = {
-  async getAll({ includeDeleted = false } = {}) {
-    await delay();
-    const list = storage.get();
+  // ... (giữ nguyên các hàm getAll, getById, create) ...
 
-    const filtered = includeDeleted
-      ? list
-      : list.filter((i) => !i.deletedAt);
+  async getAll({ includeDeleted = false, enrich = true } = {}) {
+    try {
+      const response = await fetch(API_URL);
+      const data = await handleResponse(response);
 
-    return Promise.all(filtered.map(enrichOnLeave));
+      const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
+        const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
+        const tb = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
+        return tb - ta;
+      });
+
+      const filtered = includeDeleted
+        ? sortedData
+        : sortedData.filter((i) => !isSoftDeleted(i?.deletedAt));
+
+      if (!enrich) return filtered;
+
+      const [employees, depts, positions] = await Promise.all([
+        employeeService.getAll({ includeDeleted: true }),
+        departmentService.getAll({ includeDeleted: true, enrich: false }),
+        positionService.getAll({ includeDeleted: true, enrich: false }),
+      ]);
+
+      return filtered.map((item) => enrichOnLeaveData(item, employees, depts, positions));
+    } catch (error) {
+      console.error(ERROR_MSGS.FETCH_FAILED, error);
+      return [];
+    }
   },
 
   async getById(id) {
-    await delay();
-    const i = normalizeId(id);
-
-    const found = storage
-      .get()
-      .find((x) => normalizeId(x.id) === i);
-
-    return found ? enrichOnLeave(found) : null;
+    try {
+      const response = await fetch(`${API_URL}/${id}`);
+      if (response.status === 404) return null;
+      return handleResponse(response);
+    } catch {
+      return null;
+    }
   },
 
   async create(data) {
-    await delay();
-
-    await validateEmployeeWorking(data?.employeeCode);
-    validateLeaveRange(data?.fromDate, data?.toDate);
+    await validators.ensureEmployeeWorking(data?.employeeCode);
+    validators.ensureValidRange(data?.fromDate, data?.toDate);
 
     const now = new Date().toISOString();
 
-    const item = {
+    const newItem = {
       ...data,
-      id: crypto.randomUUID(),
-      status: data?.status ?? "Chờ duyệt",
+      employeeCode: normalizeCode(data?.employeeCode),
+      status: data?.status ?? LEAVE_STATUS.PENDING,
       approvedAt: null,
       approvedBy: null,
+      rejectReason: null,
       createdAt: now,
       updatedAt: null,
       deletedAt: null,
     };
 
-    storage.set([item, ...storage.get()]);
-    return enrichOnLeave(item);
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newItem),
+    });
+
+    return handleResponse(response);
   },
 
   async update(id, data) {
-    await delay();
+    try {
+      const current = await this.getById(id);
+      if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
+      const nextFrom = data?.fromDate ?? current.fromDate;
+      const nextTo = data?.toDate ?? current.toDate;
 
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
+      if (data?.fromDate != null || data?.toDate != null) {
+        validators.ensureValidRange(nextFrom, nextTo);
+      }
 
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
+      const updatedItem = {
+        ...current,
+        ...data,
+        id: current.id,
+        employeeCode: current.employeeCode,
+        fromDate: nextFrom,
+        toDate: nextTo,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const response = await fetch(`${API_URL}/${current.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedItem),
+      });
+
+      return handleResponse(response);
+    } catch (error) {
+      if (error?.message) throw error;
+      throw new Error(ERROR_MSGS.UPDATE_FAILED);
     }
-
-    if (data?.fromDate || data?.toDate) {
-      validateLeaveRange(
-        data.fromDate ?? list[index].fromDate,
-        data.toDate ?? list[index].toDate
-      );
-    }
-
-    const updated = {
-      ...list[index],
-      ...data,
-      id: list[index].id,
-      employeeCode: list[index].employeeCode,
-      updatedAt: new Date().toISOString(),
-    };
-
-    list[index] = updated;
-    storage.set(list);
-
-    return enrichOnLeave(updated);
   },
 
+  /**
+   * Xóa mềm (PUT) theo id
+   * [UPDATE] Không cho phép xóa nếu status là PENDING
+   */
   async remove(id) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
+    // --- LOGIC MỚI BẮT ĐẦU ---
+    // Kiểm tra nếu trạng thái là CHỜ DUYỆT thì chặn lại
+    if (current.status === LEAVE_STATUS.PENDING) {
+      throw new Error(ERROR_MSGS.CANNOT_DELETE_PENDING);
     }
+    // --- LOGIC MỚI KẾT THÚC ---
 
-    list[index] = {
-      ...list[index],
-      deletedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+
+    const softDeleteData = {
+      ...current,
+      deletedAt: now,
+      updatedAt: now,
     };
 
-    storage.set(list);
-    return true;
+    const response = await fetch(`${API_URL}/${current.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(softDeleteData),
+    });
+
+    return handleResponse(response);
   },
+
+  // ... (giữ nguyên các hàm restore, approve, reject, destroy) ...
 
   async restore(id) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-    }
-
-    list[index] = {
-      ...list[index],
+    const restoreData = {
+      ...current,
       deletedAt: null,
-      approvedAt: null,
-      approvedBy: null,
+      // status: LEAVE_STATUS.PENDING,
+      // approvedAt: null,
+      // approvedBy: null,
+      // rejectReason: null,
       updatedAt: new Date().toISOString(),
     };
 
-    storage.set(list);
-    return enrichOnLeave(list[index]);
+    const response = await fetch(`${API_URL}/${current.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(restoreData),
+    });
+
+    return handleResponse(response);
   },
 
   async approve(id, approver = "admin") {
-    await delay();
     return this.update(id, {
-      status: "Đã duyệt",
+      status: LEAVE_STATUS.APPROVED,
       approvedAt: new Date().toISOString(),
       approvedBy: approver,
-      updatedAt: new Date().toISOString(),
+      rejectReason: null,
     });
   },
 
-  // async reject(id, reason, approver = "admin") {
-  //   await delay();
-  //   const list = storage.get();
-  //   const i = normalizeId(id);
-  //   const index = list.findIndex((x) => normalizeId(x.id) === i);
-
-  //   if (index === -1) {
-  //     throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-  //   }
-  //   const updated = {
-  //     ...list[index],
-  //     status: "Từ chối",
-  //     reason: reason,
-  //     approvedAt: new Date().toISOString(),
-  //     approvedBy: approver,
-  //     updatedAt: new Date().toISOString(),
-  //   };
-
-  //   list[index] = updated;
-  //   storage.set(list);
-
-  //   return enrichOnLeave(updated);
-  // },
-
   async reject(id, reason, approver = "admin") {
-    await delay();
     return this.update(id, {
-      status: "Từ chối",
-      rejectReason: reason,
+      status: LEAVE_STATUS.REJECTED,
+      rejectReason: reason || null,
       approvedAt: new Date().toISOString(),
-      approvedBy: approver, // Lưu tên người từ chối vào đây
-      updatedAt: new Date().toISOString(),
+      approvedBy: approver,
     });
   },
 
   async destroy(id) {
-    await delay();
-
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-    }
-
-    list.splice(index, 1);
-    storage.set(list);
-    return true;
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "DELETE",
+    });
+    return handleResponse(response);
   },
 };

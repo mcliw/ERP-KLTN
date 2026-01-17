@@ -1,90 +1,53 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/PositionFilter.jsx
 
-import { FaSearch, FaTimes } from "react-icons/fa";
-import "../styles/filter.css";
-
-const safeArray = (v) => (Array.isArray(v) ? v : []);
+import { FilterWrapper, FilterSearch, FilterSelect } from "../common/FilterComponents";
 
 export default function PositionFilter({
-  // values
   keyword = "",
   department = "",
   status = "",
-
-  // options: [{ value, label }]
   departmentOptions = [],
   statusOptions = [],
-
-  // handlers
   onKeywordChange,
   onDepartmentChange,
   onStatusChange,
   onClear,
 }) {
-  const canClear = keyword || department || status;
+  const hasFilter = keyword || department || status;
 
   const handleClear = () => {
-    if (onClear) {
-      onClear();
-      return;
-    }
+    if (onClear) return onClear();
     onKeywordChange?.("");
     onDepartmentChange?.("");
     onStatusChange?.("");
   };
 
   return (
-    <div className="filters">
-      {/* SEARCH */}
-      <div className="search-wrap">
-        <FaSearch className="search-icon" />
-        <input
-          className="search-input"
-          name="keyword"
-          value={keyword}
-          placeholder="Tìm theo mã hoặc tên chức vụ"
-          onChange={(e) => onKeywordChange?.(e.target.value)}
-        />
+    <FilterWrapper>
+      {/* Search */}
+      <FilterSearch
+        keyword={keyword}
+        onKeywordChange={onKeywordChange}
+        placeholder="Tìm theo mã hoặc tên chức vụ"
+        hasFilter={hasFilter}
+        onClear={handleClear}
+      />
 
-        {canClear && (
-          <button
-            type="button"
-            className="clear-btn"
-            onClick={handleClear}
-            title="Xoá bộ lọc"
-          >
-            <FaTimes />
-          </button>
-        )}
-      </div>
-
-      {/* DEPARTMENT */}
-      <select
-        className="input"
+      {/* Department Select */}
+      <FilterSelect
         value={department}
-        onChange={(e) => onDepartmentChange?.(e.target.value)}
-      >
-        <option value="">Tất cả phòng ban</option>
-        {safeArray(departmentOptions).map((d) => (
-          <option key={d.value} value={d.value}>
-            {d.label}
-          </option>
-        ))}
-      </select>
+        onChange={onDepartmentChange}
+        options={departmentOptions}
+        defaultLabel="Tất cả phòng ban"
+      />
 
-      {/* STATUS */}
-      <select
-        className="input"
+      {/* Status Select */}
+      <FilterSelect
         value={status}
-        onChange={(e) => onStatusChange?.(e.target.value)}
-      >
-        <option value="">Tất cả trạng thái</option>
-        {safeArray(statusOptions).map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-    </div>
+        onChange={onStatusChange}
+        options={statusOptions}
+        defaultLabel="Tất cả trạng thái"
+      />
+    </FilterWrapper>
   );
 }
