@@ -1,3 +1,19 @@
 pnpm install
 pnpm --filter erp-portal add zod
 npm install recharts
+
+mkdir -p services
+
+mkdir -p security
+
+mkdir -p repository
+
+mkdir -p entity
+
+mkdir -p controller
+
+mkdir -p constant
+
+mkdir -p config
+
+mkdir -p dto

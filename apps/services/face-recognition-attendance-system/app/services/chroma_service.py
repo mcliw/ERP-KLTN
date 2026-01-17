@@ -4,13 +4,27 @@ import os
 
 class ChromaService:
     def __init__(self):
-        # Tạo thư mục lưu DB nếu chưa có
-        if not os.path.exists("chroma_db"):
-            os.makedirs("chroma_db")
+        # --- CẤU HÌNH KẾT NỐI SERVER (DOCKER) ---
+        # Lấy host và port từ biến môi trường (được định nghĩa trong docker-compose.yml)
+        # Nếu chạy local (không qua docker), mặc định sẽ trỏ về localhost:8000
+        db_host = os.getenv("CHROMA_DB_HOST", "localhost")
+        db_port = os.getenv("CHROMA_DB_PORT", "8000")
+
+        print(f"🔌 ChromaService: Đang kết nối tới {db_host}:{db_port}...")
+
+        try:
+            # Sử dụng HttpClient để kết nối tới ChromaDB container
+            self.client = chromadb.HttpClient(host=db_host, port=int(db_port))
             
-        self.client = chromadb.PersistentClient(path="chroma_db")
-        
+            # Kiểm tra kết nối bằng heartbeat
+            self.client.heartbeat()
+            print("✅ ChromaService: Kết nối thành công!")
+        except Exception as e:
+            print(f"❌ ChromaService Lỗi: Không thể kết nối tới ChromaDB tại {db_host}:{db_port}. Chi tiết: {e}")
+            # Lưu ý: Nếu không kết nối được DB, ứng dụng có thể sẽ crash ở các bước sau.
+
         # Cấu hình sử dụng khoảng cách L2 (Euclidean) chuẩn FaceNet
+        # get_or_create_collection hoạt động giống nhau ở cả Client và Server mode
         self.collection = self.client.get_or_create_collection(
             name="faces_dataset", 
             metadata={"hnsw:space": "l2"}

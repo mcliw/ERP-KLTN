@@ -83,6 +83,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+      - JWT_SECRET=${JWT_SECRET}
+      - SERVER_SERVLET_CONTEXT_PATH=/identity
+      - SPRING_GRAPHQL_PATH=/graphql
+      - SERVER_PORT=8080
     depends_on:
       - db-identity
     networks:
@@ -129,18 +133,18 @@ services:
     networks:
       - erp-network
 
-  # 3. Supply Chain Service (Golang)
+  # 3. Supply Chain Service
   supply-chain-service:
     build: 
       context: ./apps/services/supply-chain
+    env_file:
+    - .env
     image: arsneonci/supply-chain-service:latest
     container_name: supply-chain-service
     environment:
-      - DB_HOST=db-supply
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=DEADlift12Hard
-      - DB_NAME=supply_db
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-supply:5432/supply_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
     depends_on:
       - db-supply
     networks:
@@ -213,7 +217,7 @@ services:
   # 6. AI Assistant Service (Python FastAPI)
 #  ai-service:
 #    build: 
-#      context: ./apps/services/ai-chatbot
+#      context: ./apps/services/erp_ai_chatbot
 #    image: arsneonci/ai-service:latest
 #    container_name: ai-service
 #    environment:
@@ -222,7 +226,6 @@ services:
 #      - db-ai
 #    networks:
 #      - erp-network
-
 #  db-ai:
 #    image: postgres:15-alpine
 #    container_name: db-ai
@@ -232,6 +235,37 @@ services:
 #      - POSTGRES_PASSWORD=DEADlift12Hard
 #    volumes:
 #      - ai-data:/var/lib/postgresql/data
+#    networks:
+#      - erp-network
+
+  # 6. Face Recognition Service (Python FastAPI)
+#  face-service:
+#      context: ./apps/services/face-recognition-attendance-system
+#    image: arsneonci/face-service:latest
+#    container_name: face-service
+#    environment:
+#      # Kết nối database PostgreSQL
+#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-hrm:5432/hrm_db
+#      # Cấu hình kết nối ChromaDB (Server mode)
+#      - CHROMA_DB_HOST=chromadb
+#      - CHROMA_DB_PORT=8000
+#    depends_on:
+#      - db-hrm
+#      - chromadb # Chờ ChromaDB khởi động xong
+#    networks:
+#      - erp-network
+
+#  chromadb:
+#    image: chromadb/chroma:latest
+#    container_name: chromadb_container
+#    volumes:
+      # Mount volume để không bị mất dữ liệu khuôn mặt khi restart
+#      - chroma-data:/chroma/chroma
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - IS_PERSISTENT=TRUE
+#      - ANONYMIZED_TELEMETRY=FALSE
 #    networks:
 #      - erp-network
 
@@ -246,3 +280,4 @@ volumes:
   ai-data:
   sales-data:
   accounting-data:
+  chroma-data:

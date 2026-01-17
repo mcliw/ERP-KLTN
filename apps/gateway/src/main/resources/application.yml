@@ -1,41 +1,52 @@
+# ==============================================================
+# 1. SERVER CONFIGURATION
+# ==============================================================
 server:
   port: 8080
   forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
 
+# ==============================================================
+# 2. CUSTOM PROPERTIES
+# ==============================================================
 jwt:
-  secret: ${JWT_SECRET} 
+  secret: ${JWT_SECRET}
 
+# ==============================================================
+# 3. SPRING FRAMEWORK & MODULES
+# ==============================================================
 spring:
   application:
     name: gateway-service
+  
   main:
     web-application-type: reactive
-  # CẤU HÌNH BẢO MẬT (MỚI)
-  # Gateway đóng vai trò Resource Server, cần biết thuật toán để validate Token
+
+  # --- Security Configuration (Resource Server) ---
   security:
     oauth2:
       resourceserver:
         jwt:
           jws-algorithm: HS512 # Phải khớp với thuật toán ký bên Identity Service
 
+  # --- Spring Cloud Gateway Configuration ---
   cloud:
     gateway:
-      # 1. Cấu hình CORS Global (Cho phép Frontend gọi vào)
+      # A. Global CORS (Cho phép Frontend gọi vào)
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: 
+            allowedOrigins:
               - "https://ldgcompany.local"
               - "https://store.local"
               - "http://localhost:3000" # Frontend Dev
               - "http://localhost:5173" # Vite Dev
             allowedMethods: "*"
             allowedHeaders: "*"
-            allowCredentials: true # Cho phép gửi cookie/auth header
+            allowCredentials: true
 
-      # 2. Định tuyến (Routes) - URI phải khớp với container_name trong docker-compose
+      # B. Routes Definition
       routes:
-        # Route 1: Identity Service (Nơi duy nhất cho phép public access login/register)
+        # Route 1: Identity Service
         - id: identity-service
           uri: http://identity-service:8080
           predicates:
@@ -73,7 +84,7 @@ spring:
           predicates:
             - Path=/api/accounting/**
           filters:
-            - StripPrefix=1 
+            - StripPrefix=1
 
         # Route 6: AI Assistant
         - id: ai-service
@@ -82,3 +93,26 @@ spring:
             - Path=/api/ai/**
           filters:
             - StripPrefix=1
+
+# ==============================================================
+# 4. LOGGING
+# ==============================================================
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.http.server.reactive: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+
+# ==============================================================
+# 5. MANAGEMENT & ACTUATOR
+# ==============================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "gateway, health, info"
+  endpoint:
+    gateway:
+      enabled: true

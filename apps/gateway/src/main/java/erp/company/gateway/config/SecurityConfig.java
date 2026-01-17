@@ -1,83 +1,68 @@
 package erp.company.gateway.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import reactor.core.publisher.Mono;
-
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 
 @Configuration
-@EnableWebFluxSecurity
+@EnableWebFluxSecurity // Bắt buộc dùng Annotation này cho Gateway, KHÔNG dùng @EnableWebSecurity
 public class SecurityConfig {
 
-    @Value("${jwt.secret}")
-    private String jwtSecret;
+    private final String jwkSetUri = "http://localhost:8080/oauth2/jwks"; // Thay bằng URL thật của Identity Service
 
-    @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
-        return http
-            // SỬA LỖI TẠI ĐÂY: Dùng ServerHttpSecurity.CsrfSpec thay vì AbstractHttpConfigurer
-            .csrf(ServerHttpSecurity.CsrfSpec::disable)
-            .cors(ServerHttpSecurity.CorsSpec::disable)
-            
-            .authorizeExchange(exchanges -> exchanges
-                .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                .pathMatchers("/api/identity/**").permitAll()
-                .pathMatchers("/actuator/**").permitAll()
-                .anyExchange().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt
-                    .jwtDecoder(jwtDecoder())
-                    .jwtAuthenticationConverter(jwtAuthenticationConverter())
+        @Bean
+        public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+            http
+                // 1. Tắt CSRF (Bắt buộc cho API, nếu không POST sẽ bị chặn)
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                
+                // 2. Cấu hình quyền truy cập
+                .authorizeExchange(exchanges -> exchanges
+                    // Cho phép phương thức OPTIONS (CORS pre-flight request từ trình duyệt)
+                    .pathMatchers(HttpMethod.OPTIONS).permitAll()
+                    
+                    // QUAN TRỌNG: Cho phép truy cập Login/Register mà không cần Token
+                    // Lưu ý: Gateway nhìn thấy path CÓ prefix /api, nên phải whitelist cả /api/...
+                    .pathMatchers("/api/identity/**").permitAll() 
+                    .pathMatchers("/api/identity/graphql").permitAll()
+                    
+                    // Các service khác bắt buộc phải có Token
+                    .anyExchange().authenticated()
                 )
-            )
-            .build();
-    }
+                
+                // 3. Cấu hình Resource Server (Validate Token)
+                .oauth2ResourceServer(oauth2 -> oauth2
+                    .jwt(jwt -> jwt
+                        .jwtDecoder(jwtDecoder())
+                        .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                    )
+                );
 
-    @Bean
-    public Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtAuthenticationConverter() {
-        return jwt -> {
-            List<GrantedAuthority> authorities = new ArrayList<>();
-            String role = jwt.getClaimAsString("role");
-            if (role != null && !role.isEmpty()) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
-            }
-            List<String> permissions = jwt.getClaimAsStringList("permissions");
-            if (permissions != null) {
-                authorities.addAll(permissions.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList()));
-            }
-            return Mono.just(new JwtAuthenticationToken(jwt, authorities));
-        };
-    }
+            return http.build();
+        }
 
+    // Bean giải mã Token (Fix lỗi ReactiveJwtDecoder missing)
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        SecretKeySpec secretKey = new SecretKeySpec(
-                jwtSecret.getBytes(StandardCharsets.UTF_8),
-                "HmacSHA512"
-        );
-        return NimbusReactiveJwtDecoder.withSecretKey(secretKey)
-                .macAlgorithm(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS512)
-                .build();
+        return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
+    }
+
+    // Bean chuyển đổi Token thành User (Fix lỗi JwtAuthenticationToken missing)
+    @Bean
+    public Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtAuthenticationConverter() {
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        // Cấu hình thêm nếu cần (ví dụ map roles từ claim)
+        return new ReactiveJwtAuthenticationConverterAdapter(jwtAuthenticationConverter);
     }
 }

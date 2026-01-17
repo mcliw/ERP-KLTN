@@ -371,7 +371,7 @@ INSERT INTO users (
     '$2a$10$zhyFs9H01KRGXxSzJC9QpeYXWzRiljmu6b49Xudc2uRkA03TJpmvS',
     'ACTIVE', 
     'INTERNAL', 
-    1,
+    (SELECT id FROM roles WHERE name = 'ADMIN'),
     '2025-01-01 08:00:00', 
     NOW()
 )
