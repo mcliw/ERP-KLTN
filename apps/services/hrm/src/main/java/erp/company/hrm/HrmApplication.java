@@ -3,11 +3,22 @@ package erp.company.hrm;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import io.github.cdimascio.dotenv.Dotenv;
+
 @SpringBootApplication
 public class HrmApplication {
+ 
+    public static void main(String[] args) {
+        // Nạp file .env vào System Properties
+        Dotenv dotenv = Dotenv.configure()
+                .directory("./") // Đường dẫn đến thư mục chứa file .env
+                .ignoreIfMissing()
+                .load();
 
-	public static void main(String[] args) {
-		SpringApplication.run(HrmApplication.class, args);
-	}
+        dotenv.entries().forEach(entry -> 
+            System.setProperty(entry.getKey(), entry.getValue())
+        );
 
+        SpringApplication.run(HrmApplication.class, args);
+    }
 }
