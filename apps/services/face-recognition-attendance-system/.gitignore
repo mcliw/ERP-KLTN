@@ -1,0 +1,6 @@
+.env
+**/venv/
+/vid_test/*.MOV
+/vid_test/*.
+/dataset
+/model_save/*.pkl
