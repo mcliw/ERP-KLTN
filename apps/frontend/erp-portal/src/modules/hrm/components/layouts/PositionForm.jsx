@@ -1,16 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import "../styles/form.css";
+// apps/frontend/erp-portal/src/modules/hrm/components/layouts/PositionForm.jsx
+
+import { useMemo, useEffect, useState } from "react";
 import {
   positionCreateSchema,
   positionUpdateSchema,
   POSITION_NAME_OPTIONS,
 } from "../../validations/position.schema";
-import { FaSave, FaTimes } from "react-icons/fa";
+import {
+  useFormManager,
+  FormInput,
+  FormSelect,
+  FormTextarea,
+  FormActions,
+} from "../common/FormCommon";
 import { departmentService } from "../../services/department.service";
+import { useToast } from "../../../../shared/components/ToastProvider";
 
-/* =========================
- * Constants
- * ========================= */
+/* ==============================
+ * Helpers & Configs
+ * ============================== */
+const cleanData = (data) => {
+  if (!data) return {};
+  const cleaned = {};
+  Object.keys(data).forEach((key) => {
+    cleaned[key] = data[key] === null || data[key] === undefined ? "" : data[key];
+  });
+  return cleaned;
+};
 
 const DEFAULT_FORM = {
   code: "",
@@ -21,322 +37,210 @@ const DEFAULT_FORM = {
   description: "",
 };
 
-/* =========================
- * Component
- * ========================= */
-
+/* ==============================
+ * Main Component
+ * ============================== */
 export default function PositionForm({
   mode = "create",
-  initialData = null,
-  hasAssignees = false, // ⭐ QUAN TRỌNG
+  initialData,
+  hasAssignees = false,
   onSubmit,
   onCancel,
 }) {
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [errors, setErrors] = useState({});
+  const toast = useToast();
   const [infoMessage, setInfoMessage] = useState("");
-
-  const initialSnapshotRef = useRef(null);
-
-  /* =========================
-   * Departments
-   * ========================= */
-
   const [departments, setDepartments] = useState([]);
-  const [loadingDepartments, setLoadingDepartments] =
-    useState(false);
+  const [loadingDepts, setLoadingDepts] = useState(false);
+
+  const safeInitialValues = useMemo(() => {
+    if (!initialData) return DEFAULT_FORM;
+    const cleaned = cleanData(initialData);
+    return { ...DEFAULT_FORM, ...cleaned };
+  }, [initialData]);
+
+  const { form, setForm, errors, handleChange, validate } = useFormManager({
+    initialValues: safeInitialValues,
+    mode,
+    schema: mode === "create" ? positionCreateSchema : positionUpdateSchema,
+  });
+
+  const isDirty = useMemo(() => {
+    return JSON.stringify(form) !== JSON.stringify(safeInitialValues);
+  }, [form, safeInitialValues]);
 
   useEffect(() => {
-    const loadDepartments = async () => {
+    if (initialData) {
+      setForm((prev) => ({ ...prev, ...cleanData(initialData) }));
+    }
+  }, [initialData, setForm]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadDepts = async () => {
+      setLoadingDepts(true);
       try {
-        setLoadingDepartments(true);
         const list = await departmentService.getAll();
-        setDepartments(
-          list.filter(
-            (d) => !d.status || d.status === "Hoạt động"
-          )
-        );
-      } catch {
-        setDepartments([]);
+        if (mounted) setDepartments(list.filter((d) => d.status === "Hoạt động"));
+      } catch (err) {
+        console.error("Failed to load departments", err);
+        if (mounted) setDepartments([]);
       } finally {
-        setLoadingDepartments(false);
+        if (mounted) setLoadingDepts(false);
       }
     };
 
-    loadDepartments();
+    loadDepts();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  /* =========================
-   * Init edit mode
-   * ========================= */
-
+  // Clear info when relevant fields change
   useEffect(() => {
-    if (mode !== "edit" || !initialData) return;
+    if (infoMessage) setInfoMessage("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.name, form.department, form.capacity, form.status, form.description]);
 
-    const nextForm = {
-      ...DEFAULT_FORM,
-      ...initialData,
-      capacity: Math.max(
-        Number(initialData.capacity ?? 1),
-        Number(initialData.assigneeCount ?? 0) || 1
-      ),
-    };
+  // Guard Status: Không cho "Ngưng hoạt động" nếu còn nhân viên đảm nhận
+  useEffect(() => {
+    if (mode !== "edit") return;
 
-    setForm(nextForm);
-    initialSnapshotRef.current = { ...nextForm };
-  }, [mode, initialData]);
-
-  /* =========================
-   * Handlers
-   * ========================= */
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setInfoMessage("");
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleCapacityChange = (e) => {
-    const min = hasAssignees
-      ? Number(initialData?.assigneeCount ?? 1)
-      : 1;
-
-    const value = Math.max(min, Number(e.target.value || min));
-
-    setForm((prev) => ({
-      ...prev,
-      capacity: value,
-    }));
-  };
+    if (form.status === "Ngưng hoạt động" && hasAssignees) {
+      setInfoMessage("Không thể ngưng hoạt động chức vụ khi đang có nhân viên đảm nhận.");
+      setForm((prev) => ({ ...prev, status: "Hoạt động" }));
+    }
+  }, [form.status, hasAssignees, mode, setForm]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     if (mode === "edit" && !isDirty) {
-      setInfoMessage("Không có thay đổi nào để lưu.");
+      toast.info("Dữ liệu không có gì thay đổi.");
       return;
     }
 
-    const schema =
-      mode === "create"
-        ? positionCreateSchema
-        : positionUpdateSchema;
+    const currentAssigneeCount =
+      typeof initialData?.assigneeCount === "number" ? initialData.assigneeCount : 0;
 
-    const submitData =
-      mode === "edit"
-        ? (() => {
-            const { code, ...rest } = form;
-            return rest;
-          })()
-        : form;
+    const capacityNumber = Number(form.capacity);
 
-    const result = schema.safeParse(submitData);
-
-    if (!result.success) {
-      const fieldErrors = {};
-      result.error.issues.forEach((i) => {
-        fieldErrors[i.path[0]] = i.message;
-      });
-
-      setErrors(fieldErrors);
-
-      document
-        .querySelector(
-          `[name="${Object.keys(fieldErrors)[0]}"]`
-        )
-        ?.focus();
-
+    // Guard: nếu đang có người đảm nhận thì không cho giảm capacity < số hiện có
+    if (hasAssignees && Number.isFinite(capacityNumber) && capacityNumber < currentAssigneeCount) {
+      setInfoMessage("Số lượng không được nhỏ hơn nhân viên hiện có.");
       return;
     }
 
-    setErrors({});
-    setInfoMessage("");
+    const payload = {
+      code: form.code ?? "",
+      name: form.name ?? "",
+      department: form.department ?? "",
+      capacity: capacityNumber,
+      status: form.status ?? "Hoạt động",
+      description: form.description ?? "",
+    };
 
-    const ok = window.confirm(
-      mode === "create"
-        ? "Bạn có chắc chắn muốn tạo chức vụ này?"
-        : "Bạn có chắc chắn muốn lưu thay đổi chức vụ này?"
-    );
-    if (!ok) return;
+    // Theo pattern của bạn: edit thì bỏ code
+    const submitData = mode === "edit" ? (({ code, ...rest }) => rest)(payload) : payload;
+
+    if (!validate(submitData)) return;
+
+    if (!window.confirm(mode === "create" ? "Tạo chức vụ?" : "Lưu thay đổi?")) return;
 
     onSubmit?.(submitData);
   };
 
-  /* =========================
-   * Derived
-   * ========================= */
-
-  const isDirty = useMemo(() => {
-    if (mode !== "edit") return true;
-    if (!initialSnapshotRef.current) return false;
-
-    return (
-      JSON.stringify(form) !==
-      JSON.stringify(initialSnapshotRef.current)
-    );
-  }, [mode, form]);
-
-  const renderError = (field) =>
-    errors[field] && (
-      <span className="error">{errors[field]}</span>
-    );
-
-  /* =========================
-   * Render
-   * ========================= */
+  const disableBaseFields = mode === "edit" && hasAssignees;
 
   return (
     <form className="position-form" onSubmit={handleSubmit}>
-      <h3>
-        {mode === "create"
-          ? "Tạo chức vụ"
-          : "Cập nhật chức vụ"}
-      </h3>
+      <h3>{mode === "create" ? "Tạo chức vụ" : "Cập nhật chức vụ"}</h3>
 
       <div className="form-grid">
-        {/* Code */}
-        <div className="form-group">
-          <label>Mã chức vụ *</label>
-          <input
-            name="code"
-            value={form.code}
-            onChange={handleChange}
-            disabled={mode === "edit"}
-          />
-          {renderError("code")}
-        </div>
+        <FormInput
+          label="Mã chức vụ"
+          name="code"
+          value={form.code}
+          onChange={handleChange}
+          required
+          disabled={mode === "edit"}
+          error={errors.code}
+        />
 
-        {/* Name */}
-        <div className="form-group">
-          <label>Chức vụ *</label>
-          <select
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            disabled={mode === "edit" && hasAssignees}
-          >
-            <option value="">-- Chọn chức vụ --</option>
-            {POSITION_NAME_OPTIONS.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-          {renderError("name")}
-        </div>
-
-        {/* Department */}
-        <div className="form-group">
-          <label>Phòng ban *</label>
-          <select
-            name="department"
-            value={form.department}
-            onChange={handleChange}
-            disabled={
-              loadingDepartments ||
-              (mode === "edit" && hasAssignees)
-            }
-          >
-            <option value="">-- Chọn phòng ban --</option>
-
-            {loadingDepartments ? (
-              <option disabled>Đang tải...</option>
-            ) : (
-              departments.map((d) => (
-                <option key={d.code} value={d.code}>
-                  {d.name}
-                </option>
-              ))
-            )}
-          </select>
-          {renderError("department")}
-        </div>
-
-        {/* Capacity */}
-        <div className="form-group">
-          <label>Số người có thể đảm nhận *</label>
-          <input
-            type="number"
-            name="capacity"
-            min={1}
-            value={form.capacity}
-            onChange={handleCapacityChange}
-          />
-          {hasAssignees && (
-            <small className="hint">
-              Không được nhỏ hơn số người đang đảm
-              nhận
-            </small>
-          )}
-          {renderError("capacity")}
-        </div>
-
-        {/* Status */}
-        <div className="form-group">
-          <label>Trạng thái</label>
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-          >
-            <option value="Hoạt động">
-              Hoạt động
+        <FormSelect
+          label="Chức vụ"
+          name="name"
+          value={form.name}
+          onChange={handleChange}
+          required
+          disabled={disableBaseFields}
+          error={errors.name}
+        >
+          <option value="">-- Chọn chức vụ --</option>
+          {POSITION_NAME_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n}
             </option>
-            {mode === "edit" && (
-              <option value="Ngưng hoạt động">
-                Ngưng hoạt động
-              </option>
-            )}
-          </select>
-        </div>
+          ))}
+        </FormSelect>
 
-        {/* Description */}
-        <div className="form-group full-width">
-          <label>Mô tả</label>
-          <textarea
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            rows={3}
-          />
-          {renderError("description")}
-        </div>
+        <FormSelect
+          label="Phòng ban"
+          name="department"
+          value={form.department}
+          onChange={handleChange}
+          required
+          disabled={disableBaseFields || loadingDepts}
+          error={errors.department}
+        >
+          <option value="">-- Chọn phòng ban --</option>
+          {departments.map((d) => (
+            <option key={d.code} value={d.code}>
+              {d.name}
+            </option>
+          ))}
+        </FormSelect>
+
+        <FormInput
+          type="number"
+          label="Số lượng tối đa"
+          name="capacity"
+          value={form.capacity}
+          onChange={handleChange}
+          required
+          min={1}
+          error={errors.capacity}
+        />
+
+        <FormSelect
+          label="Trạng thái"
+          name="status"
+          value={form.status}
+          onChange={handleChange}
+          disabled={mode === "edit" && hasAssignees}
+          error={errors.status}
+        >
+          <option value="Hoạt động">Hoạt động</option>
+          {mode === "edit" && <option value="Ngưng hoạt động">Ngưng hoạt động</option>}
+        </FormSelect>
+
+        <FormTextarea
+          label="Mô tả"
+          name="description"
+          value={form.description}
+          onChange={handleChange}
+          error={errors.description}
+        />
       </div>
 
-      {infoMessage && (
-        <div className="info-message">
-          {infoMessage}
-        </div>
-      )}
+      {infoMessage && <div className="info-message">{infoMessage}</div>}
 
-      <div className="form-actions">
-        <button
-          type="submit"
-          className="btn-primary"
-          title={
-            mode === "edit" && !isDirty
-              ? "Chưa có thay đổi để lưu"
-              : ""
-          }
-        >
-          <FaSave />{" "}
-          <span>{mode === "create"
-            ? "Tạo chức vụ"
-            : "Lưu thay đổi"}</span>
-        </button>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={onCancel}
-        >
-          <FaTimes /> <span>Hủy</span>
-        </button>
-      </div>
+      <FormActions
+        mode={mode}
+        isDirty={isDirty}
+        onCancel={onCancel}
+        submitLabel={mode === "create" ? "Tạo chức vụ" : "Lưu thay đổi"}
+      />
     </form>
   );
 }

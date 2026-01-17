@@ -1,109 +1,101 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/PositionEdit.jsx
 
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import PositionForm from "../../components/layouts/PositionForm";
+import PageContainer from "../../../../shared/components/PageContainer";
 import { positionService } from "../../services/position.service";
+import { useEditResource } from "../../../../shared/hooks/useEditResource";
 
 export default function PositionEdit() {
   const { code } = useParams();
-  const navigate = useNavigate();
 
-  const [position, setPosition] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  // 1. Breadcrumbs động
+  const breadcrumbs = useMemo(
+    () => [
+      { label: "Trang chủ", link: "/" },
+      { label: "Nhân sự", link: "/hrm" },
+      { label: "Chức vụ", link: "/hrm/chuc-vu" },
+      { label: `Cập nhật: ${code}`, active: true },
+    ],
+    [code]
+  );
 
-  /* =========================
-   * Load position
-   * ========================= */
+  // 2. Service functions (ổn định dependency)
+  const fetcher = useCallback((id) => positionService.getByCode(id, { enrich: true }), []);
+  const updater = useCallback((id, data) => positionService.update(id, data), []);
 
-  useEffect(() => {
-    let alive = true;
+  // 3. Hook chuẩn hóa
+  const {
+    data: position,
+    loading,
+    submitting,
+    isNotFound,
+    isDeleted,
+    handleUpdate,
+    handleCancel,
+  } = useEditResource({
+    id: code,
+    fetcher,
+    updater,
+    successPath: "/hrm/chuc-vu",
+    options: {
+      resourceName: "chức vụ",
+      transformPayload: (formData) => {
+        const { code, assigneeCount, ...rest } = formData; // 🔒 không gửi code; bỏ field tính toán
+        return rest;
+      },
+    },
+  });
 
-    const loadPosition = async () => {
-      setLoading(true);
-      try {
-        const data = await positionService.getByCode(code);
-        if (!alive) return;
-        setPosition(data);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    loadPosition();
-    return () => {
-      alive = false;
-    };
-  }, [code]);
-
-  /* =========================
-   * Guards
-   * ========================= */
-
+  // 4. Render trạng thái đặc biệt
   if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải dữ liệu...</div>;
-  }
-
-  if (!position) {
     return (
-      <div style={{ padding: 20 }}>
-        Không tìm thấy chức vụ
-      </div>
+      <PageContainer title="Đang tải dữ liệu..." breadcrumbs={breadcrumbs}>
+        <div className="text-center py-5">Đang lấy thông tin chức vụ...</div>
+      </PageContainer>
     );
   }
 
-  if (position.deletedAt) {
+  if (isNotFound) {
     return (
-      <div style={{ padding: 20 }}>
-        Chức vụ đã bị xoá, không thể chỉnh sửa
-      </div>
+      <PageContainer title="Không tìm thấy" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-danger">
+          Không tìm thấy chức vụ với mã: <strong>{code}</strong>
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
     );
   }
 
-  /* =========================
-   * Handlers
-   * ========================= */
+  if (isDeleted) {
+    return (
+      <PageContainer title="Chức vụ đã xóa" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-warning">
+          Chức vụ <strong>{position?.name || code}</strong> đã bị xóa/ngưng hoạt động.
+          Bạn cần khôi phục trước khi chỉnh sửa.
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
+    );
+  }
 
-  const handleUpdate = async (formData) => {
-    if (submitting) return;
-    setSubmitting(true);
-
-    const payload = {
-      ...formData,
-      code: undefined, // 🔒 khóa mã
-    };
-
-    try {
-      await positionService.update(code, payload);
-      navigate(`/hrm/chuc-vu/${code}`);
-    } catch (err) {
-      if (err?.status === 404) {
-        alert("Không tìm thấy chức vụ");
-      } else if (err?.field) {
-        alert(err.message);
-      } else {
-        alert("Có lỗi khi cập nhật chức vụ");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
-
+  // 5. Render Form chính
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer title={`Cập nhật: ${position?.name || code}`} breadcrumbs={breadcrumbs}>
       <PositionForm
         mode="edit"
         initialData={position}
-        hasAssignees={(position.assigneeCount ?? 0) > 0}
+        hasAssignees={(position?.assigneeCount ?? 0) > 0}
         onSubmit={handleUpdate}
-        onCancel={() => navigate(-1)}
+        onCancel={handleCancel}
         disabled={submitting}
+        checkCodeExists={positionService.checkCodeExists?.bind(positionService)}
       />
-    </div>
+    </PageContainer>
   );
 }

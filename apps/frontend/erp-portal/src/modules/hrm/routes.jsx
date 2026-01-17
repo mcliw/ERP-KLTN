@@ -25,14 +25,21 @@ import AccountCreate from "./pages/layouts/AccountCreate";
 import AccountEdit from "./pages/layouts/AccountEdit";
 import AccountDetail from "./pages/layouts/AccountDetail";
 import AccountRestore from "./pages/layouts/AccountRestore";
-import Payroll from "./pages/layouts/Payroll";
-import PayrollCreate from "./pages/layouts/PayrollCreate";
-import PayrollDetail from "./pages/layouts/PayrollDetail";
 import OnLeave from "./pages/layouts/OnLeave";
 import OnLeaveCreate from "./pages/layouts/OnLeaveCreate";
 import OnLeaveEdit from "./pages/layouts/OnLeaveEdit";
 import OnLeaveDetail from "./pages/layouts/OnLeaveDetail";
 import OnLeaveRestore from "./pages/layouts/OnLeaveRestore";
+import TimeKeeping from "./pages/layouts/TimeKeeping";
+import TimeKeepingCreate from "./pages/layouts/TimeKeepingCreate";
+import TimeKeepingEdit from "./pages/layouts/TimeKeepingEdit";
+import TimeKeepingDetail from "./pages/layouts/TimeKeepingDetail";
+import TimeKeepingRestore from "./pages/layouts/TimeKeepingRestore";
+import Salary from "./pages/layouts/Salary";
+import SalaryCreate from "./pages/layouts/SalaryCreate";
+import SalaryEdit from "./pages/layouts/SalaryEdit";
+import SalaryDetail from "./pages/layouts/SalaryDetail";
+import SalaryRestore from "./pages/layouts/SalaryRestore";
 
 const hrmRoutes = (
   <>
@@ -213,32 +220,6 @@ const hrmRoutes = (
       }
     />
 
-    {/* PAYROLL (LƯƠNG) */}
-    <Route
-      path="/hrm/luong"
-      element={
-        <RequireAuth allowRoles={HRM_PERMISSIONS.PAYROLL}>
-          <Payroll />
-        </RequireAuth>
-      }
-    />
-    <Route
-      path="/hrm/luong/them-ky-luong"
-      element={
-        <RequireAuth allowRoles={HRM_PERMISSIONS.PAYROLL}>
-          <PayrollCreate />
-        </RequireAuth>
-      }
-    />
-    <Route
-      path="/hrm/luong/:id"
-      element={
-        <RequireAuth allowRoles={HRM_PERMISSIONS.PAYROLL}>
-          <PayrollDetail />
-        </RequireAuth>
-      }
-    />
-
     {/* ON LEAVE (NGHỈ PHÉP) */}
     <Route
       path="/hrm/nghi-phep"
@@ -277,6 +258,88 @@ const hrmRoutes = (
       element={
         <RequireAuth allowRoles={HRM_PERMISSIONS.LEAVE}>
           <OnLeaveRestore />
+        </RequireAuth>
+      }
+    />
+    {/* TIMEKEEPING */}
+    <Route
+      path="/hrm/cham-cong"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
+          <TimeKeeping />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/cham-cong/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
+          <TimeKeepingCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/cham-cong/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
+          <TimeKeepingEdit />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/cham-cong/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
+          <TimeKeepingDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/cham-cong/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
+          <TimeKeepingRestore />
+        </RequireAuth>
+      }
+    />
+    {/* SALARY */}
+    <Route
+      path="/hrm/quan-ly-luong"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY}>
+          <Salary />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryEdit />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY}>
+          <SalaryDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryRestore />
         </RequireAuth>
       }
     />

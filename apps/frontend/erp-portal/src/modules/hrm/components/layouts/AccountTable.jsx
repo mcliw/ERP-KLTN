@@ -1,22 +1,21 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/AccountTable.jsx
 
 import {
-  FaCaretLeft,
-  FaCaretRight,
-  FaEye,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-import "../styles/table.css";
+  TablePagination,
+  TableActions,
+  StatusBadge,
+  EmptyRow,
+  formatDate } from "../common/TableComponents";
 
-const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "—";
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
-const normalizeStatus = (v) =>
-  String(v || "").toLowerCase();
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function AccountTable({
   data = [],
+  departmentMap = {},
+  positionMap = {},
+
   page = 1,
   totalPages = 1,
   onPrev,
@@ -27,10 +26,9 @@ export default function AccountTable({
   onDelete,
   renderExtraActions,
 }) {
-  const hasActions =
-    onView || onEdit || onDelete || renderExtraActions;
-
-  const colSpan = hasActions ? 9 : 8;
+  const resolve = (map, value) => map[normalizeCode(value)] || value || "";
+  const hasActions = onView || onEdit || onDelete || renderExtraActions;
+  const colCount = hasActions ? 9 : 8;
 
   return (
     <>
@@ -45,96 +43,53 @@ export default function AccountTable({
             <th>Phân quyền</th>
             <th>Trạng thái</th>
             <th>Ngày tạo</th>
-            {hasActions && (
-              <th className="action-col">Thao tác</th>
-            )}
+            {hasActions && <th className="action-col">Thao tác</th>}
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan={colSpan} className="empty">
-                Không có dữ liệu
-              </td>
-            </tr>
+            <EmptyRow colSpan={colCount} />
           ) : (
             data.map((a) => {
               const emp = a.employee || {};
-              const isDeleted = Boolean(a.deletedAt);
+              const deleted = isSoftDeleted(a.deletedAt);
 
               return (
                 <tr
                   key={a.username}
                   className={[
                     onRowClick && "clickable",
-                    isDeleted && "deleted",
+                    deleted && "deleted",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   onClick={() => onRowClick?.(a)}
                 >
                   <td>{a.username}</td>
-                  <td>{emp.name || "-"}</td>
-                  <td>{emp.email || "-"}</td>
-                  <td>{emp.departmentName || "-"}</td>
-                  <td>{emp.positionName || "-"}</td>
-                  <td>{a.role || "-"}</td>
+                  <td>{emp.name || "—"}</td>
+                  <td>{emp.email || "—"}</td>
+
+                  <td>{resolve(departmentMap, emp.department || emp.departmentName) || "—"}</td>
+                  <td>{resolve(positionMap, emp.position || emp.positionName) || "—"}</td>
+
+                  <td>{a.role || "—"}</td>
 
                   <td>
-                    <span
-                      className={`status ${
-                        a.deletedAt
-                          ? "deleted"
-                          : normalizeStatus(a.status) === "hoạt động"
-                          ? "active"
-                          : "inactive"
-                      }`}
-                    >
-                      {a.deletedAt ? "Đã xoá" : a.status || "Không rõ"}
-                    </span>
+                    <StatusBadge status={a.status} isDeleted={deleted} />
                   </td>
 
                   <td>{formatDate(a.createdAt)}</td>
 
                   {hasActions && (
-                    <td
-                      className="actions"
-                      onClick={(ev) =>
-                        ev.stopPropagation()
-                      }
-                    >
-                      {onView && (
-                        <button
-                          onClick={() => onView(a)}
-                          title="Xem"
-                        >
-                          <FaEye />
-                        </button>
-                      )}
-
-                      {onEdit && !isDeleted && (
-                        <button
-                          onClick={() => onEdit(a)}
-                          title="Sửa"
-                        >
-                          <FaEdit />
-                        </button>
-                      )}
-
-                      {onDelete && !isDeleted && (
-                        <button
-                          className="danger"
-                          onClick={() => onDelete(a)}
-                          title="Xoá"
-                        >
-                          <FaTrash />
-                        </button>
-                      )}
-
-                      {/* EXTRA ACTIONS (restore, reset pw, ...) */}
-                      {renderExtraActions?.(a)}
-                    </td>
+                    <TableActions
+                      data={a}
+                      onView={onView}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      renderExtra={renderExtraActions}
+                      isDeleted={deleted}
+                    />
                   )}
                 </tr>
               );
@@ -143,26 +98,12 @@ export default function AccountTable({
         </tbody>
       </table>
 
-      {/* PAGINATION */}
-      <div className="pagination">
-        <button
-          disabled={page === 1}
-          onClick={onPrev}
-        >
-          <FaCaretLeft /> Trước
-        </button>
-
-        <span>
-          Trang {page} / {totalPages}
-        </span>
-
-        <button
-          disabled={page === totalPages}
-          onClick={onNext}
-        >
-          Sau <FaCaretRight />
-        </button>
-      </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
     </>
   );
 }

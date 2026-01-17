@@ -1,114 +1,107 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/EmployeeEdit.jsx
-
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import EmployeeForm from "../../components/layouts/EmployeeForm";
+import PageContainer from "../../../../shared/components/PageContainer";
 import { employeeService } from "../../services/employee.service";
-
-/* =========================
- * Component
- * ========================= */
+import { useEditResource } from "../../../../shared/hooks/useEditResource";
 
 export default function EmployeeEdit() {
   const { code } = useParams();
-  const navigate = useNavigate();
 
-  const [employee, setEmployee] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  // 1. Breadcrumbs động
+  const breadcrumbs = useMemo(() => [
+    { label: "Trang chủ", link: "/" },
+    { label: "Nhân sự", link: "/hrm" },
+    { label: "Hồ sơ nhân viên", link: "/hrm/ho-so-nhan-vien" },
+    { label: `Cập nhật: ${code}`, active: true },
+  ], [code]);
 
-  /* =========================
-   * Load employee
-   * ========================= */
+  // 2. Định nghĩa các hàm tương tác Service (dùng useCallback để ổn định dependency cho Hook)
+  const fetcher = useCallback((id) => employeeService.getByCode(id), []);
+  
+  // Lưu ý: service.update nhận (code, data)
+  const updater = useCallback((id, data) => employeeService.update(id, data), []);
 
-  useEffect(() => {
-    let alive = true;
-
-    const loadEmployee = async () => {
-      setLoading(true);
-      try {
-        const data = await employeeService.getByCode(code);
-        if (!alive) return;
-        setEmployee(data);
-      } finally {
-        if (alive) setLoading(false);
+  // 3. Sử dụng Hook chuẩn hóa
+  const { 
+    data: employee, 
+    loading, 
+    submitting, 
+    isNotFound, 
+    isDeleted, 
+    handleUpdate, 
+    handleCancel 
+  } = useEditResource({
+    id: code,
+    fetcher,
+    updater,
+    successPath: "/hrm/ho-so-nhan-vien",
+    options: {
+      resourceName: "nhân viên",
+      // Xử lý payload: Loại bỏ các field File Object, chỉ giữ lại URL chuỗi và data text
+      transformPayload: (formData) => {
+        const { 
+          // Các field File object (không gửi lên JSON API)
+          avatar, cvFile, healthCertFile, degreeFile, contractFile,
+          avatarPreview,
+          // Code không được sửa nên bỏ ra khỏi body
+          code, 
+          ...rest 
+        } = formData;
+        
+        return rest;
       }
-    };
-
-    loadEmployee();
-    return () => {
-      alive = false;
-    };
-  }, [code]);
-
-  /* =========================
-   * Guards
-   * ========================= */
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải dữ liệu...</div>;
-  }
-
-  if (!employee) {
-    return (
-      <div style={{ padding: 20 }}>
-        Không tìm thấy nhân viên
-      </div>
-    );
-  }
-
-  if (employee.deletedAt) {
-    return (
-      <div style={{ padding: 20 }}>
-        Hồ sơ nhân viên đã bị xoá, không thể chỉnh sửa
-      </div>
-    );
-  }
-
-  /* =========================
-   * Handlers
-   * ========================= */
-
-  const handleUpdate = async (formData) => {
-    if (submitting) return;
-    setSubmitting(true);
-
-    const payload = {
-      ...formData,
-      avatar: undefined,
-      avatarPreview: undefined,
-      code: undefined, // khoá mã
-    };
-
-    try {
-      await employeeService.update(code, payload);
-      navigate(`/hrm/ho-so-nhan-vien/${code}`);
-    } catch (err) {
-      if (err?.status === 404) {
-        alert("Không tìm thấy nhân viên");
-      } else if (err?.status === 400) {
-        alert(err.message || "Dữ liệu không hợp lệ");
-      } else {
-        alert("Có lỗi khi cập nhật hồ sơ nhân viên");
-      }
-    } finally {
-      setSubmitting(false);
     }
-  };
+  });
 
-  /* =========================
-   * Render
-   * ========================= */
+  // 4. Render các trạng thái đặc biệt
+  if (loading) {
+    return (
+      <PageContainer title="Đang tải dữ liệu..." breadcrumbs={breadcrumbs}>
+        <div className="text-center py-5">Đang lấy thông tin nhân viên...</div>
+      </PageContainer>
+    );
+  }
 
+  if (isNotFound) {
+    return (
+      <PageContainer title="Không tìm thấy" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-danger">
+          Không tìm thấy hồ sơ nhân viên với mã: <strong>{code}</strong>
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>Quay lại danh sách</button>
+      </PageContainer>
+    );
+  }
+
+  if (isDeleted) {
+    return (
+      <PageContainer title="Hồ sơ đã xóa" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-warning">
+          Hồ sơ nhân viên <strong>{employee?.name}</strong> đã bị xóa hoặc nghỉ việc. 
+          Bạn cần khôi phục hồ sơ trước khi chỉnh sửa.
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>Quay lại danh sách</button>
+      </PageContainer>
+    );
+  }
+
+  // 5. Render Form chính
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer 
+      title={`Cập nhật: ${employee?.name || code}`} 
+      breadcrumbs={breadcrumbs}
+    >
       <EmployeeForm
         mode="edit"
         initialData={employee}
         onSubmit={handleUpdate}
-        onCancel={() => navigate(-1)}
+        onCancel={handleCancel}
         disabled={submitting}
+        // Bind context để đảm bảo check trùng mã hoạt động (dù edit thường disable mã)
+        checkCodeExists={employeeService.checkCodeExists.bind(employeeService)}
       />
-    </div>
+    </PageContainer>
   );
 }

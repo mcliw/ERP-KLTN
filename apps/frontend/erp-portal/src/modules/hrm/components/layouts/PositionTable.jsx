@@ -1,16 +1,14 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/PositionTable.jsx
 
 import {
-  FaCaretLeft,
-  FaCaretRight,
-  FaEye,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-import "../styles/table.css";
+  TablePagination,
+  TableActions,
+  EmptyRow,
+} from "../common/TableComponents";
 
-const normalizeCode = (v) =>
-  String(v || "").trim().toUpperCase();
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
+
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function PositionTable({
   data = [],
@@ -25,13 +23,17 @@ export default function PositionTable({
   onDelete,
   renderExtraActions,
 }) {
-  const hasActions =
-    onView || onEdit || onDelete || renderExtraActions;
+  const resolve = (map, value) => map[normalizeCode(value)] || value || "";
+  const hasActions = onView || onEdit || onDelete || renderExtraActions;
 
-  const resolveDepartment = (value) => {
-    const key = normalizeCode(value);
-    return departmentMap[key] || value || "";
-  };
+  const colCount = hasActions ? 8 : 7;
+
+  const getAssignedCount = (p) =>
+    typeof p.assigneeCount === "number"
+      ? p.assigneeCount
+      : p.assignees?.length ?? 0;
+
+  const getCapacity = (p) => (typeof p.capacity === "number" ? p.capacity : 1);
 
   return (
     <>
@@ -45,34 +47,26 @@ export default function PositionTable({
             <th>Phòng ban</th>
             <th>Trạng thái</th>
             <th>Mô tả</th>
-            {hasActions && (
-              <th className="action-col">Thao tác</th>
-            )}
+            {hasActions && <th className="action-col">Thao tác</th>}
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan={hasActions ? 8 : 7} className="empty">
-                Không có dữ liệu
-              </td>
-            </tr>
+            <EmptyRow colSpan={colCount} />
           ) : (
             data.map((p) => {
-              const assigned =
-                typeof p.assigneeCount === "number"
-                  ? p.assigneeCount
-                  : p.assignees?.length ?? 0;
-
-              const capacity = p.capacity ?? 1;
+              const deleted = isSoftDeleted(p.deletedAt);
+              const assigned = getAssignedCount(p);
+              const capacity = getCapacity(p);
+              const canDelete = !(assigned > 0);
 
               return (
                 <tr
                   key={p.code}
                   className={[
                     onRowClick && "clickable",
-                    p.deletedAt && "deleted",
+                    deleted && "deleted",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -80,74 +74,36 @@ export default function PositionTable({
                 >
                   <td>{p.code}</td>
                   <td>{p.name}</td>
-
                   <td>
                     {p.assignees?.length
-                      ? p.assignees
-                          .map((e) => e.name)
-                          .join(", ")
-                      : ""}
+                      ? p.assignees.map((e) => e.name).join(", ")
+                      : "—"}
                   </td>
-
                   <td>
                     {assigned} / {capacity}
                   </td>
-
-                  <td>
-                    {resolveDepartment(p.department)}
-                  </td>
-
+                  <td>{resolve(departmentMap, p.department)}</td>
                   <td>{p.status}</td>
-
-                  <td
-                    title={p.description || ""}
-                    className="truncate"
-                  >
-                    {p.description || ""}
+                  <td title={p.description || ""} className="truncate">
+                    {p.description || "—"}
                   </td>
 
                   {hasActions && (
-                    <td
-                      className="actions"
-                      onClick={(ev) =>
-                        ev.stopPropagation()
+                    <TableActions
+                      data={p}
+                      onView={onView}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      renderExtra={renderExtraActions}
+                      isDeleted={deleted}
+                      // Logic riêng: Không xoá nếu đang có người đảm nhận
+                      canDelete={canDelete}
+                      deleteTitle={
+                        !canDelete
+                          ? "Không thể xoá vì đang có người đảm nhận"
+                          : "Xoá"
                       }
-                    >
-                      {onView && (
-                        <button
-                          title="Xem"
-                          onClick={() => onView(p)}
-                        >
-                          <FaEye />
-                        </button>
-                      )}
-
-                      {onEdit && !p.deletedAt && (
-                        <button
-                          title="Sửa"
-                          onClick={() => onEdit(p)}
-                        >
-                          <FaEdit />
-                        </button>
-                      )}
-
-                      {onDelete && !p.deletedAt && (
-                        <button
-                          className="danger"
-                          title={
-                            assigned > 0
-                              ? "Không thể xoá vì đang có người đảm nhận"
-                              : "Xoá"
-                          }
-                          onClick={() => onDelete(p)}
-                        >
-                          <FaTrash />
-                        </button>
-                      )}
-
-                      {renderExtraActions &&
-                        renderExtraActions(p)}
-                    </td>
+                    />
                   )}
                 </tr>
               );
@@ -156,26 +112,12 @@ export default function PositionTable({
         </tbody>
       </table>
 
-      {/* PAGINATION */}
-      <div className="pagination">
-        <button
-          disabled={page === 1}
-          onClick={onPrev}
-        >
-          <FaCaretLeft /> Trước
-        </button>
-
-        <span>
-          Trang {page} / {totalPages}
-        </span>
-
-        <button
-          disabled={page === totalPages}
-          onClick={onNext}
-        >
-          Sau <FaCaretRight />
-        </button>
-      </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
     </>
   );
 }
