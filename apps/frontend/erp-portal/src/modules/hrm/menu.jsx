@@ -33,7 +33,7 @@ export const hrmMenu = [
   },
   {
     label: "Lương",
-    path: "/hrm/luong",
+    path: "/hrm/quan-ly-luong",
     icon: <FaMoneyBill />,
     roles: HRM_PERMISSIONS.PAYROLL,
   },

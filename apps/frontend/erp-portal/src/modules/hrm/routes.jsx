@@ -35,6 +35,11 @@ import TimeKeepingCreate from "./pages/layouts/TimeKeepingCreate";
 import TimeKeepingEdit from "./pages/layouts/TimeKeepingEdit";
 import TimeKeepingDetail from "./pages/layouts/TimeKeepingDetail";
 import TimeKeepingRestore from "./pages/layouts/TimeKeepingRestore";
+import Salary from "./pages/layouts/Salary";
+import SalaryCreate from "./pages/layouts/SalaryCreate";
+import SalaryEdit from "./pages/layouts/SalaryEdit";
+import SalaryDetail from "./pages/layouts/SalaryDetail";
+import SalaryRestore from "./pages/layouts/SalaryRestore";
 
 const hrmRoutes = (
   <>
@@ -294,6 +299,47 @@ const hrmRoutes = (
       element={
         <RequireAuth allowRoles={HRM_PERMISSIONS.TIMEKEPPING}>
           <TimeKeepingRestore />
+        </RequireAuth>
+      }
+    />
+    {/* SALARY */}
+    <Route
+      path="/hrm/quan-ly-luong"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY}>
+          <Salary />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryEdit />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY}>
+          <SalaryDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/hrm/quan-ly-luong/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.SALARY_EDIT}>
+          <SalaryRestore />
         </RequireAuth>
       }
     />
