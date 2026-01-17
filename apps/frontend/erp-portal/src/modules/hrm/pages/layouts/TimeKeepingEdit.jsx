@@ -5,13 +5,12 @@ import { useParams } from "react-router-dom";
 import TimeKeepingForm from "../../components/layouts/TimeKeepingForm";
 import PageContainer from "../../../../shared/components/PageContainer";
 import { timeKeepingService } from "../../services/timeKeeping.service";
+import { employeeService } from "../../services/employee.service";
 import { useEditResource } from "../../../../shared/hooks/useEditResource";
 
 export default function TimeKeepingEdit() {
-  // Chấm công thường dùng ID (số hoặc uuid) làm định danh
   const { id } = useParams();
 
-  // 1. Breadcrumbs động
   const breadcrumbs = useMemo(
     () => [
       { label: "Trang chủ", link: "/" },
@@ -20,14 +19,32 @@ export default function TimeKeepingEdit() {
       { label: `Cập nhật #${id}`, active: true },
     ],
     [id]
-  
   );
 
-  // 2. Service functions (bọc useCallback để ổn định dependency)
-  const fetcher = useCallback((recordId) => timeKeepingService.getById(recordId), []);
+  // 2. Cập nhật hàm fetcher: Lấy record -> Lấy tên nhân viên -> Gộp lại
+  const fetcher = useCallback(async (recordId) => {
+    // Gọi API lấy bản ghi chấm công
+    const record = await timeKeepingService.getById(recordId);
+    
+    // Nếu có employeeId, gọi tiếp API nhân viên để lấy tên
+    if (record && record.employeeId) {
+        try {
+            const emp = await employeeService.getById(record.employeeId);
+            // Trả về object đã được bổ sung employeeName
+            return {
+                ...record,
+                employeeName: emp ? `${emp.code} - ${emp.name}` : "Nhân viên không tồn tại"
+            };
+        } catch (error) {
+            console.error("Lỗi lấy tên nhân viên:", error);
+            return { ...record, employeeName: "Lỗi tải tên" };
+        }
+    }
+    return record;
+  }, []);
+
   const updater = useCallback((recordId, data) => timeKeepingService.update(recordId, data), []);
 
-  // 3. Hook chuẩn hóa cho Edit
   const {
     data: timeKeepingData,
     loading,
@@ -43,15 +60,15 @@ export default function TimeKeepingEdit() {
     successPath: "/hrm/cham-cong",
     options: {
       resourceName: "bảng công",
-      // Transform payload: Loại bỏ các trường không cần gửi lên server khi update
       transformPayload: (formData) => {
+        // Loại bỏ các trường hiển thị thừa khi gửi lên server
         const { 
             id, 
-            employeeId, // Thường không cho đổi nhân viên khi sửa công
-            employeeName, 
+            employeeId, 
+            employeeName, // Bỏ tên khi update
             employeeCode,
             departmentName,
-            workCount, // Backend tự tính lại
+            workCount, 
             createdAt, 
             updatedAt, 
             ...rest 
@@ -61,7 +78,6 @@ export default function TimeKeepingEdit() {
     },
   });
 
-  // 4. Render trạng thái đặc biệt
   if (loading) {
     return (
       <PageContainer title="Đang tải dữ liệu..." breadcrumbs={breadcrumbs}>
@@ -97,7 +113,6 @@ export default function TimeKeepingEdit() {
     );
   }
 
-  // 5. Render Form chính
   return (
     <PageContainer
       title={`Cập nhật chấm công #${id}`}

@@ -94,6 +94,14 @@ export default function TimeKeepingDetail() {
           <DetailItem label="Giờ ra" value={record.checkOutTime || "—"} />
           <DetailItem label="Số công" value={record.workCount} />
           <DetailItem label="Trạng thái" value={record.status} />
+          {record.status === "Đã hủy" && (
+             <DetailItem 
+                label="Lý do hủy" 
+                value={record.cancelReason} 
+                span={2} 
+                className="text-danger fw-bold" // Style chữ đỏ
+             />
+          )}
           <DetailItem label="Ghi chú" value={record.note || "Không có ghi chú"} span={2} />
         </DetailGrid>
       </DetailSection>

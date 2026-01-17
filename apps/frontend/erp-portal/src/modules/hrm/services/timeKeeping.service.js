@@ -245,16 +245,45 @@ export const timeKeepingService = {
     return handleResponse(response);
   },
 
+  async cancel(id, reason) {
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+
+    const updateData = {
+      ...current,
+      status: "Đã hủy",          // Đổi trạng thái
+      cancelReason: reason,      // Lưu lý do hủy
+      workCount: 0,              // Hủy thì không tính công
+      updatedAt: new Date().toISOString(),
+    };
+
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updateData),
+    });
+
+    return handleResponse(response);
+  },
+
   // === THÊM HÀM NÀY ĐỂ SỬA LỖI RESTORE ===
   async restore(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
+    // Logic khôi phục
     const restoreData = {
       ...current,
-      deletedAt: null, // Bỏ đánh dấu xóa
+      deletedAt: null, // Bỏ đánh dấu xóa mềm (nếu có)
       updatedAt: new Date().toISOString(),
     };
+
+    // Nếu đang là "Đã hủy", khôi phục về "Đúng giờ" (hoặc trạng thái mặc định)
+    if (current.status === "Đã hủy") {
+      restoreData.status = "Đúng giờ"; // Reset trạng thái
+      restoreData.cancelReason = null; // Xóa lý do hủy
+      restoreData.workCount = 1;       // Tính lại công
+    }
 
     const response = await fetch(`${API_URL}/${id}`, {
       method: "PUT",

@@ -2,11 +2,10 @@
 
 import {
   TablePagination,
-  TableActions,
   EmptyRow
 } from "../common/TableComponents";
-
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
+import { FaEye, FaPen, FaBan } from "react-icons/fa"; 
 
 export default function TimeKeepingTable({
   data = [],
@@ -20,8 +19,8 @@ export default function TimeKeepingTable({
   onDelete,
   renderExtraActions,
 }) {
+  // Tính toán số cột
   const hasActions = onView || onEdit || onDelete || renderExtraActions;
-  // Số lượng cột hiển thị (7 cột dữ liệu + 1 cột thao tác nếu có)
   const colCount = hasActions ? 8 : 7;
 
   return (
@@ -46,63 +45,79 @@ export default function TimeKeepingTable({
           ) : (
             data.map((d) => {
               const deleted = isSoftDeleted(d.deletedAt);
+              const canEdit = true; 
               
-              // Giả định logic: Không thể sửa/xóa nếu trạng thái công đã chốt (ví dụ: isLocked)
-              // Bạn có thể tùy chỉnh logic này theo nghiệp vụ thực tế
-              const canEdit = !d.isLocked; 
-              const canDelete = !d.isLocked; 
-
               return (
                 <tr
-                  key={d.id || d.code} // Sử dụng ID duy nhất của bản ghi chấm công
+                  key={d.id || d.code}
                   className={[
                     onRowClick && "clickable",
                     deleted && "deleted"
                   ].filter(Boolean).join(" ")}
                   onClick={() => onRowClick?.(d)}
                 >
-                  {/* Tên nhân viên */}
                   <td>
                     <div className="fw-500">{d.employeeName}</div>
                     <small className="text-muted">{d.employeeCode}</small>
                   </td>
-                  
-                  {/* Phòng ban */}
                   <td>{d.departmentName || "—"}</td>
-                  
-                  {/* Chức vụ */}
                   <td>{d.positionName || "—"}</td>
-                  
-                  {/* Giờ vào */}
                   <td className="text-nowrap">{d.checkInTime || "—"}</td>
-                  
-                  {/* Giờ ra */}
                   <td className="text-nowrap">{d.checkOutTime || "—"}</td>
                   
-                  {/* Trạng thái công */}
+                  {/* Cột trạng thái */}
                   <td>
-                    {/* Render badge màu sắc tùy theo trạng thái nếu cần */}
-                    <span className={`status-badge status-${d.statusKey || 'default'}`}>
+                    <span className={`status-badge ${d.status === "Đã hủy" ? "status-inactive" : "status-active"}`}>
                         {d.status || "—"}
                     </span>
                   </td>
                   
-                  {/* Số công */}
                   <td className="fw-bold">{d.workCount ?? 0}</td>
 
+                  {/* CỘT THAO TÁC */}
                   {hasActions && (
-                    <TableActions
-                      data={d}
-                      onView={onView}
-                      onEdit={canEdit ? onEdit : undefined} // Disable edit nếu bị khóa
-                      onDelete={canDelete ? onDelete : undefined} // Disable delete nếu bị khóa
-                      renderExtra={renderExtraActions}
-                      isDeleted={deleted}
-                      canDelete={canDelete}
-                      deleteTitle={
-                        canDelete ? "Xoá" : "Không thể xoá bản ghi đã chốt"
-                      }
-                    />
+                    <td className="action-col">
+                       <div className="actions" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          
+                          {/* 1. Nút Xem */}
+                          {onView && (
+                            <button 
+                                className="btn-view" 
+                                title="Xem chi tiết"
+                                onClick={(e) => { e.stopPropagation(); onView(d); }}
+                            >
+                                <FaEye />
+                            </button>
+                          )}
+
+                          {/* 2. Nút Sửa */}
+                          {onEdit && canEdit && !deleted && (
+                             <button 
+                                className="btn-edit" 
+                                title="Chỉnh sửa"
+                                onClick={(e) => { e.stopPropagation(); onEdit(d); }}
+                             >
+                                <FaPen />
+                             </button>
+                          )}
+                          
+                          {/* 3. Nút Hủy công (Chỉ hiện khi chưa xóa) */}
+                          {onDelete && canEdit && !deleted && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(d); }}
+                                title="Hủy công"
+                                className="btn-delete"
+                                style={{ color: "#d97706" }} // Màu cam
+                            >
+                                <FaBan />
+                            </button>
+                          )}
+
+                          {/* === QUAN TRỌNG: Hiển thị các nút thêm (Khôi phục/Xóa vĩnh viễn) === */}
+                          {renderExtraActions && renderExtraActions(d)}
+                          
+                       </div>
+                    </td>
                   )}
                 </tr>
               );

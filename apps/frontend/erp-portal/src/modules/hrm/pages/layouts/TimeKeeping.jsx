@@ -2,7 +2,7 @@
 
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo, useCallback } from "react";
-import { FaCamera, FaPlus, FaRecycle } from "react-icons/fa"; // Import icons
+import { FaCamera, FaPlus, FaRecycle, FaBan } from "react-icons/fa"; // Import icons
 
 // Components
 import TimeKeepingTable from "../../components/layouts/TimeKeepingTable";
@@ -114,21 +114,31 @@ export default function TimeKeeping() {
     setDepartmentId("");
   }, []);
 
-  const handleDelete = useCallback(
+  const handleCancelWork = useCallback(
     async (record) => {
-      if (record.isLocked) {
-        toast.info("Không thể xoá bản ghi đã chốt công.");
+      // 1. Kiểm tra nếu đã hủy rồi thì thôi
+      if (record.status === "Đã hủy") {
+        toast.info("Bản ghi này đã bị hủy trước đó.");
         return;
       }
-      if (!window.confirm(`Xoá chấm công của ${record.employeeName} ngày ${record.date}?`)) 
+
+      // 2. Hiện popup nhập lý do
+      const reason = window.prompt(`Nhập lý do hủy công ngày ${record.date} của ${record.employeeName}:`);
+      
+      // Nếu người dùng bấm Cancel hoặc không nhập gì
+      if (reason === null) return; // Bấm hủy
+      if (reason.trim() === "") {
+        toast.warning("Vui lòng nhập lý do hủy.");
         return;
+      }
 
       try {
-        await timeKeepingService.remove(record.id);
-        toast.success("Đã xoá bản ghi chấm công");
-        refresh();
+        // 3. Gọi service
+        await timeKeepingService.cancel(record.id, reason);
+        toast.success("Đã hủy công thành công");
+        refresh(); // Tải lại bảng
       } catch (err) {
-        toast.error(err?.message || "Lỗi khi xoá");
+        toast.error(err?.message || "Lỗi khi hủy công");
       }
     },
     [refresh, toast]
@@ -232,7 +242,7 @@ export default function TimeKeeping() {
         onRowClick={(d) => navigate(`/hrm/cham-cong/${d.id}`)}
         onView={(d) => navigate(`/hrm/cham-cong/${d.id}`)}
         onEdit={canEdit ? (d) => navigate(`/hrm/cham-cong/${d.id}/chinh-sua`) : undefined}
-        onDelete={canEdit ? handleDelete : undefined}
+        onDelete={canEdit ? handleCancelWork : undefined}
       />
 
       {/* MODAL CAMERA */}
