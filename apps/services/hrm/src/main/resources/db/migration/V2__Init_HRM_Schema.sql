@@ -258,3 +258,77 @@ CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_logs_date ON attendance_logs(check_time);
 CREATE INDEX IF NOT EXISTS idx_timesheets_date ON timesheets(work_date);
 CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id);
+
+-- 1. Tạo dữ liệu Phòng ban (Departments)
+-- Lưu ý: Gán cứng ID để đảm bảo liên kết chính xác với Chức vụ và Nhân viên
+INSERT INTO departments (department_id, code, name, description, status) VALUES 
+(1, 'DEP_HR', 'Phòng Nhân Sự', 'Quản lý nhân sự và tuyển dụng', true),
+(2, 'DEP_IT', 'Phòng Kỹ Thuật', 'Phát triển và bảo trì hệ thống', true),
+(3, 'DEP_SALES', 'Phòng Kinh Doanh', 'Kinh doanh và chăm sóc khách hàng', true)
+ON CONFLICT (department_id) DO NOTHING;
+
+-- Reset sequence cho department_id để tránh lỗi khi insert thêm sau này
+SELECT setval('departments_department_id_seq', (SELECT MAX(department_id) FROM departments));
+
+-- 2. Tạo dữ liệu Chức vụ (Positions)
+INSERT INTO positions (position_id, code, name, department_id, description, status) VALUES 
+(1, 'POS_HR_MGR', 'Trưởng phòng Nhân Sự', 1, 'Quản lý phòng HR', true),
+(2, 'POS_HR_STAFF', 'Chuyên viên Tuyển dụng', 1, 'Tuyển dụng nhân sự', true),
+(3, 'POS_IT_MGR', 'Trưởng phòng Kỹ Thuật', 2, 'Quản lý team IT', true),
+(4, 'POS_DEV_BE', 'Backend Developer', 2, 'Lập trình viên Backend', true),
+(5, 'POS_SALES_MGR', 'Trưởng phòng Kinh Doanh', 3, 'Quản lý team Sales', true),
+(6, 'POS_SALES_EXEC', 'Nhân viên Kinh Doanh', 3, 'Sales Executive', true)
+ON CONFLICT (position_id) DO NOTHING;
+
+-- Reset sequence cho position_id
+SELECT setval('positions_position_id_seq', (SELECT MAX(position_id) FROM positions));
+
+-- 3. Tạo dữ liệu Nhân viên (Employees)
+-- account_id và email được lấy từ file CSV
+INSERT INTO employees (
+    employee_code, account_id, email, status, status_empl, 
+    full_name, gender, birthday, phone, identity_card, 
+    hometown, address, department_id, position_id, join_date, 
+    created_at, updated_at
+) VALUES (
+    'EMP001', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'test.user@ldg.company', 'Active', 'OFFICIAL', 
+    'Lê Minh Dũng', 'Nam', '1998-05-23', '0950797412', '001218730018', 
+    'Hà Nội', 'Số 30 Tôn Đức Thắng, Hà Nội', 
+    1, 1, '2024-09-19', 
+    NOW(), NOW()
+),
+(
+    'EMP002', '123e4567-e89b-12d3-a456-426614174000', 'linh@ldg.company', 'Active', 'OFFICIAL', 
+    'Nguyễn Mai Châu', 'Nữ', '1990-09-01', '0941394812', '001794392052', 
+    'Hà Nội', 'Số 20 Tôn Đức Thắng, Hà Nội', 
+    1, 2, '2023-12-06', 
+    NOW(), NOW()
+),
+(
+    'EMP003', '8c67022a-1fa1-46ab-835b-30d4aaba08ee', 'admin@ldg.company', 'Active', 'OFFICIAL', 
+    'Trần Đức Em', 'Nam', '1992-09-03', '0918935776', '001361801063', 
+    'Hà Nội', 'Số 37 Tôn Đức Thắng, Hà Nội', 
+    2, 3, '2024-01-09', 
+    NOW(), NOW()
+),
+(
+    'EMP004', '883fa883-6b89-48ef-a3ac-cf6bab847957', 'tranthib@ldg.company', 'Active', 'OFFICIAL', 
+    'Hoàng Mai Lan', 'Nữ', '1993-11-08', '0994876805', '001875507324', 
+    'Hà Nội', 'Số 45 Tôn Đức Thắng, Hà Nội', 
+    2, 4, '2024-12-11', 
+    NOW(), NOW()
+),
+(
+    'EMP005', 'aac7ebf8-5f64-48c8-9e02-5125bef2928f', 'lehoangc@ldg.company', 'Active', 'OFFICIAL', 
+    'Nguyễn Mai Linh', 'Nữ', '1990-02-22', '0952539352', '001105686601', 
+    'Hà Nội', 'Số 43 Tôn Đức Thắng, Hà Nội', 
+    3, 5, '2023-12-04', 
+    NOW(), NOW()
+),
+(
+    'EMP006', '2281807a-8296-4fe1-88df-6dcb8b30005b', 'phamthid@ldg.company', 'Active', 'OFFICIAL', 
+    'Đặng Quốc Hùng', 'Nam', '1991-08-24', '0968182933', '001840194463', 
+    'Hà Nội', 'Số 60 Tôn Đức Thắng, Hà Nội', 
+    3, 6, '2024-01-24', 
+    NOW(), NOW()
+);

@@ -5,7 +5,8 @@ import { jwtDecode } from "jwt-decode"; // Thư viện giải mã token
 const LOGIN_MUTATION = `
   mutation login($input: LoginRequest!) {
     login(input: $input) {
-      token
+      accessToken
+      tokenType
     }
   }
 `;
@@ -35,7 +36,7 @@ export const authService = {
         query: LOGIN_MUTATION,
         variables: {
           input: {
-            email: email,       // Đã sửa: mapping trực tiếp email
+            email: email,
             password: password,
           },
         },
@@ -47,7 +48,8 @@ export const authService = {
       }
 
       // Lấy token từ cấu trúc JSON trả về
-      const token = response.data.data.login.token;
+      const token = response.data.data.login.accessToken;
+      const tokenType = response.data.data.login.tokenType;
 
       // GIẢI MÃ TOKEN: Lấy thông tin user (role, permission) từ token
       // Frontend không cần gọi API getProfile nữa, giúp tối ưu hiệu năng
@@ -56,11 +58,13 @@ export const authService = {
       return {
         token: token,
         user: {
-          id: decoded.sub || email,         // 'sub' thường là ID hoặc Email trong JWT chuẩn
+          id: decoded.sub,
           email: decoded.email || email,
-          name: decoded.fullName || email,  // Nếu token có claim fullName
           role: decoded.role,               // Quan trọng: dùng để phân quyền Menu
-          permissions: decoded.permissions || [] // Quan trọng: dùng để ẩn/hiện nút bấm
+          permissions: decoded.permissions || [], // Quan trọng: dùng để ẩn/hiện nút bấm
+          accountType: decoded.account_type, // INTERNAL hoặc EXTERNAL
+          iat: decoded.iat,
+          exp: decoded.exp,
         },
       };
 

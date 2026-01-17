@@ -39,7 +39,7 @@ public class SecurityConfig {
             
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                .pathMatchers("/api/identity/graphql", "/api/identity/graphiql").permitAll()
+                .pathMatchers("/api/identity/**").permitAll()
                 .pathMatchers("/actuator/**").permitAll()
                 .anyExchange().authenticated()
             )

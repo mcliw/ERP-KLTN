@@ -13,24 +13,24 @@
 --	CONNECTION LIMIT = -1
 --	IS_TEMPLATE = False;
 
--- 1. Bảng chứa các quyền hạn (Từ file Excel)
+-- 1. Bảng permissions
 CREATE TABLE IF NOT EXISTS permissions (
-    id SERIAL PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL, -- Vd: HRM_READ, FINANCE_EXPORT
+    id BIGSERIAL PRIMARY KEY, -- Sửa SERIAL -> BIGSERIAL
+    code VARCHAR(50) UNIQUE NOT NULL,
     description TEXT
 );
 
--- 2. Bảng chứa Role (Admin, HR Manager, Employee...)
+-- 2. Bảng roles
 CREATE TABLE IF NOT EXISTS roles (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL, -- Vd: ADMIN, HR_MANAGER, CUSTOMER
+    id BIGSERIAL PRIMARY KEY, -- Sửa SERIAL -> BIGSERIAL
+    name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT
 );
 
--- 3. Bảng trung gian Role - Permission (RBAC)
+-- 3. Bảng role_permissions
 CREATE TABLE IF NOT EXISTS role_permissions (
-    role_id INT REFERENCES roles (id),
-    permission_id INT REFERENCES permissions (id),
+    role_id BIGINT REFERENCES roles (id),       -- Sửa INT -> BIGINT
+    permission_id BIGINT REFERENCES permissions (id), -- Sửa INT -> BIGINT
     PRIMARY KEY (role_id, permission_id)
 );
 
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
 account_type VARCHAR(20) NOT NULL, -- 'INTERNAL' (Staff) hoặc 'EXTERNAL' (Customer)
 
 -- Role chính (Access Control)
-role_id INT REFERENCES roles(id) );
+role_id BIGINT REFERENCES roles(id) );
 
 -- 5. Bảng Refresh Token (Quản lý phiên đăng nhập)
 CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -354,3 +354,24 @@ WHERE r.name = 'PAYROLL_ACC' AND p.code IN (
 -- Do đó, trong hệ thống ERP (Portal), role CUSTOMER sẽ không được gán các permission quản trị.
 -- Hệ thống Storefront (nếu có) sẽ xử lý quyền riêng hoặc dùng API riêng.
 -- -----------------------------------------------------------------------------
+
+INSERT INTO users (
+    id, 
+    email, 
+    password_hash, 
+    status, 
+    account_type, 
+    role_id, 
+    created_at, 
+    last_login_at
+) VALUES 
+(
+    '8c67022a-1fa1-46ab-835b-30d4aaba08ee',
+    'admin@ldg.company', 
+    '$2a$10$zhyFs9H01KRGXxSzJC9QpeYXWzRiljmu6b49Xudc2uRkA03TJpmvS',
+    'ACTIVE', 
+    'INTERNAL', 
+    1,
+    '2025-01-01 08:00:00', 
+    NOW()
+)

@@ -36,7 +36,6 @@ public class JwtUtil {
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().getName())
                 .claim("permissions", permissions)
-                .claim("account_type", user.getAccountType())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expiration * 1000))
                 .signWith(getSigningKey(), io.jsonwebtoken.SignatureAlgorithm.HS512)

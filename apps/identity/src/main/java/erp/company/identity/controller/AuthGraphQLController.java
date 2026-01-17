@@ -23,7 +23,7 @@ public class AuthGraphQLController {
     private final AuthService authService;
 
     @MutationMapping
-    public User register(@Argument RegisterRequest input) { // Sửa kiểu trả về thành User
+    public User register(@Argument RegisterRequest input) { 
         return authService.register(input);
     }
 

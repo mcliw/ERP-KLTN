@@ -60,7 +60,6 @@ public class Employee extends BaseEntity {
     @Column(name = "status_empl")
     private EmployeeStatus statusEmpl;
 
-    // Bank Info
     @Column(name = "bank_name")
     private String bankName;
     @Column(name = "bank_account_number")

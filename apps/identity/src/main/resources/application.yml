@@ -2,8 +2,7 @@ spring:
   application:
     name: identity
 
-  servlet:
-    context-path: /identity
+  
 
   datasource:
     url: ${DB_URL}
@@ -13,12 +12,18 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update # Use 'update' for development, change to 'validate' or 'none' for production
+      ddl-auto: validate # Use 'update' for development, change to 'validate' or 'none' for production
     show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+  graphql:
+  path: /graphql    # Đổi endpoint mặc định từ /graphql sang /identity/graphql
+  graphiql:
+    enabled: true
+    path: /graphiql # Đổi luôn trang test GraphiQL
 
   flyway:
     baseline-on-migrate: true
@@ -26,12 +31,10 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+      context-path: /identity
 
-graphql:
-    path: /identity/graphql    # Đổi endpoint mặc định từ /graphql sang /identity/graphql
-    graphiql:
-      enabled: true
-      path: /identity/graphiql # Đổi luôn trang test GraphiQL
+
 
 jwt:
   secret: ${JWT_SECRET}
