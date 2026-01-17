@@ -1,6 +1,3 @@
-node_modules
-.venv/
-certs/
 .env
 *.key
 credentials.json
@@ -14,6 +11,8 @@ __pycache__/
 venv/
 *.pycvenv/
 *.pyc
+chroma_db/
+*.sqlite3
 *.bin
 .DS_Store
-apps/services/erp_ai_chatbot/scripts/*.py
+D:/ERP-KLTN/apps/services/erp_ai_chatbot/scripts/

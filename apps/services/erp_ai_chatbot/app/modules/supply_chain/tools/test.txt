@@ -1,0 +1,82 @@
+Nhà cung cấp SUP001 có hiệu suất giao hàng thế nào và cho tôi 5 phiếu nhập gần nhất từ nhà cung cấp này.
+tìm nhà cung cấp có mã SUP001 và cho tôi xem thông tin chi tiết của nhà cung cấp đó
+Chi tiết PO-20250001 gồm những SKU nào và số lượng đặt/nhận?
+tôi cần bạn giúp tôi tìm Kho nào có mã WH001?
+tôi cần bạn giúp tôi Tra tồn kho SKU IP15-128   
+Đơn mua nào sắp đến hạn giao nhất, tiến độ nhập hiện bao nhiêu %, và còn thiếu SKU nào?
+PO nào sắp đến hạn giao nhất trong các đơn mua đang mở, và hiện đơn đó đang ở trạng thái gì?
+Tìm sản phẩm có SKU IP15-128
+Trạng thái phiếu xuất GI-20250001
+Với PO-20250001, cho tôi danh sách phiếu nhập (GR) của PO này và cho biết phiếu nhập gần nhất gồm những SKU nào.
+Những PO nào đang nhận một phần? Với PO đầu tiên trong danh sách đó, hãy đối chiếu số lượng PO và GR
+A. Single-tool (mỗi câu gọi 1 tool)
+
+Tồn kho theo SKU/từ khóa (list inventory)
+
+“Tra tồn kho IP15-128”
+
+Tồn kho theo kho
+
+“Tồn kho ở kho WH001 hiện có những SKU nào?”
+
+Tồn kho theo kho + sản phẩm
+
+“Ở kho WH001 còn bao nhiêu IP15-128?”
+
+Trạng thái PO
+
+“Trạng thái PO-20250001 là gì?”
+
+Chi tiết PO (items[])
+
+“Chi tiết PO-20250001 gồm những SKU nào và số lượng đặt/nhận?”
+
+Tiến độ nhập PO (progress + missing_items)
+
+“PO-20250001 đã nhập bao nhiêu % và còn thiếu SKU nào?”
+
+Danh sách PO chưa hoàn tất (list PO)
+
+“Danh sách PO chưa hoàn tất”
+
+Danh sách PO đang nhận một phần (list PO PARTIAL_RECEIVED)
+
+“Những PO nào đang nhận một phần?”
+
+Trạng thái GR
+
+“Trạng thái phiếu nhập GR-20250001”
+
+Top 5 sản phẩm xuất nhiều (list top export)
+
+“Top 5 sản phẩm xuất nhiều nhất là những SKU nào và tổng số lượng xuất?”
+
+B. Multi-tool (1 câu nhưng router phải gọi nhiều tool)
+
+PO sắp đến hạn + tiến độ nhập + thiếu SKU
+
+“Đơn mua nào sắp đến hạn giao nhất, tiến độ nhập hiện bao nhiêu %, và còn thiếu SKU nào?”
+
+Hiệu suất NCC + 5 GR gần nhất theo NCC
+
+“Nhà cung cấp SUP001 có hiệu suất giao hàng thế nào và cho tôi 5 phiếu nhập gần nhất từ nhà cung cấp này.”
+
+PO nhận một phần + đối chiếu PO vs GR cho PO đầu tiên
+
+“Những PO nào đang nhận một phần? Với PO đầu tiên trong danh sách đó, hãy đối chiếu số lượng PO và GR.”
+
+PO → danh sách GR theo PO → chi tiết GR mới nhất
+
+“Với PO-20250001, cho tôi danh sách phiếu nhập (GR) của PO này và cho biết phiếu nhập gần nhất gồm những SKU nào.”
+
+Tìm nhà cung cấp theo từ khóa → xem hồ sơ chi tiết
+
+“Tìm nhà cung cấp có mã SUP001 và cho tôi xem thông tin chi tiết của nhà cung cấp đó.”
+
+Lưu ý nhanh khi test
+
+Với câu hỏi “5 phiếu nhập gần đây”: hiện tool gr_gan_day(days, limit) có nhưng router hay hỏi lại. Để tránh router clarifying, dùng câu rõ tham số:
+
+“Cho tôi danh sách phiếu nhập gần đây trong 7 ngày, tối đa 5 phiếu.”
+
+Nếu bạn muốn, tôi có thể viết thêm 10 câu “stress test” (lẫn tiếng Việt không dấu, viết tắt, sai chính tả nhẹ) để kiểm tra router + alias args có chịu được không.
