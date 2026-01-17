@@ -254,5 +254,28 @@ export const dashboardService = {
       console.error("Weekly Trend Error:", error);
       return [];
     }
+  },
+
+  async getExportData() {
+    try {
+      // 1. Lấy lại dữ liệu tổng hợp
+      const summary = await this.getSummary();
+
+      // 2. Lấy danh sách nhân viên đầy đủ (để in ra sheet danh sách)
+      const employees = await employeeService.getAll({ includeDeleted: false });
+      
+      // 3. Lấy danh sách chấm công hôm nay chi tiết
+      const today = getTodayString();
+      const timeKeepings = await timeKeepingService.getAll({ date: today });
+
+      return {
+        summary,
+        employees,
+        timeKeepings
+      };
+    } catch (error) {
+      console.error("Export Data Error:", error);
+      throw new Error("Không thể lấy dữ liệu xuất báo cáo");
+    }
   }
 };

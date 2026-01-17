@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { 
   FaUserPlus, FaUserClock, FaUsers, 
   FaMoneyBillWave, FaChartPie, FaChartBar,
-  FaUserTimes, FaBriefcase
+  FaUserTimes, FaBriefcase, FaFileDownload, FaBuilding, FaSitemap
 } from "react-icons/fa";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 // Components
 import StatCard from "../../components/layouts/StatCard";
@@ -47,7 +49,7 @@ const AttendanceChart = ({ data }) => {
       {/* Bar: Đúng giờ */}
       <div className="chart-row">
         <div className="chart-label d-flex align-items-center">
-          <span className="badge bg-success me-2" style={{width: 10, height: 10, padding: 0}}> </span>
+          <span style={{width: 10, height: 10, padding: 0}}> </span>
           Đúng giờ ({onTime})
         </div>
         <div className="chart-bar-area">
@@ -59,7 +61,7 @@ const AttendanceChart = ({ data }) => {
       {/* Bar: Đi muộn */}
       <div className="chart-row">
         <div className="chart-label d-flex align-items-center">
-          <span className="badge bg-warning me-2" style={{width: 10, height: 10, padding: 0}}> </span>
+          <span style={{width: 10, height: 10, padding: 0}}> </span>
           Đi muộn ({late})
         </div>
         <div className="chart-bar-area">
@@ -71,7 +73,7 @@ const AttendanceChart = ({ data }) => {
       {/* Bar: Chưa check-in/Vắng */}
       <div className="chart-row">
         <div className="chart-label d-flex align-items-center">
-          <span className="badge bg-secondary me-2" style={{width: 10, height: 10, padding: 0}}> </span>
+          <span style={{width: 10, height: 10, padding: 0}}> </span>
           Chưa điểm danh ({notCheckedIn})
         </div>
         <div className="chart-bar-area">
@@ -127,6 +129,7 @@ export default function HRMDashboard() {
   const [keyword, setKeyword] = useState("");
   const [department, setDepartment] = useState("");
   const [page, setPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const pageSize = 5;
 
   // --- FETCH DATA ---
@@ -187,6 +190,83 @@ export default function HRMDashboard() {
     }
   };
 
+  // [NEW] Hàm xử lý xuất báo cáo
+  const handleExportReport = async () => {
+    try {
+      setIsExporting(true);
+      toast.info("Đang tạo báo cáo, vui lòng đợi...");
+
+      // 1. Lấy dữ liệu từ service
+      const { summary, employees, timeKeepings } = await dashboardService.getExportData();
+
+      // 2. Tạo Workbook
+      const wb = XLSX.utils.book_new();
+
+      // --- SHEET 1: TỔNG QUAN (SUMMARY) ---
+      const summaryData = [
+        ["BÁO CÁO TỔNG QUAN NHÂN SỰ"],
+        ["Ngày xuất báo cáo", new Date().toLocaleDateString('vi-VN')],
+        [""],
+        ["THỐNG KÊ NHÂN SỰ"],
+        ["Tổng nhân sự hoạt động", summary.hrStats.totalActive],
+        ["Nhân viên mới (trong tháng)", summary.hrStats.newHires],
+        ["Nhân viên nghỉ việc (trong tháng)", summary.hrStats.resigned],
+        ["Tỷ lệ biến động", `${summary.hrStats.turnoverRate}%`],
+        [""],
+        ["TÌNH HÌNH CHẤM CÔNG HÔM NAY"],
+        ["Tổng nhân sự", summary.attendanceStats.total],
+        ["Đúng giờ", summary.attendanceStats.onTime],
+        ["Đi muộn", summary.attendanceStats.late],
+        ["Chưa điểm danh/Vắng", summary.attendanceStats.notCheckedIn],
+        [""],
+        ["THỐNG KÊ LƯƠNG (ƯỚC TÍNH)"],
+        ["Số hợp đồng hiệu lực", summary.payrollStats.activeContracts],
+        ["Tổng quỹ lương ước tính", summary.payrollStats.estimatedTotal]
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Tổng quan");
+
+      // --- SHEET 2: DANH SÁCH NHÂN VIÊN ---
+      const empData = employees.map(e => ({
+        "Mã NV": e.code,
+        "Họ và tên": e.name,
+        "Phòng ban": e.departmentName || e.department, // Cần map tên phòng ban nếu e.department là ID
+        "Vị trí": e.position,
+        "Email": e.email,
+        "Số điện thoại": e.phone,
+        "Ngày vào làm": e.createdAt ? new Date(e.createdAt).toLocaleDateString('vi-VN') : "",
+        "Trạng thái": e.status
+      }));
+      const wsEmployees = XLSX.utils.json_to_sheet(empData);
+      XLSX.utils.book_append_sheet(wb, wsEmployees, "Danh sách nhân viên");
+
+      // --- SHEET 3: CHẤM CÔNG HÔM NAY ---
+      const attData = timeKeepings.map(t => ({
+        "Mã NV": t.employeeCode,
+        "Tên NV": t.employeeName,
+        "Giờ vào": t.checkInTime,
+        "Giờ ra": t.checkOutTime,
+        "Trạng thái": t.status,
+        "Ghi chú": t.note
+      }));
+      const wsAttendance = XLSX.utils.json_to_sheet(attData);
+      XLSX.utils.book_append_sheet(wb, wsAttendance, "Chấm công hôm nay");
+
+      // 3. Xuất file
+      const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const dataBlob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8" });
+      
+      saveAs(dataBlob, `Bao_Cao_Nhan_Su_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success("Xuất báo cáo thành công!");
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi xuất báo cáo: " + err.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // --- LOADING STATE ---
   if (!summary) {
     return <div className="p-4 text-center">Đang tải dữ liệu tổng quan...</div>;
@@ -197,8 +277,24 @@ export default function HRMDashboard() {
 
   return (
     <div className="dashboard-wrap">
-      <h1>Dashboard Nhân sự</h1>
-      <p className="text-muted mb-4">Tổng quan tình hình nhân sự hôm nay</p>
+      <div className="d-flex justify-content-between align-items-center mb-4" style={{display: 'inline-flex', alignItems: 'center', gap: 1000}}>
+        <div>
+          <h1 className="mb-1">Dashboard Nhân sự</h1>
+        </div>
+        
+        <button 
+          className="btn-restore" 
+          onClick={handleExportReport}
+          disabled={isExporting}
+        >
+          {isExporting ? (
+            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          ) : (
+            <FaFileDownload className="me-2" />
+          )}
+          {isExporting ? "Đang xuất..." : "Xuất báo cáo"}
+        </button>
+      </div>
 
       {/* 1. STATS CARDS */}
       <div className="stats">
@@ -276,6 +372,16 @@ export default function HRMDashboard() {
             label="Thêm nhân viên" 
             icon={<FaUserPlus />} 
             onClick={() => navigate("/hrm/ho-so-nhan-vien/them-moi")} 
+        />
+        <QuickAction 
+            label="Thêm phòng ban" 
+            icon={<FaBuilding />} 
+            onClick={() => navigate("/hrm/phong-ban/them-moi")}
+        />
+        <QuickAction 
+            label="Thêm chức vụ" 
+            icon={<FaSitemap />} 
+            onClick={() => navigate("/hrm/chuc-vu/them-moi")}
         />
         <QuickAction 
             label="Chấm công" 

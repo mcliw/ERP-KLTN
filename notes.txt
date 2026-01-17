@@ -1,3 +1,4 @@
 pnpm install
 pnpm --filter erp-portal add zod
 npm install recharts
+npm install xlsx file-saver
