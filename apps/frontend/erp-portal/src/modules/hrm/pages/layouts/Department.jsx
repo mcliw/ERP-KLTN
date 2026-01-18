@@ -24,22 +24,26 @@ const normalizeText = (v) => String(v || "").trim().toLowerCase();
 export default function Department() {
   const navigate = useNavigate();
   const toast = useToast();
-
   const user = useAuthStore((s) => s.user);
   const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.DEPARTMENT_EDIT);
 
-  const { data: departments, loading, refresh } = useAsyncData(departmentService.getAll);
-
+  const { data: departments, total, loading, refresh } = useAsyncData(
+    () => departmentService.getAll(params), 
+    [params] // Load lại khi params thay đổi
+  );
+  const statusOptions = useMemo(() => [
+    { value: "Hoạt động", label: "Hoạt động" },
+    { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
+  ], []);
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState("");
+  const [params, setParams] = useState({
+    keyword: "",
+    status: "",
+    page: 1,
+    limit: 7
+  });
 
-  const statusOptions = useMemo(
-    () => [
-      { value: "Hoạt động", label: "Hoạt động" },
-      { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
-    ],
-    []
-  );
 
   const filteredDepartments = useMemo(() => {
     const kw = normalizeText(keyword);
@@ -84,6 +88,10 @@ export default function Department() {
     [refresh, toast]
   );
 
+  const handleKeywordChange = (val) => setParams(p => ({ ...p, keyword: val, page: 1 }));
+  const handleStatusChange = (val) => setParams(p => ({ ...p, status: val, page: 1 }));
+  const handleClear = () => setParams({ keyword: "", status: "", page: 1, limit: 7 });
+
   if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
 
   return (
@@ -91,25 +99,24 @@ export default function Department() {
       <PageHeader
         title="Quản lý phòng ban"
         createLabel="Thêm phòng ban"
-        onCreate={canEdit ? () => navigate("/hrm/phong-ban/them-moi") : null}
-        onRestore={canEdit ? () => navigate("/hrm/phong-ban/khoi-phuc") : null}
+        onCreate={() => navigate("/hrm/phong-ban/them-moi")}
       />
 
       <DepartmentFilter
-        keyword={keyword}
-        status={status}
+        keyword={params.keyword}
+        status={params.status}
         statusOptions={statusOptions}
-        onKeywordChange={setKeyword}
-        onStatusChange={setStatus}
-        onClear={handleClearFilter}
+        onKeywordChange={handleKeywordChange}
+        onStatusChange={handleStatusChange}
+        onClear={handleClear}
       />
 
       <DepartmentTable
-        data={paginatedData}
-        page={page}
-        totalPages={totalPages}
-        onPrev={goToPrev}
-        onNext={goToNext}
+        data={departments} // Lúc này departments chắc chắn là Array vì service đã bóc tách .content
+        page={params.page}
+        totalPages={Math.ceil(total / params.limit)}
+        onPrev={() => setParams(p => ({ ...p, page: p.page - 1 }))}
+        onNext={() => setParams(p => ({ ...p, page: p.page + 1 }))}
         onRowClick={(d) => navigate(`/hrm/phong-ban/${d.code}`)}
         onView={(d) => navigate(`/hrm/phong-ban/${d.code}`)}
         onEdit={canEdit ? (d) => navigate(`/hrm/phong-ban/${d.code}/chinh-sua`) : undefined}

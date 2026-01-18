@@ -46,6 +46,7 @@ type AuthResponse {
 # --- Định nghĩa Input cho Login/Register ---
 
 input RegisterRequest {
+    id: ID 
     email: String!
     password: String!
     roleName: String

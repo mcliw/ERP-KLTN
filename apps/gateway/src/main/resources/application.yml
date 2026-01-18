@@ -1,19 +1,10 @@
-# ==============================================================
-# 1. SERVER CONFIGURATION
-# ==============================================================
 server:
   port: 8080
   forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
 
-# ==============================================================
-# 2. CUSTOM PROPERTIES
-# ==============================================================
 jwt:
   secret: ${JWT_SECRET}
 
-# ==============================================================
-# 3. SPRING FRAMEWORK & MODULES
-# ==============================================================
 spring:
   application:
     name: gateway-service
@@ -44,59 +35,6 @@ spring:
             allowedHeaders: "*"
             allowCredentials: true
 
-      # B. Routes Definition
-      routes:
-        # Route 1: Identity Service
-        - id: identity-service
-          uri: http://identity-service:8080
-          predicates:
-            - Path=/api/identity/**
-          filters:
-            - StripPrefix=1 # /api/identity/graphql -> /identity/graphql
-
-        # Route 2: Sales CRM Service
-        - id: sales-service
-          uri: http://sales-service:8080
-          predicates:
-            - Path=/api/sales/**
-          filters:
-            - StripPrefix=1
-
-        # Route 3: HRM Service
-        - id: hrm-service
-          uri: http://hrm-service:8080
-          predicates:
-            - Path=/api/hrm/**
-          filters:
-            - StripPrefix=1
-
-        # Route 4: Supply Chain Service
-        - id: supply-chain-service
-          uri: http://supply-chain-service:8080
-          predicates:
-            - Path=/api/supply-chain/**
-          filters:
-            - StripPrefix=1
-
-        # Route 5: Accounting Service
-        - id: accounting-service
-          uri: http://accounting-service:8080
-          predicates:
-            - Path=/api/accounting/**
-          filters:
-            - StripPrefix=1
-
-        # Route 6: AI Assistant
-        - id: ai-service
-          uri: http://ai-service:8000
-          predicates:
-            - Path=/api/ai/**
-          filters:
-            - StripPrefix=1
-
-# ==============================================================
-# 4. LOGGING
-# ==============================================================
 logging:
   level:
     root: INFO
@@ -105,9 +43,6 @@ logging:
     org.springframework.web.reactive: DEBUG
     reactor.netty: DEBUG
 
-# ==============================================================
-# 5. MANAGEMENT & ACTUATOR
-# ==============================================================
 management:
   endpoints:
     web:

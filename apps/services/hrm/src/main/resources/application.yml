@@ -2,9 +2,6 @@ spring:
   application:
     name: hrm
  
-  servlet:
-    context-path: /hrm
-
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -19,6 +16,16 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+  graphql:
+  path: /graphql
+  graphiql:
+    enabled: true
+    path: /graphiql
+  flyway:
+    baseline-on-migrate: true
+    check-location: true
 
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+      context-path: /hrm

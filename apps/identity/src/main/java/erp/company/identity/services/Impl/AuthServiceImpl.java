@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,18 +33,21 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Email already exists");
         }
 
-        // Logic lấy Role (mặc định CUSTOMER nếu không truyền)
         String roleName = request.getRoleName() != null ? request.getRoleName() : "CUSTOMER";
         Role role = roleRepository.findByName(roleName)
                 .orElseThrow(() -> new RuntimeException("Role not found: " + roleName));
 
-        // Builder giờ đã hoạt động nhờ sửa file User.java
+        // [LOGIC MỚI] Xử lý ID liên kết
+        // Nếu có ID gửi lên (từ HRM) thì dùng, không thì tạo mới (cho user vãng lai)
+        UUID userId = request.getId() != null ? request.getId() : UUID.randomUUID();
+
         User user = User.builder()
-                .email(request.getEmail()) // Dùng email
+                .id(userId) // SET ID THỦ CÔNG
+                .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .accountType(request.getAccountType())
                 .status("ACTIVE")
                 .role(role)
+                .accountType("INTERNAL") // Mặc định là Internal nếu tạo qua form này
                 .createdAt(LocalDateTime.now())
                 .build();
 

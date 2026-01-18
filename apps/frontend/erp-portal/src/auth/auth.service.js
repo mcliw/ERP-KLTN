@@ -17,7 +17,6 @@ const REGISTER_MUTATION = `
     register(input: $input) {
       id
       email
-      fullName
     }
   }
 `;
@@ -84,10 +83,11 @@ export const authService = {
         query: REGISTER_MUTATION,
         variables: {
           input: {
+            id: data.userId, // Mapping ID từ HRM accountId
             email: data.email,
             password: data.password,
-            fullName: data.fullName,
-            accountType: "EXTERNAL" // Mặc định user đăng ký từ ngoài là EXTERNAL
+            roleName: data.role,
+            accountType: "INTERNAL"
           },
         },
       });
@@ -95,7 +95,6 @@ export const authService = {
       if (response.data.errors) {
         throw new Error(response.data.errors[0].message);
       }
-
       return response.data.data.register;
     } catch (error) {
        throw error.response?.data?.errors?.[0]?.message || error.message;

@@ -2,8 +2,6 @@ spring:
   application:
     name: identity
 
-  
-
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -20,10 +18,10 @@ spring:
         format_sql: true
 
   graphql:
-  path: /graphql    # Đổi endpoint mặc định từ /graphql sang /identity/graphql
+  path: /graphql
   graphiql:
     enabled: true
-    path: /graphiql # Đổi luôn trang test GraphiQL
+    path: /graphiql
 
   flyway:
     baseline-on-migrate: true

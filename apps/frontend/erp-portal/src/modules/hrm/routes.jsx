@@ -1,5 +1,5 @@
 // src/modules/hrm/routes.jsx
-
+import React from "react";
 import { Route } from "react-router-dom";
 import RequireAuth from "../../auth/RequireAuth";
 import { HRM_PERMISSIONS } from "../../shared/permissions/hrm.permissions";
@@ -10,31 +10,37 @@ import EmployeeProfile from "./pages/layouts/EmployeeProfile";
 import EmployeeCreate from "./pages/layouts/EmployeeCreate";
 import EmployeeEdit from "./pages/layouts/EmployeeEdit";
 import EmployeeDocumentRestore from "./pages/layouts/EmployeeDocumentRestore";
+
 import Department from "./pages/layouts/Department";
 import DepartmentCreate from "./pages/layouts/DepartmentCreate";
 import DepartmentEdit from "./pages/layouts/DepartmentEdit";
 import DepartmentDetail from "./pages/layouts/DepartmentDetail";
 import DepartmentRestore from "./pages/layouts/DepartmentRestore";
+
 import PositionDocument from "./pages/layouts/PositionDocument";
 import PositionCreate from "./pages/layouts/PositionCreate";
 import PositionEdit from "./pages/layouts/PositionEdit";
 import PositionDetail from "./pages/layouts/PositionDetail";
 import PositionRestore from "./pages/layouts/PositionRestore";
+
 import Account from "./pages/layouts/Account";
 import AccountCreate from "./pages/layouts/AccountCreate";
 import AccountEdit from "./pages/layouts/AccountEdit";
 import AccountDetail from "./pages/layouts/AccountDetail";
 import AccountRestore from "./pages/layouts/AccountRestore";
+
 import OnLeave from "./pages/layouts/OnLeave";
 import OnLeaveCreate from "./pages/layouts/OnLeaveCreate";
 import OnLeaveEdit from "./pages/layouts/OnLeaveEdit";
 import OnLeaveDetail from "./pages/layouts/OnLeaveDetail";
 import OnLeaveRestore from "./pages/layouts/OnLeaveRestore";
+
 import TimeKeeping from "./pages/layouts/TimeKeeping";
 import TimeKeepingCreate from "./pages/layouts/TimeKeepingCreate";
 import TimeKeepingEdit from "./pages/layouts/TimeKeepingEdit";
 import TimeKeepingDetail from "./pages/layouts/TimeKeepingDetail";
 import TimeKeepingRestore from "./pages/layouts/TimeKeepingRestore";
+
 import Salary from "./pages/layouts/Salary";
 import SalaryCreate from "./pages/layouts/SalaryCreate";
 import SalaryEdit from "./pages/layouts/SalaryEdit";

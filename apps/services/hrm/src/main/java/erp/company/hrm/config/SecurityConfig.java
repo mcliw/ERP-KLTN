@@ -25,17 +25,17 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // [QUAN TRỌNG] Cho phép các request bắt đầu bằng /internal/hrm/graphql/ đi qua mà KHÔNG cần xác thực.
                 // Điều này giúp Identity Service gọi được API: /internal/hrm/graphql/employees/unlinked
-                .requestMatchers("/internal/hrm/graphql/**").permitAll()
+                //.requestMatchers("/internal/hrm/graphql/**").permitAll()
 
                 // Cho phép truy cập Swagger/OpenAPI (nếu có dùng để test)
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-
+                //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                .anyRequest().permitAll()
                 // Các request thông thường (User gọi từ Gateway vào /api/employees...) 
                 // thì VẪN PHẢI xác thực (Authenticated).
                 // Lưu ý: Để dòng này hoạt động đúng, HRM cần có cơ chế validate JWT (JwtFilter).
                 // Nếu HRM chưa có JwtFilter và bạn muốn tin tưởng Gateway tuyệt đối, 
                 // hãy đổi .authenticated() thành .permitAll() tạm thời.    
-                .anyRequest().authenticated()
+                //.anyRequest().authenticated()
             );
 
         // Nếu bạn đã copy JwtFilter sang HRM, hãy bỏ comment dòng dưới đây:

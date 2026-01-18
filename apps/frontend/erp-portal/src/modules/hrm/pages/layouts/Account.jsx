@@ -106,7 +106,8 @@ export default function Account() {
       <PageHeader
         title="Quản lý tài khoản"
         createLabel="Thêm tài khoản"
-        onCreate={canEdit ? () => navigate("/hrm/tai-khoan/them-moi") : null}
+        onCreate={() => navigate("/hrm/tai-khoan/them-moi")}
+
         onRestore={canEdit ? () => navigate("/hrm/tai-khoan/khoi-phuc") : null}
       />
 

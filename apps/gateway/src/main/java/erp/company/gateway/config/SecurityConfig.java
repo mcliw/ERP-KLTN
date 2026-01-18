@@ -38,16 +38,17 @@ public class SecurityConfig {
                     .pathMatchers("/api/identity/graphql").permitAll()
                     
                     // Các service khác bắt buộc phải có Token
-                    .anyExchange().authenticated()
-                )
+                    .anyExchange().permitAll()
+                    //.anyExchange().authenticated()
+                );
                 
                 // 3. Cấu hình Resource Server (Validate Token)
-                .oauth2ResourceServer(oauth2 -> oauth2
+/*                .oauth2ResourceServer(oauth2 -> oauth2
                     .jwt(jwt -> jwt
                         .jwtDecoder(jwtDecoder())
                         .jwtAuthenticationConverter(jwtAuthenticationConverter())
                     )
-                );
+                ); */
 
             return http.build();
         }

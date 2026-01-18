@@ -21,7 +21,33 @@ public class GatewayRoutesConfig {
                         .filters(f -> f.stripPrefix(1))
                         .uri("http://hrm-service:8080"))
 
-                // Bạn có thể thêm các route khác tương tự (Sales, Supply Chain...) tại đây
+                // --- CÁC ROUTE BỔ SUNG TỪ APPLICATION.YML ---
+
+                // Route 3: Sales Service
+                .route("sales-service", r -> r.path("/api/sales/**")
+                        .filters(f -> f.stripPrefix(1))
+                        .uri("http://sales-service:8080"))
+
+                // Route 4: Supply Chain Service
+                .route("supply-chain-service", r -> r.path("/api/supply-chain/**")
+                        .filters(f -> f.stripPrefix(1))
+                        .uri("http://supply-chain-service:8080"))
+
+                // Route 5: Accounting Service
+                .route("accounting-service", r -> r.path("/api/accounting/**")
+                        .filters(f -> f.stripPrefix(1))
+                        .uri("http://accounting-service:8080"))
+
+                // Route 6: AI Assistant Service
+                .route("ai-service", r -> r.path("/api/ai/**")
+                        .filters(f -> f.stripPrefix(1))
+                        .uri("http://ai-service:8000"))
+
+                // Route 7: Face Recognition Service
+                .route("face-service", r -> r.path("/api/face/**")
+                        .filters(f -> f.stripPrefix(1))
+                        .uri("http://face-service:8000")) 
+
                 .build();
     }
 }
