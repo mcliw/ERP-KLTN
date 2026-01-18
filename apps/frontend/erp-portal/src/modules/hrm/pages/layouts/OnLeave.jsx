@@ -29,7 +29,7 @@ export default function OnLeave() {
   const { user } = useAuthStore();
   const { departmentMap, positionMap } = useLookupMaps();
 
-  const canManage = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
+  const canManage = HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(user?.role);
 
   const { data: allLeaves, loading, refresh } = useAsyncData(onLeaveService.getAll);
 

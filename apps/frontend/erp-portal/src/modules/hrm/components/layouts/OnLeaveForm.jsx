@@ -54,7 +54,7 @@ export default function OnLeaveForm({
   const toast = useToast();
 
   const canUpdateStatus = useMemo(
-    () => HRM_PERMISSIONS.LEAVE_EDIT.includes(currentUser?.role),
+    () => HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(currentUser?.role),
     [currentUser]
   );
 

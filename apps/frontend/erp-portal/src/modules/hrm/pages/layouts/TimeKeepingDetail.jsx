@@ -22,7 +22,7 @@ export default function TimeKeepingDetail() {
   const user = useAuthStore((s) => s.user);
   
   // Kiểm tra quyền Edit chấm công (cần đảm bảo constant này tồn tại)
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.TIMEKEEPING_EDIT || "TIMEKEEPING_EDIT");
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_TIME_KEEPING_UPDATE || "TIMEKEEPING_EDIT");
 
   // 1. Fetch TimeKeeping Info
   const { data: record, loading: recordLoading } = useFetchDetail(timeKeepingService.getById, id);

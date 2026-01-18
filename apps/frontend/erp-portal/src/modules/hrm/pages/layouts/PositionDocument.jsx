@@ -29,7 +29,7 @@ export default function PositionDocument() {
 
   const { departmentMap } = useLookupMaps();
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.POSITION_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_POSITION_UPDATE);
 
   const { data: positions, loading, refresh } = useAsyncData(positionService.getAll);
 

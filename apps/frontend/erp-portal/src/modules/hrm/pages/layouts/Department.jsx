@@ -26,7 +26,7 @@ export default function Department() {
   const toast = useToast();
 
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.DEPARTMENT_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_DEPARTMENT_UPDATE);
 
   const { data: departments, loading, refresh } = useAsyncData(departmentService.getAll);
 

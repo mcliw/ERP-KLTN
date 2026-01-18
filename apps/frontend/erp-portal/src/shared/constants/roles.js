@@ -1,18 +1,25 @@
+// apps/frontend/erp-portal/src/shared/constants/roles.js
+
 export const ROLES = {
-  ADMIN: "ADMIN",
+  // --- Quản trị & Cơ bản ---
+  ADMIN: "ADMIN",                         // Quản trị hệ thống - Toàn quyền
+  EMPLOYEE: "EMPLOYEE",                   // Nhân viên cơ bản (Nội bộ)
+  CUSTOMER: "CUSTOMER",                   // Khách hàng (Bên ngoài)
+  DEPT_MANAGER: "DEPT_MANAGER",           // Quản lý phòng ban
 
-  HR_MANAGER: "HR_MANAGER",
-  HR_EMPLOYEE: "HR_EMPLOYEE",
+  // --- Nhân sự (HR) ---
+  HR_MANAGER: "HR_MANAGER",               // Quản lý nhân sự
 
-  SCM_MANAGER: "SCM_MANAGER",
-  SCM_EMPLOYEE: "SCM_EMPLOYEE",
+  // --- Mua sắm & Kho (Purchasing & Warehouse) ---
+  PURCHASING_MANAGER: "PURCHASING_MANAGER", // Quản lý mua sắm
+  STOREKEEPER: "STOREKEEPER",             // Thủ kho
 
-  SALES_CRM_MANAGER: "SALES_CRM_MANAGER",
-  SALES_CRM_EMPLOYEE: "SALES_CRM_EMPLOYEE",
+  // --- Bán hàng (Sales) ---
+  SALES_ADMIN: "SALES_ADMIN",             // Quản trị bán hàng
 
-  SUPPLY_CHAIN_MANAGER: "SUPPLY_CHAIN_MANAGER",
-  SUPPLY_CHAIN_EMPLOYEE: "SUPPLY_CHAIN_EMPLOYEE",
-
-  FINANCE_ACCOUNTING_MANAGER: "FINANCE_ACCOUNTING_MANAGER",
-  FINANCE_ACCOUNTING_EMPLOYEE: "FINANCE_ACCOUNTING_EMPLOYEE",
+  // --- Tài chính & Kế toán (Finance & Accounting) ---
+  CFO: "CFO",                             // Kế toán trưởng
+  RECEIVABLE_ACC: "RECEIVABLE_ACC",       // Kế toán công nợ phải thu
+  PAYABLE_ACC: "PAYABLE_ACC",             // Kế toán công nợ phải trả
+  PAYROLL_ACC: "PAYROLL_ACC",             // Kế toán tiền lương
 };

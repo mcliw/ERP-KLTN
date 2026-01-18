@@ -31,7 +31,7 @@ export default function Salary() {
 
   const user = useAuthStore((s) => s.user);
   // Kiểm tra quyền (Nếu chưa có trong file constant, bạn có thể thay bằng string "salary.edit")
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.SALARY_EDIT || "salary.edit");
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_SALARY_INFO_UPDATE || "salary.edit");
 
   // 1. Fetch dữ liệu chính (Lương)
   const { data: salaries, loading, refresh } = useAsyncData(salaryService.getAll);

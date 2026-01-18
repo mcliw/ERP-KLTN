@@ -27,7 +27,7 @@ export default function Account() {
   const toast = useToast();
 
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.ACCOUNT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_ACCOUNT_UPDATE);
 
   // Fetch data
   const { data: accounts, loading, refresh } = useAsyncData(accountService.getAll);

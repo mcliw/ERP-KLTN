@@ -60,7 +60,9 @@
 }
 
 .main-table td.actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  min-height: 100px;
   justify-content: center;
   gap: 5px;
   margin-top: 0px;
