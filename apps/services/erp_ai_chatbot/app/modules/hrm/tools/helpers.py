@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
+from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -12,15 +13,13 @@ from app.modules.hrm.models import Employee, Department
 
 _EMP_CODE_RE = re.compile(r"^[A-Z]{0,4}\d{1,10}$", re.IGNORECASE)
 
+def _norm(s):
+    if s is None:
+        return ""
+    return str(s).strip()
 
-def _norm(s: str) -> str:
-    return (s or "").strip()
-
-
-def find_employee_by_user_id(session: Session, user_id: int) -> Optional[Employee]:
-    if user_id is None:
-        return None
-    return session.query(Employee).filter(Employee.user_id == int(user_id)).first()
+def find_employee_by_user_id(session, user_id: UUID):
+    return session.query(Employee).filter(Employee.user_id == user_id).first()
 
 
 def find_employee_exact_code(session: Session, employee_code: str) -> Optional[Employee]:

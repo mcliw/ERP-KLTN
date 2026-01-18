@@ -18,7 +18,7 @@ import re
 _DATE_YMD = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _DATE_DMY = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
 _NUM_TOKEN = re.compile(r"\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{4,}\b")
-_CODE_RE = re.compile(r"\b[A-Z]{2,}-\d+\b")
+_CODE_RE = re.compile(r"\b(?:[A-Z]{2,10}\d{2,6}|[A-Z]{2,10}-\d{1,12})\b")
 
 def is_llm_available() -> bool:
     return _client is not None
@@ -75,7 +75,6 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
                 "step_id": si.get("id"),
                 "tool": si.get("tool"),
                 "args": si.get("args"),
-                # FULL result: ok/data/thong_diep/...
                 "result": si.get("result"),
             }
             for si in step_infos
@@ -83,7 +82,7 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
     }
 
     sys = (
-        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi.\n"
+        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi và nếu có từ tiếng anh hãy chuyển sang tiếng việt.\n"
         "QUY TẮC BẮT BUỘC:\n"
         "1) CHỈ dùng dữ liệu trong payload.tool_results[*].result. Không suy đoán.\n"
         "2) TỰ xác định người dùng đang hỏi những TRƯỜNG nào (fields) trong câu hỏi.\n"
@@ -95,7 +94,7 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
         'Đặc biệt lưu ý: \n'
         '1) Trả lời người dùng thân thiện như 1 tin nhắn. Cấu trúc 1 đoạn văn rõ rằng, mạch lạc\n'
         '2) Không sử dụng gạch đầu dòng hay xuống dòng\n'
-        '3) Có thuật ngữ hoặc từ tiếng anh thì hãy thay bằng từ tiếng việt luôn ví dụ ANNUAL là nghỉ phép năm, APPROVE là đã duyệt,...'
+        '3) Hãy dịch luôn các từ tiếng anh có trong câu trả lời thành tiếng việt ví dụ ANNUAL là nghỉ phép năm, APPROVE là đã duyệt, ACTIVE là hoạt động,...'
         "\n"
         "ĐỊNH DẠNG GỢI Ý:\n"
         "- Khi liệt kê danh sách, hãy tự động gộp các mục trùng nhau (cùng SKU, Tên hoặc ID) thành một dòng duy nhất và cộng tổng các số liệu liên quan (số lượng, giá trị...). Tuyệt đối không hiển thị các dòng dữ liệu lặp lại rời rạc."

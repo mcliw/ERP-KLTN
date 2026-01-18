@@ -3,26 +3,23 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from uuid import UUID
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
 from app.modules.hrm.models import Employee, Department, Position
-from .helpers import find_employee_by_user_id, find_employee_exact_code, find_employees, find_employee
+from .helpers import find_employee_exact_code, find_employees, find_employee, find_employee_by_user_id
 
 
 class TimNhanVienArgs(BaseModel):
     tu_khoa: str = Field(..., description="Mã nhân viên / tên / id")
 
-
 class ThongTinNhanVienArgs(BaseModel):
-    employee_code: str = Field(..., description="Mã nhân viên (vd: NV001)")
-
-
-class ThongTinNhanVienIdArgs(BaseModel):
-    employee_id: int = Field(..., ge=1)
-
+    employee_code: str = Field(..., description="Mã nhân viên")
 
 class ThongTinNhanVienTheoUserArgs(BaseModel):
-    user_id: int = Field(..., ge=1, description="user_id từ backend auth context")
+    user_id: UUID
 
+class ThongTinNhanVienByCodeArgs(BaseModel):
+    employee_code: str = Field(min_length=2, max_length=20)
 
 def _card(emp: Employee, dept: Department | None, pos: Position | None):
     return {
@@ -76,17 +73,7 @@ def thong_tin_nhan_vien(session: Session, employee_code: str):
     pos = session.query(Position).filter(Position.id == e.position_id).first() if e.position_id else None
     return ok(_card(e, dept, pos), "Thông tin nhân viên.")
 
-
-def thong_tin_nhan_vien_id(session: Session, employee_id: int):
-    e = session.query(Employee).filter(Employee.id == int(employee_id)).first()
-    if not e:
-        return can_lam_ro("Không tìm thấy nhân viên theo id.", [])
-    dept = session.query(Department).filter(Department.id == e.department_id).first() if e.department_id else None
-    pos = session.query(Position).filter(Position.id == e.position_id).first() if e.position_id else None
-    return ok(_card(e, dept, pos), "Thông tin nhân viên.")
-
-
-def thong_tin_nhan_vien_theo_user(session: Session, user_id: int):
+def thong_tin_nhan_vien_theo_user(session: Session, user_id: UUID):
     e = find_employee_by_user_id(session, user_id)
     if not e:
         return can_lam_ro("Không tìm thấy nhân viên theo user_id (chưa map user_id -> employee).", [])
@@ -98,6 +85,5 @@ def thong_tin_nhan_vien_theo_user(session: Session, user_id: int):
 NHAN_SU_TOOLS = [
     ToolSpec("tim_nhan_vien", "Tìm nhân viên theo mã/tên/id.", TimNhanVienArgs, tim_nhan_vien, "hrm"),
     ToolSpec("thong_tin_nhan_vien", "Xem hồ sơ nhân viên theo mã.", ThongTinNhanVienArgs, thong_tin_nhan_vien, "hrm"),
-    ToolSpec("thong_tin_nhan_vien_id", "Xem hồ sơ nhân viên theo id.", ThongTinNhanVienIdArgs, thong_tin_nhan_vien_id, "hrm"),
     ToolSpec("thong_tin_nhan_vien_theo_user", "Xem hồ sơ nhân viên theo user_id (tự động lấy nhân viên của bạn).", ThongTinNhanVienTheoUserArgs, thong_tin_nhan_vien_theo_user, "hrm"),
 ]

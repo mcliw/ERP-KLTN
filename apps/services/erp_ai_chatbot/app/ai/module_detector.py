@@ -17,9 +17,8 @@ _GEMINI_DETECT_MODEL = os.getenv("GEMINI_DETECT_MODEL", os.getenv("GEMINI_MODEL"
 
 _client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else genai.Client()
 
-MODULES = ["hrm", "supply_chain", "sale_crm", "finance_accounting"]
-ModuleName = Literal["hrm", "supply_chain", "sale_crm", "finance_accounting"]
-
+MODULES = ["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"]
+ModuleName = Literal["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"]
 
 # ====== output model ======
 class ModuleDetectOut(BaseModel):
@@ -193,7 +192,6 @@ OUTPUT
 - needs_clarification: true/false
 - clarifying_question: null nếu không cần hỏi; có string nếu cần hỏi
 """
-
 
 def detect_module_llm(message: str, role: str | None = None) -> dict:
     msg = (message or "").strip()

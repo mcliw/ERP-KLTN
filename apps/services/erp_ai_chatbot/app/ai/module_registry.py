@@ -7,6 +7,7 @@ _MODULE_TOOLS: Dict[str, Dict[str, ToolSpec]] = {
     "sale_crm": {},
     "finance_accounting": {},
     "supply_chain": {},
+    "rag_policy": {},  
 }
 
 _LOADED: set[str] = set()
@@ -36,6 +37,11 @@ def ensure_loaded(module: str):
     elif module == "finance_accounting":
         from app.modules.finance_accounting.tools import FINANCE_ACCOUNTING_TOOLS
         register_tools("finance_accounting", FINANCE_ACCOUNTING_TOOLS)
+
+    elif module == "rag_policy":
+        from app.modules.rag_policy.tools import RAG_POLICY_TOOLS
+        register_tools("rag_policy", RAG_POLICY_TOOLS)
+
 
     _LOADED.add(module)
 

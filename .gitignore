@@ -1,10 +1,10 @@
 node_modules
 .venv/
 certs/
-.env
+**/.env/
 *.key
 credentials.json
-DATABASE_URL
+CHAT_DATABASE_URL
 SALE_CRM_DATABASE_URL
 HRM_DATABASE_URL
 FINANCE_DATABASE_URL
@@ -17,3 +17,8 @@ venv/
 *.bin
 .DS_Store
 apps/services/erp_ai_chatbot/scripts/*.py
+apps/services/face-recognition-attendance-system/dataset/
+apps/services/face-recognition-attendance-system/model_save/
+apps/services/face-recognition-attendance-system/vid_test/
+apps/services/erp_ai_chatbot/app/rag/data/
+apps/services/erp_ai_chatbot/app/chroma_policy/

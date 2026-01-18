@@ -2,14 +2,14 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-
+from uuid import UUID
 from app.ai.executor.executor_sale_crm import execute_chat_sale_crm
 
 router = APIRouter(prefix="/sale_crm")
 
 class ChatRequest(BaseModel):
     module: str = "sale_crm"
-    user_id: int | None = None
+    user_id: UUID | None = None
     role: str | None = None
     message: str
     debug: bool = False

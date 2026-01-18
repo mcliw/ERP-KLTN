@@ -1,11 +1,100 @@
+# app/ai/routers/router_hrm.py
 from __future__ import annotations
 
 import re
-from app.ai.plan_schema import Plan
-from app.ai.routers.common import gemini_fallback,build_system_instruction
+from app.ai.routers.common import gemini_fallback
+from app.ai.plan_schema import Plan, PlanStep
+from app.core.role.scope_resolver import resolve_scope
+from app.ai.hrm_intent_utils import is_self_query, extract_employee_code
+
+SELF_ONLY_MSG = "Bạn chỉ được xem dữ liệu của chính mình, không được xem nhân viên khác."
+
+def route_hrm_plan(module: str, message: str, auth: dict) -> Plan:
+    role = auth.get("role")
+    user_id = auth.get("user_id")
+
+    msg = (message or "").strip()
+    emp_code = extract_employee_code(msg)
+    self_q = is_self_query(msg)
+
+    # 1) có employee_code => muốn xem người khác (ƯU TIÊN)
+    if emp_code:
+        scope = resolve_scope(role_name=role, module="hrm", tool_name="thong_tin_nhan_vien")
+
+        # scope SELF/DEPT mà đi xem người khác => trả thẳng msg SELF
+        if scope in ("SELF", "DEPT"):
+            return Plan(
+                module="hrm",
+                intent="forbidden_other_employee",
+                needs_clarification=False,
+                clarifying_question=None,
+                steps=[],
+                final_response_template=SELF_ONLY_MSG,
+            )
+
+        # scope ALL => gọi tool xem theo mã
+        return Plan(
+            module="hrm",
+            intent="xem_thong_tin_nhan_vien_khac",
+            needs_clarification=False,
+            clarifying_question=None,
+            steps=[
+                PlanStep(id="s1", tool="thong_tin_nhan_vien", args={"employee_code": emp_code}, save_as="emp")
+            ],
+            final_response_template=None,
+        )
+
+    # 2) self query (KHÔNG có mã)
+    if self_q:
+        return Plan(
+            module="hrm",
+            intent="xem_thong_tin_nhan_vien",
+            needs_clarification=False,
+            clarifying_question=None,
+            steps=[
+                PlanStep(
+                    id="s1",
+                    tool="thong_tin_nhan_vien_theo_user",
+                    args={"user_id": user_id},   # hoặc {} để executor inject
+                    save_as="me",
+                )
+            ],
+            final_response_template=None,
+        )
+
+    # 3) fallback: tìm theo keyword
+    scope = resolve_scope(role_name=role, module="hrm", tool_name="tim_nhan_vien")
+    if scope in ("SELF", "DEPT"):
+        return Plan(
+            module="hrm",
+            intent="forbidden_search_other_employee",
+            needs_clarification=False,
+            clarifying_question=None,
+            steps=[],
+            final_response_template=SELF_ONLY_MSG,
+        )
+
+    return Plan(
+        module="hrm",
+        intent="tim_nhan_vien",
+        needs_clarification=False,
+        clarifying_question=None,
+        steps=[PlanStep(id="s1", tool="tim_nhan_vien", args={"tu_khoa": msg}, save_as="candidates")],
+        final_response_template=None,
+    )
 
 def plan_route_hrm(module: str, message: str, auth: dict) -> Plan:
     msg = (message or "").strip()
+
+    emp_code = extract_employee_code(msg)
+    self_q = is_self_query(msg)
+
+    # ✅ chỉ route rule-based khi:
+    # - có mã nhân viên (FIN003/CORE006...) hoặc
+    # - hỏi self nhưng KHÔNG có mã nhân viên
+    if emp_code or (self_q and not emp_code):
+        return route_hrm_plan(module, msg, auth)
+
     low = msg.lower()
 
     m_emp = re.search(r"\bNV\d+\b", msg, re.IGNORECASE)

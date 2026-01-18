@@ -2,14 +2,14 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
-
+from uuid import UUID
 from app.ai.executor import execute_chat_supply_chain
 
 router = APIRouter(prefix="/supply_chain")
 
 class ChatRequest(BaseModel):
     module: str = 'supply_chain'
-    user_id: int | None = None
+    user_id: UUID | None = None
     role: str | None = None
     message: str
     debug: bool = False
