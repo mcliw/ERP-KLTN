@@ -24,7 +24,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
 // Styles
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================

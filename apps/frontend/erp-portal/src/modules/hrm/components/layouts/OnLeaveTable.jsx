@@ -10,7 +10,7 @@ import {
   StatusBadge,
   EmptyRow,
   formatDate,
-} from "../common/TableComponents";
+} from "../../../../shared/components/TableComponents";
 
 const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 

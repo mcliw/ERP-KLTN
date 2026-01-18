@@ -1,6 +1,6 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/EmployeeFilter.jsx
 
-import { FilterWrapper, FilterSearch, FilterSelect } from "../common/FilterComponents";
+import { FilterWrapper, FilterSearch, FilterSelect } from "../../../../shared/components/FilterComponents";
 
 export default function EmployeeFilter({
   keyword = "",

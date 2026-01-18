@@ -5,7 +5,7 @@ import {
   TableActions,
   EmptyRow,
   formatDate
-} from "../common/TableComponents";
+} from "../../../../shared/components/TableComponents";
 
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 

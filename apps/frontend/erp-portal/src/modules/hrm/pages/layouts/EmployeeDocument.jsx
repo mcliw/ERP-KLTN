@@ -10,7 +10,7 @@ import { useLookupMaps } from "../../hooks/useLookupMaps";
 import { employeeService } from "../../services/employee.service";
 import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
 import { useClientPagination } from "../../../../shared/hooks/useClientPagination";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 import { useToast } from "../../../../shared/components/ToastProvider";
 

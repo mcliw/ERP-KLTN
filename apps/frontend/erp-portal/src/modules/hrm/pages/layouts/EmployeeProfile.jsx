@@ -9,7 +9,7 @@ import { formatDate } from "../../../../shared/utils/format";
 import {
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 export default function EmployeeProfile() {
   const { code } = useParams();

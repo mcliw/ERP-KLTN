@@ -4,7 +4,7 @@ import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 import OnLeaveTable from "../../components/layouts/OnLeaveTable";
 import { onLeaveService } from "../../services/onLeave.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function OnLeaveRestore() {
   const navigate = useNavigate();

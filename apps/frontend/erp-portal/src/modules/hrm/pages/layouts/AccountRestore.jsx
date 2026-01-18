@@ -5,7 +5,7 @@ import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 import AccountTable from "../../components/layouts/AccountTable";
 import { accountService } from "../../services/account.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function AccountRestore() {
   const navigate = useNavigate();

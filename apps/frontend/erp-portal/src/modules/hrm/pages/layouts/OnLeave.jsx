@@ -13,7 +13,7 @@ import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 import { useToast } from "../../../../shared/components/ToastProvider";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================

@@ -1,6 +1,6 @@
 // src/modules/hrm/menu.jsx
 
-import { HRM_PERMISSIONS } from "../../shared/permissions/hrm.permissions";
+import { HRM_PERMISSIONS } from "../../shared/permissions/hrm.permissions"; // Đảm bảo đúng đường dẫn file bạn vừa tạo
 import {
   FaUsers,
   FaTachometerAlt,
@@ -17,7 +17,8 @@ export const hrmMenu = [
     label: "Dashboard",
     path: "/hrm/dashboard",
     icon: <FaTachometerAlt />,
-    roles: HRM_PERMISSIONS.HRM_REPORT_VIEW,
+    // Trong file permission, HRM_REPORT_VIEW đã là mảng ['ADMIN', 'CFO'...] nên gán trực tiếp
+    roles: HRM_PERMISSIONS.HRM_REPORT_VIEW, 
   },
   {
     label: "Hồ sơ nhân viên",

@@ -7,7 +7,7 @@ import TimeKeepingTable from "../../components/layouts/TimeKeepingTable";
 import { timeKeepingService } from "../../services/timeKeeping.service";
 import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
 import { useToast } from "../../../../shared/components/ToastProvider";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function TimeKeepingRestore() {
   const navigate = useNavigate();

@@ -5,7 +5,7 @@ import {
   TableActions,
   StatusBadge,
   EmptyRow,
-  formatDate } from "../common/TableComponents";
+  formatDate } from "../../../../shared/components/TableComponents";
 
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 

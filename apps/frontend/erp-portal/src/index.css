@@ -66,3 +66,30 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Custom Scrollbar cho Sidebar */
+.custom-scrollbar {
+  overflow-y: auto; /* Kích hoạt cuộn dọc */
+  overflow-x: hidden; /* Ẩn cuộn ngang */
+}
+
+/* Độ rộng thanh cuộn */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+/* Nền của thanh cuộn (trong suốt) */
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Thanh trượt (Thumb) */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2); /* Màu trắng mờ 20% */
+  border-radius: 10px; /* Bo tròn */
+}
+
+/* Khi di chuột vào thanh trượt */
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4); /* Sáng lên */
+}

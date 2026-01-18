@@ -6,7 +6,7 @@ import PositionTable from "../../components/layouts/PositionTable";
 import { positionService } from "../../services/position.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
 import { useLookupMaps } from "../../hooks/useLookupMaps";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function PositionRestore() {
   const navigate = useNavigate();

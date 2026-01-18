@@ -8,7 +8,7 @@ import {
   FormSelect,
   FormTextarea,
   FormActions,
-} from "../common/FormCommon";
+} from "../../../../shared/components/FormCommon";
 import { employeeService } from "../../services/employee.service";
 import { departmentService } from "../../services/department.service";
 import { positionService } from "../../services/position.service";

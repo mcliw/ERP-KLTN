@@ -5,7 +5,7 @@ import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 import SalaryTable from "../../components/layouts/SalaryTable";
 import { salaryService } from "../../services/salary.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function SalaryRestore() {
   const navigate = useNavigate();

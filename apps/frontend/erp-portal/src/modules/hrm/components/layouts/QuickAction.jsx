@@ -1,4 +1,4 @@
-import "../styles/quickAction.css";
+import "../../../../shared/styles/quickAction.css";
 
 export default function QuickAction({ label, icon, onClick }) {
   return (

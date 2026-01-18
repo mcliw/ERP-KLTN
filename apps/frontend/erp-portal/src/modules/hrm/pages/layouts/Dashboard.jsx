@@ -26,7 +26,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { useToast } from "../../../../shared/components/ToastProvider";
 
 // Import CSS riêng
-import "../styles/dashboard.css";
+import "../../../../shared/styles/dashboard.css";
 
 /* =====================
  * Sub-Components (Biểu đồ CSS thuần)

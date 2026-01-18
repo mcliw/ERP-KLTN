@@ -3,7 +3,7 @@
 import {
   TablePagination,
   EmptyRow
-} from "../common/TableComponents";
+} from "../../../../shared/components/TableComponents";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 import { FaEye, FaPen, FaBan } from "react-icons/fa"; 
 

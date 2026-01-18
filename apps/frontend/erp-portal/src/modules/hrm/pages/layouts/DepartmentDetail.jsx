@@ -11,7 +11,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 export default function DepartmentDetail() {
   const { code } = useParams();
