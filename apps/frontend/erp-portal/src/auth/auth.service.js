@@ -1,7 +1,13 @@
-import { axiosClient } from "../services/axiosClient";
-import { jwtDecode } from "jwt-decode"; // Thư viện giải mã token
+// src/auth/auth.service.js
+// LƯU Ý: Hãy kiểm tra lại đường dẫn import axiosClient cho đúng với cấu trúc thư mục của bạn.
+// Nếu file này nằm ở src/auth/ thì đường dẫn thường là "../services/axiosClient" hoặc "../../services/axiosClient"
+import { axiosClient } from "../services/axiosClient"; 
+import { jwtDecode } from "jwt-decode";
 
-// 1. Định nghĩa Query GraphQL cho Login
+/* ==============================================
+ * GraphQL Mutations
+ * ============================================== */
+
 const LOGIN_MUTATION = `
   mutation login($input: LoginRequest!) {
     login(input: $input) {
@@ -11,7 +17,6 @@ const LOGIN_MUTATION = `
   }
 `;
 
-// 2. Định nghĩa Query GraphQL cho Register
 const REGISTER_MUTATION = `
   mutation register($input: RegisterRequest!) {
     register(input: $input) {
@@ -21,98 +26,107 @@ const REGISTER_MUTATION = `
   }
 `;
 
-export const authService = {
-  /**
-   * Gọi API Login tới Identity Service qua Gateway
-   * @param {string} email
-   * @param {string} password
-   */
-  async loginApi({ email, password }) {
-    try {
-      // Gửi POST request đến Gateway
-      // URL này được Nginx chuyển -> Gateway -> Identity Service
-      const response = await axiosClient.post("/identity/graphql", {
-        query: LOGIN_MUTATION,
-        variables: {
-          input: {
-            email: email,
-            password: password,
-          },
+/* ==============================================
+ * Auth Functions (Named Exports)
+ * ============================================== */
+
+/**
+ * Gọi API Login
+ */
+export const loginApi = async ({ email, password }) => {
+  try {
+    // Gọi API qua axiosClient (đã cấu hình interceptor trả về response.data)
+    const response = await axiosClient.post("/identity/graphql", {
+      query: LOGIN_MUTATION,
+      variables: {
+        input: {
+          email: email,
+          password: password,
         },
-      });
+      },
+    });
 
-      // Kiểm tra lỗi từ GraphQL trả về (nếu có)
-      if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
-      }
-
-      // Lấy token từ cấu trúc JSON trả về
-      const token = response.data.data.login.accessToken;
-      const tokenType = response.data.data.login.tokenType;
-
-      // GIẢI MÃ TOKEN: Lấy thông tin user (role, permission) từ token
-      // Frontend không cần gọi API getProfile nữa, giúp tối ưu hiệu năng
-      const decoded = jwtDecode(token);
-
-      return {
-        token: token,
-        user: {
-          id: decoded.sub,
-          email: decoded.email || email,
-          role: decoded.role,               // Quan trọng: dùng để phân quyền Menu
-          permissions: decoded.permissions || [], // Quan trọng: dùng để ẩn/hiện nút bấm
-          accountType: decoded.account_type, // INTERNAL hoặc EXTERNAL
-          iat: decoded.iat,
-          exp: decoded.exp,
-        },
-      };
-
-    } catch (error) {
-      console.error("Login Error:", error);
-      // Ưu tiên lấy message lỗi từ Backend trả về
-      throw error.response?.data?.errors?.[0]?.message || error.message || "Lỗi đăng nhập";
+    // Kiểm tra lỗi từ GraphQL
+    if (response.errors) {
+      throw new Error(response.errors[0].message);
     }
-  },
 
-  /**
-   * Gọi API Register
-   */
-  async registerApi(data) {
-    try {
-      const response = await axiosClient.post("/identity/graphql", {
-        query: REGISTER_MUTATION,
-        variables: {
-          input: {
-            id: data.userId, // Mapping ID từ HRM accountId
-            email: data.email,
-            password: data.password,
-            roleName: data.role,
-            accountType: "INTERNAL"
-          },
-        },
-      });
+    // Lấy data từ response.data.login (do axiosClient đã bóc 1 lớp data)
+    const loginData = response.data?.login;
 
-      if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
-      }
-      return response.data.data.register;
-    } catch (error) {
-       throw error.response?.data?.errors?.[0]?.message || error.message;
+    if (!loginData) {
+      throw new Error("Không nhận được phản hồi từ server");
     }
-  },
 
-  /**
-   * Reset Password (Cần cập nhật logic API thật sau này)
-   */
-  async resetPasswordApi({ email, password }) {
-    // Hiện tại giả lập delay, sau này thay bằng GraphQL Mutation
-    await new Promise((r) => setTimeout(r, 500));
-    console.log(`Reset password for ${email} with new pass: ${password}`);
-    return true;
+    // Lưu token
+    localStorage.setItem("erp_token", loginData.accessToken);
+
+    // Decode token để lấy thông tin user
+    const decoded = jwtDecode(loginData.accessToken);
+
+    return {
+      ...loginData,
+      user: decoded,
+    };
+  } catch (error) {
+    console.error("Login Error:", error);
+    throw error.response?.errors?.[0]?.message || error.message || "Lỗi đăng nhập";
   }
 };
 
-// Export các hàm lẻ để giữ tương thích với code cũ (nếu có chỗ nào đang import { loginApi })
-export const loginApi = authService.loginApi;
-export const registerApi = authService.registerApi;
-export const resetPasswordApi = authService.resetPasswordApi;
+/**
+ * Gọi API Register
+ */
+export const registerApi = async (data) => {
+  try {
+    const response = await axiosClient.post("/identity/graphql", {
+      query: REGISTER_MUTATION,
+      variables: {
+        input: {
+          id: data.userId,
+          email: data.email,
+          password: data.password,
+          roleName: data.role,
+          accountType: "INTERNAL"
+        },
+      },
+    });
+
+    if (response.errors) {
+      throw new Error(response.errors[0].message);
+    }
+
+    return response.data?.register;
+  } catch (error) {
+    throw error.response?.errors?.[0]?.message || error.message || "Lỗi đăng ký";
+  }
+};
+
+/**
+ * Reset Password (Giả lập)
+ */
+export const resetPasswordApi = async ({ email, password }) => {
+  // Giả lập delay
+  await new Promise((r) => setTimeout(r, 500));
+  console.log(`Reset password for ${email}`);
+  return true;
+};
+
+/**
+ * Logout
+ */
+export const logout = () => {
+  localStorage.removeItem("erp_token");
+  window.location.href = "/login";
+};
+
+/* ==============================================
+ * Default Export (Object)
+ * ============================================== */
+// Export thêm dạng object để tương thích nếu nơi khác import { authService }
+export const authService = {
+  loginApi,
+  registerApi,
+  resetPasswordApi,
+  logout
+};

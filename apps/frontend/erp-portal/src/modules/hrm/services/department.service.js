@@ -1,12 +1,13 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/department.service.js
-
+import { axiosClient } from "../../../services/axiosClient";
 import { positionService } from "./position.service";
 import { employeeService } from "./employee.service";
 
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3001/departments";
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/departments";
 
 const STATUS = {
   ACTIVE: "Hoạt động",
@@ -28,39 +29,24 @@ const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
 /* =========================
  * Internal Logic (Enrich Data)
  * ========================= */
+// Logic tính toán số lượng nhân viên và chức vụ trong phòng ban
 const enrichDepartmentData = (department, allEmployees, allPositions) => {
-  const deptCode = normalizeCode(department?.code);
-
-  const activeEmployees = (Array.isArray(allEmployees) ? allEmployees : []).filter(
-    (e) =>
-      !isSoftDeleted(e?.deletedAt) &&
-      String(e?.status || "").trim() === "Đang làm việc" &&
-      normalizeCode(e?.department) === deptCode
+  const deptCode = department.code;
+  
+  const deptEmployees = allEmployees.filter(e => 
+    e.department === deptCode && !isSoftDeleted(e.deletedAt)
   );
-
-  const manager = activeEmployees.find((e) => {
-    const pos = (Array.isArray(allPositions) ? allPositions : []).find(
-      (p) => normalizeCode(p?.code) === normalizeCode(e?.position)
-    );
-    return String(pos?.name || "").trim().toLowerCase().includes("trưởng phòng");
-  });
+  
+  const deptPositions = allPositions.filter(p => p.department === deptCode);
 
   return {
     ...department,
-    employeeCount: activeEmployees.length,
-    managerName: manager?.name || null,
+    employeeCount: deptEmployees.length,
+    positionCount: deptPositions.length,
+    managerName: department.manager ? (allEmployees.find(e => e.code === department.manager)?.name || department.manager) : "Chưa cập nhật"
   };
 };
 
@@ -69,17 +55,17 @@ const enrichDepartmentData = (department, allEmployees, allPositions) => {
  * ========================= */
 const validators = {
   async checkHasActiveEmployees(deptCode) {
-    const employees = await employeeService.getAll({ includeDeleted: false });
-
-    const hasActiveEmp = (Array.isArray(employees) ? employees : []).some(
-      (e) =>
-        !isSoftDeleted(e?.deletedAt) &&
-        String(e?.status || "").trim() === "Đang làm việc" &&
-        normalizeCode(e?.department) === normalizeCode(deptCode)
+    const employees = await employeeService.getAll();
+    const activeInDept = employees.filter(e => 
+      e.department === deptCode && 
+      e.status === "Đang làm việc" && 
+      !isSoftDeleted(e.deletedAt)
     );
-
-    if (hasActiveEmp) throw new Error(ERROR_MSGS.HAS_EMPLOYEES);
-  },
+    
+    if (activeInDept.length > 0) {
+      throw new Error(ERROR_MSGS.HAS_EMPLOYEES);
+    }
+  }
 };
 
 /* =========================
@@ -88,52 +74,59 @@ const validators = {
 export const departmentService = {
   async getAll({ includeDeleted = false, enrich = true } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      // Sử dụng axiosClient đã cấu hình interceptor để lấy data trực tiếp
+      const departments = await axiosClient.get(API_URL);
 
-      const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
-        const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
-        const tb = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
-        return tb - ta;
-      });
+      let result = Array.isArray(departments) ? departments : [];
 
-      const filtered = includeDeleted
-        ? sortedData
-        : sortedData.filter((d) => !isSoftDeleted(d?.deletedAt));
+      if (!includeDeleted) {
+        result = result.filter((d) => !isSoftDeleted(d.deletedAt));
+      }
 
-      if (!enrich) return filtered;
+      if (enrich) {
+        // Lấy thêm dữ liệu liên quan để tính toán employeeCount, v.v.
+        const [employees, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          positionService.getAll({ includeDeleted: true })
+        ]);
+        
+        result = result.map(d => enrichDepartmentData(d, employees, positions));
+      }
 
-      const [employees, positions] = await Promise.all([
-        employeeService.getAll({ includeDeleted: true }),
-        positionService.getAll({ includeDeleted: true }),
-      ]);
-
-      return filtered.map((dept) => enrichDepartmentData(dept, employees, positions));
+      return result.sort((a, b) => normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
     } catch (error) {
       console.error(ERROR_MSGS.FETCH_FAILED, error);
       return [];
     }
   },
 
-  /**
-   * Lấy chi tiết theo code (GET ?code=...)
-   * + hỗ trợ enrich để có employeeCount/managerName cho màn edit
-   */
+  async getById(id) {
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
+  },
+
   async getByCode(code, { enrich = true } = {}) {
     try {
       const targetCode = normalizeCode(code);
-      const response = await fetch(`${API_URL}?code=${encodeURIComponent(targetCode)}`);
-      const data = await handleResponse(response);
-
+      const data = await axiosClient.get(API_URL, {
+        params: { code: targetCode }
+      });
+      
       const dept = Array.isArray(data) && data.length > 0 ? data[0] : null;
-      if (!dept || !enrich) return dept;
-
-      const [employees, positions] = await Promise.all([
-        employeeService.getAll({ includeDeleted: true }),
-        positionService.getAll({ includeDeleted: true }),
-      ]);
-
-      return enrichDepartmentData(dept, employees, positions);
+      
+      if (dept && enrich) {
+        const [employees, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          positionService.getAll({ includeDeleted: true })
+        ]);
+        return enrichDepartmentData(dept, employees, positions);
+      }
+      
+      return dept;
     } catch {
       return null;
     }
@@ -146,65 +139,41 @@ export const departmentService = {
 
   async create(data) {
     const code = normalizeCode(data?.code);
-
+    
     const exists = await this.checkCodeExists(code);
     if (exists) throw new Error(ERROR_MSGS.EXISTS);
 
-    const newDept = {
+    const newDepartment = {
       ...data,
       code,
-      status: data?.status || STATUS.ACTIVE,
+      status: data.status || STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newDept),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newDepartment);
   },
 
-  /**
-   * Cập nhật (PUT) theo id
-   * Rule: KHÔNG cho chuyển sang "Ngưng hoạt động" nếu còn NV đang làm việc
-   */
   async update(code, data) {
-    try {
-      const targetCode = normalizeCode(code);
+    const targetCode = normalizeCode(code);
+    
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-      // lấy current có đủ info (enrich không bắt buộc, nhưng giữ nguyên cũng ok)
-      const current = await this.getByCode(targetCode, { enrich: false });
-      if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
-
-      const nextStatus = (data?.status ?? current.status)?.trim();
-
-      // Chỉ check khi có ý định chuyển ACTIVE -> INACTIVE
-      if (nextStatus === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
-        await validators.checkHasActiveEmployees(targetCode);
-      }
-
-      const updatedDept = {
-        ...current,
-        ...data,
-        code: targetCode, // không cho đổi mã
-        updatedAt: new Date().toISOString(),
-      };
-
-      const response = await fetch(`${API_URL}/${current.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedDept),
-      });
-
-      return handleResponse(response);
-    } catch (error) {
-      if (error?.message) throw error;
-      throw new Error(ERROR_MSGS.UPDATE_FAILED);
+    // Nếu chuyển sang Ngưng hoạt động, cần kiểm tra nhân viên
+    if (data.status === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
+      await validators.checkHasActiveEmployees(targetCode);
     }
+
+    const updatedDepartment = {
+      ...current,
+      ...data,
+      code: targetCode,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedDepartment);
   },
 
   async remove(code) {
@@ -213,6 +182,7 @@ export const departmentService = {
     const current = await this.getByCode(targetCode, { enrich: false });
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
+    // Không cho phép xoá nếu còn nhân viên đang làm việc
     await validators.checkHasActiveEmployees(targetCode);
 
     const now = new Date().toISOString();
@@ -223,13 +193,7 @@ export const departmentService = {
       updatedAt: now,
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
   async restore(code) {
@@ -245,23 +209,13 @@ export const departmentService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
   },
 
   async destroy(code) {
     const current = await this.getByCode(code, { enrich: false });
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "DELETE",
-    });
-
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

@@ -1,11 +1,12 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/employee.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn import đúng với cấu trúc dự án của bạn
 import { positionService } from "./position.service";
 
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3001/employees";
+// Lưu ý: axiosClient đã có baseURL là ".../api", nên ở đây chỉ cần path con
+const API_URL = "/hrm/employees";
 
 const STATUS = {
   WORKING: "Đang làm việc",
@@ -30,15 +31,7 @@ const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 const isWorkingAndNotDeleted = (e) => e?.status === STATUS.WORKING && !isSoftDeleted(e?.deletedAt);
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
+// Hàm sanitize dữ liệu trước khi gửi (giữ nguyên logic cũ)
 const sanitizeEmployeeData = (data) => {
   const { avatar, contractFile, cvFile, healthCertFile, degreeFile, ...rest } = data;
   return rest;
@@ -62,10 +55,14 @@ const validators = {
     if (posCode) {
       const position = await positionService.getByCode(posCode);
       if (position) {
-        const res = await fetch(`${API_URL}?position=${encodeURIComponent(posCode)}`);
-        let employeesInPos = await res.json();
+        // Thay fetch bằng axiosClient.get
+        // axiosClient trả về data trực tiếp (do interceptor)
+        let employeesInPos = await axiosClient.get(API_URL, {
+          params: { position: posCode }
+        });
 
-        employeesInPos = employeesInPos
+        // Nếu API trả về Page object, cần lấy .content, nhưng logic cũ là array nên giả định array
+        employeesInPos = (Array.isArray(employeesInPos) ? employeesInPos : [])
           .filter(isWorkingAndNotDeleted)
           .filter((e) => (ignoreId ? e.id !== ignoreId : true));
 
@@ -83,10 +80,11 @@ const validators = {
         position && String(position.name || "").trim().toLowerCase().includes("trưởng phòng");
 
       if (isManager) {
-        const res = await fetch(`${API_URL}?department=${encodeURIComponent(deptCode)}`);
-        let employeesInDept = await res.json();
+        let employeesInDept = await axiosClient.get(API_URL, {
+          params: { department: deptCode }
+        });
 
-        employeesInDept = employeesInDept
+        employeesInDept = (Array.isArray(employeesInDept) ? employeesInDept : [])
           .filter(isWorkingAndNotDeleted)
           .filter((e) => (ignoreId ? e.id !== ignoreId : true));
 
@@ -111,8 +109,8 @@ const validators = {
 export const employeeService = {
   async getAll({ includeDeleted = false } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      // axiosClient tự động gắn Token từ localStorage
+      const data = await axiosClient.get(API_URL);
 
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
@@ -129,10 +127,13 @@ export const employeeService = {
 
   async getById(id) {
     try {
-      const response = await fetch(`${API_URL}/${id}`);
-      // If 404, handleResponse returns null
-      return await handleResponse(response);
+      const data = await axiosClient.get(`${API_URL}/${id}`);
+      return data;
     } catch (error) {
+      // Xử lý lỗi 404 nếu cần trả về null giống logic cũ
+      if (error.response && error.response.status === 404) {
+        return null;
+      }
       console.error("getById failed:", error);
       return null;
     }
@@ -141,8 +142,9 @@ export const employeeService = {
   async getByCode(code) {
     try {
       const targetCode = normalizeCode(code);
-      const response = await fetch(`${API_URL}?code=${targetCode}`);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL, {
+        params: { code: targetCode }
+      });
       return Array.isArray(data) && data.length > 0 ? data[0] : null;
     } catch {
       return null;
@@ -180,13 +182,8 @@ export const employeeService = {
       resignedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newEmployee),
-    });
-
-    return handleResponse(response);
+    // axiosClient.post tự động stringify body và set Content-Type
+    return await axiosClient.post(API_URL, newEmployee);
   },
 
   async update(code, data) {
@@ -233,13 +230,7 @@ export const employeeService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedEmployee),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedEmployee);
   },
 
   async remove(code) {
@@ -256,12 +247,7 @@ export const employeeService = {
       updatedAt: now,
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
   async restore(code) {
@@ -295,21 +281,13 @@ export const employeeService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
   },
 
   async destroy(code) {
     const current = await this.getByCode(code);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

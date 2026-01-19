@@ -1,5 +1,5 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/timeKeeping.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn chính xác tới file axiosClient.js của bạn
 import { employeeService } from "./employee.service";
 import { departmentService } from "./department.service";
 import { positionService } from "./position.service";
@@ -7,7 +7,8 @@ import { positionService } from "./position.service";
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3001/timeKeeping";
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/timeKeeping";
 
 const ERROR_MSGS = {
   FETCH_FAILED: "Lỗi kết nối đến máy chủ",
@@ -22,15 +23,6 @@ const ERROR_MSGS = {
  * ========================= */
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
 const calculateWorkCount = (status) => {
   switch (status) {
     case "Đúng giờ":
@@ -39,114 +31,56 @@ const calculateWorkCount = (status) => {
     case "Nghỉ phép":
       return 1;
     case "Vắng mặt":
-      return 0;
+    case "Đã hủy":
     default:
       return 0;
   }
 };
 
 /* =========================
- * Internal Logic
+ * Internal Logic (Enrich Data)
  * ========================= */
-const enrichTimeKeepingData = (record, allEmployees, allDepartments, allPositions) => {
-  const employee = (Array.isArray(allEmployees) ? allEmployees : []).find(
-    (e) => String(e.id) === String(record.employeeId)
-  );
-
-  const department = employee
-    ? (Array.isArray(allDepartments) ? allDepartments : []).find(
-        (d) => d.code === employee.department
-      )
-    : null;
-
-  const position = employee
-    ? (Array.isArray(allPositions) ? allPositions : []).find(
-        (p) => p.code === employee.position
-      )
-    : null;
+const enrichTimeData = (record, allEmployees, allDepartments, allPositions) => {
+  const emp = allEmployees.find((e) => e.id === record.employeeId || e.code === record.employeeCode);
+  if (!emp) return record;
 
   return {
     ...record,
-    employeeCode: employee?.code || "N/A",
-    employeeName: employee?.name || "Không xác định",
-    departmentName: department?.name || "—",
-    positionName: position?.name || "—",
-    workCount: record.workCount ?? calculateWorkCount(record.status),
+    employeeName: emp.name,
+    employeeCode: emp.code,
+    departmentName: allDepartments.find((d) => d.code === emp.department)?.name || emp.department,
+    positionName: allPositions.find((p) => p.code === emp.position)?.name || emp.position,
   };
-};
-
-const validators = {
-  async checkDuplicate(employeeId, date, excludeId = null) {
-    const query = `?employeeId=${employeeId}&date=${date}`;
-    const response = await fetch(`${API_URL}${query}`);
-    const data = await handleResponse(response);
-    
-    if (Array.isArray(data) && data.length > 0) {
-      if (excludeId) {
-        const exists = data.some(d => String(d.id) !== String(excludeId));
-        if (exists) throw new Error(ERROR_MSGS.EXISTS);
-      } else {
-        throw new Error(ERROR_MSGS.EXISTS);
-      }
-    }
-  },
 };
 
 /* =========================
  * Main Service
  * ========================= */
 export const timeKeepingService = {
-  async getAll({ 
-    includeDeleted = false, 
-    date = "", 
-    departmentId = "", 
-    keyword = "",
-  } = {}) {
+  async getAll({ date, employeeCode, includeDeleted = false, enrich = true } = {}) {
     try {
-      let url = API_URL;
-      const params = [];
-      if (date) params.push(`date=${date}`);
-      if (params.length > 0) url += `?${params.join("&")}`;
-
-      const response = await fetch(url);
-      const data = await handleResponse(response);
-
-      let sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      // Sử dụng axiosClient thay cho fetch, truyền params để filter
+      const records = await axiosClient.get(API_URL, {
+        params: { date, employeeCode }
       });
 
+      let result = Array.isArray(records) ? records : [];
+
       if (!includeDeleted) {
-        sortedData = sortedData.filter((d) => !isSoftDeleted(d?.deletedAt));
+        result = result.filter((r) => !isSoftDeleted(r.deletedAt));
       }
 
-      const [employees, departments, positions] = await Promise.all([
-        employeeService.getAll({ includeDeleted: true }),
-        departmentService.getAll({ includeDeleted: true, enrich: false }),
-        positionService.getAll({ includeDeleted: true }),
-      ]);
+      if (enrich) {
+        const [employees, departments, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          departmentService.getAll({ includeDeleted: true, enrich: false }),
+          positionService.getAll({ includeDeleted: true }),
+        ]);
 
-      const enrichedData = sortedData.map((record) => 
-        enrichTimeKeepingData(record, employees, departments, positions)
-      );
-
-      let finalData = enrichedData;
-
-      if (departmentId) {
-        finalData = finalData.filter(d => 
-            employees.find(e => String(e.id) === String(d.employeeId))?.department === departmentId
-        );
+        result = result.map((r) => enrichTimeData(r, employees, departments, positions));
       }
 
-      if (keyword) {
-        const lowerKey = keyword.toLowerCase();
-        finalData = finalData.filter(d => 
-            d.employeeName?.toLowerCase().includes(lowerKey) ||
-            d.employeeCode?.toLowerCase().includes(lowerKey)
-        );
-      }
-
-      return finalData;
-
+      return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     } catch (error) {
       console.error(ERROR_MSGS.FETCH_FAILED, error);
       return [];
@@ -155,18 +89,27 @@ export const timeKeepingService = {
 
   async getById(id) {
     try {
-      const response = await fetch(`${API_URL}/${id}`);
-      return await handleResponse(response);
-    } catch {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
       return null;
     }
   },
 
+  async checkExists(employeeCode, date) {
+    const records = await this.getAll({ date, employeeCode, includeDeleted: false, enrich: false });
+    return records.length > 0 ? records[0] : null;
+  },
+
   async create(data) {
-    if (data.checkInTime && data.checkOutTime && data.checkOutTime < data.checkInTime) {
-        throw new Error(ERROR_MSGS.INVALID_TIME);
+    // 1. Kiểm tra tồn tại
+    const existing = await this.checkExists(data.employeeCode, data.date);
+    if (existing) throw new Error(ERROR_MSGS.EXISTS);
+
+    // 2. Validate thời gian
+    if (data.checkIn && data.checkOut && data.checkIn >= data.checkOut) {
+      throw new Error(ERROR_MSGS.INVALID_TIME);
     }
-    await validators.checkDuplicate(data.employeeId, data.date);
 
     const newRecord = {
       ...data,
@@ -176,132 +119,65 @@ export const timeKeepingService = {
       deletedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newRecord),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newRecord);
   },
 
   async update(id, data) {
-    try {
-      const current = await this.getById(id);
-      if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
-
-      const nextCheckIn = data.checkInTime ?? current.checkInTime;
-      const nextCheckOut = data.checkOutTime ?? current.checkOutTime;
-      
-      if (nextCheckIn && nextCheckOut && nextCheckOut < nextCheckIn) {
-         throw new Error(ERROR_MSGS.INVALID_TIME);
-      }
-
-      if ((data.date && data.date !== current.date) || (data.employeeId && data.employeeId !== current.employeeId)) {
-         await validators.checkDuplicate(
-            data.employeeId || current.employeeId, 
-            data.date || current.date, 
-            id
-         );
-      }
-
-      const updatedRecord = {
-        ...current,
-        ...data,
-        workCount: calculateWorkCount(data.status || current.status),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const response = await fetch(`${API_URL}/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedRecord),
-      });
-
-      return handleResponse(response);
-    } catch (error) {
-      if (error?.message) throw error;
-      throw new Error(ERROR_MSGS.UPDATE_FAILED);
-    }
-  },
-
-  async remove(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const now = new Date().toISOString();
-    const softDeleteData = {
+    if (data.checkIn && data.checkOut && data.checkIn >= data.checkOut) {
+      throw new Error(ERROR_MSGS.INVALID_TIME);
+    }
+
+    const updatedRecord = {
       ...current,
-      deletedAt: now,
-      updatedAt: now,
+      ...data,
+      workCount: calculateWorkCount(data.status || current.status),
+      updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, updatedRecord);
   },
 
-  async cancel(id, reason) {
+  async remove(id, reason = "Hủy bởi người quản lý") {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
     const updateData = {
       ...current,
-      status: "Đã hủy",          // Đổi trạng thái
-      cancelReason: reason,      // Lưu lý do hủy
-      workCount: 0,              // Hủy thì không tính công
+      status: "Đã hủy",
+      cancelReason: reason,
+      workCount: 0,
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updateData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, updateData);
   },
 
-  // === THÊM HÀM NÀY ĐỂ SỬA LỖI RESTORE ===
   async restore(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // Logic khôi phục
     const restoreData = {
       ...current,
-      deletedAt: null, // Bỏ đánh dấu xóa mềm (nếu có)
+      deletedAt: null,
       updatedAt: new Date().toISOString(),
     };
 
-    // Nếu đang là "Đã hủy", khôi phục về "Đúng giờ" (hoặc trạng thái mặc định)
     if (current.status === "Đã hủy") {
-      restoreData.status = "Đúng giờ"; // Reset trạng thái
-      restoreData.cancelReason = null; // Xóa lý do hủy
-      restoreData.workCount = 1;       // Tính lại công
+      restoreData.status = "Đúng giờ";
+      restoreData.cancelReason = null;
+      restoreData.workCount = 1;
     }
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, restoreData);
   },
-  // =======================================
 
   async destroy(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${id}`);
   },
 };
