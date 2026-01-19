@@ -26,10 +26,7 @@ public class Position extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     private Department department;
-
-    @Column(columnDefinition = "int default 1")
-    private Integer quota;
-
+    
     private String description;
 
     @Column(columnDefinition = "boolean default true")
@@ -37,4 +34,7 @@ public class Position extends BaseEntity {
 
     @Column(columnDefinition = "int default 1")
     private Integer capacity;
+    
+    @Transient
+    private Integer assigneeCount;
 }

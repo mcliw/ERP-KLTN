@@ -1,5 +1,6 @@
 -- =========================================================
--- V5__Init_HRM_Schema.sql - FULL CLEANED VERSION
+-- V5__Init_HRM_Schema.sql - FULL UPDATED VERSION
+-- (Updated for Frontend Layout Compatibility)
 -- =========================================================
 
 -- Kích hoạt extension UUID để tạo ID ngẫu nhiên cho account linkage (nếu chưa có)
@@ -37,6 +38,13 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
+-- [UPDATE] Trạng thái hợp đồng lương (Thay cho is_active boolean)
+DO $$ BEGIN
+    CREATE TYPE salary_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'EXPIRED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
 -- ---------------------------------------------------------
 -- 2. CÁC BẢNG CORE (PHÒNG BAN, CHỨC VỤ)
 -- ---------------------------------------------------------
@@ -54,15 +62,15 @@ CREATE TABLE IF NOT EXISTS departments (
 );
 
 -- Bảng Chức vụ (Positions)
+-- [UPDATE] Đã loại bỏ cột 'quota', chỉ dùng 'capacity'
 CREATE TABLE IF NOT EXISTS positions (
     position_id SERIAL PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL, -- Mã chức vụ
     name VARCHAR(100) NOT NULL,       -- Tên chức vụ
     department_id INT REFERENCES departments(department_id), -- Thuộc phòng ban nào
-    quota INT DEFAULT 1,              -- Số lượng người có thể đảm nhận
     description TEXT,
     status BOOLEAN DEFAULT TRUE,
-    capacity INT DEFAULT 1,          
+    capacity INT DEFAULT 1,           -- Số lượng người tối đa
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -98,6 +106,7 @@ CREATE TABLE IF NOT EXISTS employees (
     -- Thông tin ngân hàng (để chi lương)
     bank_name VARCHAR(100),
     bank_account_number VARCHAR(50),
+    bank_account_name VARCHAR(100), -- [UPDATE] Tên chủ tài khoản (khớp Frontend)
     
     -- Dữ liệu sinh trắc học (FaceNet)
     face_embedding FLOAT[], 
@@ -210,7 +219,8 @@ CREATE TABLE IF NOT EXISTS salary_contracts (
     insurance_salary NUMERIC(15, 2),          -- Mức lương đóng bảo hiểm
     
     effective_date DATE NOT NULL,             -- Ngày bắt đầu áp dụng
-    is_active BOOLEAN DEFAULT TRUE,
+    -- [UPDATE] Dùng Enum Status thay vì boolean is_active
+    status salary_status_enum DEFAULT 'DRAFT', 
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -271,24 +281,25 @@ SELECT setval('departments_department_id_seq', (SELECT MAX(department_id) FROM d
 
 
 -- 2. TẠO DỮ LIỆU CHỨC VỤ (POSITIONS)
-INSERT INTO positions (position_id, code, name, department_id, description, quota, capacity, status) VALUES 
+-- [UPDATE] Loại bỏ trường quota, giữ lại capacity
+INSERT INTO positions (position_id, code, name, department_id, description, capacity, status) VALUES 
 -- HR
-(1, 'POS_HR_MGR', 'Trưởng phòng Nhân Sự', 1, 'Quản lý toàn bộ hoạt động HR', 1, 1, true),
-(2, 'POS_HR_EXEC', 'Chuyên viên Nhân sự', 1, 'Tuyển dụng và C&B', 5, 5, true),
+(1, 'POS_HR_MGR', 'Trưởng phòng Nhân Sự', 1, 'Quản lý toàn bộ hoạt động HR', 1, true),
+(2, 'POS_HR_EXEC', 'Chuyên viên Nhân sự', 1, 'Tuyển dụng và C&B', 5, true),
 -- IT
-(3, 'POS_IT_MGR', 'Trưởng phòng Kỹ Thuật', 2, 'CTO/Tech Lead', 1, 1, true),
-(4, 'POS_DEV_BE', 'Backend Developer', 2, 'Lập trình viên Server/API', 10, 10, true),
-(5, 'POS_DEV_FE', 'Frontend Developer', 2, 'Lập trình viên UI/UX', 10, 10, true),
-(6, 'POS_TESTER', 'QC/Tester', 2, 'Kiểm thử phần mềm', 5, 5, true),
+(3, 'POS_IT_MGR', 'Trưởng phòng Kỹ Thuật', 2, 'CTO/Tech Lead', 1, true),
+(4, 'POS_DEV_BE', 'Backend Developer', 2, 'Lập trình viên Server/API', 10, true),
+(5, 'POS_DEV_FE', 'Frontend Developer', 2, 'Lập trình viên UI/UX', 10, true),
+(6, 'POS_TESTER', 'QC/Tester', 2, 'Kiểm thử phần mềm', 5, true),
 -- Sales
-(7, 'POS_SALES_MGR', 'Trưởng phòng Kinh Doanh', 3, 'Quản lý doanh số', 1, 1, true),
-(8, 'POS_SALES_EXEC', 'Nhân viên Kinh Doanh', 3, 'Sales man', 20, 20, true),
+(7, 'POS_SALES_MGR', 'Trưởng phòng Kinh Doanh', 3, 'Quản lý doanh số', 1, true),
+(8, 'POS_SALES_EXEC', 'Nhân viên Kinh Doanh', 3, 'Sales man', 20, true),
 -- Finance
-(9, 'POS_ACC_MGR', 'Kế toán trưởng', 4, 'Kiểm soát tài chính', 1, 1, true),
-(10, 'POS_ACC_STAFF', 'Kế toán viên', 4, 'Hạch toán chi tiết', 3, 3, true),
+(9, 'POS_ACC_MGR', 'Kế toán trưởng', 4, 'Kiểm soát tài chính', 1, true),
+(10, 'POS_ACC_STAFF', 'Kế toán viên', 4, 'Hạch toán chi tiết', 3, true),
 -- Supply Chain
-(11, 'POS_SC_MGR', 'Trưởng phòng Kho vận', 5, 'Quản lý kho', 1, 1, true),
-(12, 'POS_WH_KEEPER', 'Thủ kho', 5, 'Quản lý xuất nhập tồn', 5, 5, true)
+(11, 'POS_SC_MGR', 'Trưởng phòng Kho vận', 5, 'Quản lý kho', 1, true),
+(12, 'POS_WH_KEEPER', 'Thủ kho', 5, 'Quản lý xuất nhập tồn', 5, true)
 ON CONFLICT (position_id) DO NOTHING;
 
 -- Reset sequence
@@ -296,82 +307,83 @@ SELECT setval('positions_position_id_seq', (SELECT MAX(position_id) FROM positio
 
 
 -- 3. TẠO DỮ LIỆU NHÂN VIÊN (EMPLOYEES)
+-- [UPDATE] Đã thêm trường bank_account_name (lấy theo tên nhân viên)
 INSERT INTO employees (
     employee_id, employee_code, account_id, email, full_name, 
     gender, birthday, phone, identity_card, 
     hometown, address, department_id, position_id, 
     join_date, status, status_empl, 
-    bank_name, bank_account_number, created_at, updated_at
+    bank_name, bank_account_number, bank_account_name, created_at, updated_at
 ) VALUES 
 -- 1. HR Manager
 (1, 'EMP001', uuid_generate_v4(), 'admin@ldg.company', 'Lê Minh Dũng', 
  'Nam', '1990-05-23', '0950797411', '001218730001', 
  'Hà Nội', 'Số 30 Tôn Đức Thắng, Đống Đa, Hà Nội', 
  1, 1, '2022-01-01', 'Active', 'OFFICIAL', 
- 'Vietcombank', '1014567890', NOW(), NOW()),
+ 'Vietcombank', '1014567890', 'Lê Minh Dũng', NOW(), NOW()),
 
 -- 2. IT Manager
 (2, 'EMP002', uuid_generate_v4(), 'it.manager@ldg.company', 'Trần Đức Em', 
  'Nam', '1992-09-03', '0918935772', '001361801002', 
  'Nam Định', 'P. Dịch Vọng Hậu, Cầu Giấy, Hà Nội', 
  2, 3, '2022-03-15', 'Active', 'OFFICIAL', 
- 'Techcombank', '1903456789012', NOW(), NOW()),
+ 'Techcombank', '1903456789012', 'Trần Đức Em', NOW(), NOW()),
 
 -- 3. Sales Manager
 (3, 'EMP003', uuid_generate_v4(), 'sales.manager@ldg.company', 'Nguyễn Mai Linh', 
  'Nữ', '1993-02-22', '0952539353', '001105686603', 
  'Hải Phòng', 'Time City, Minh Khai, Hà Nội', 
  3, 7, '2023-01-10', 'Active', 'OFFICIAL', 
- 'MBBank', '0952539353', NOW(), NOW()),
+ 'MBBank', '0952539353', 'Nguyễn Mai Linh', NOW(), NOW()),
 
 -- 4. Finance Manager
 (4, 'EMP004', uuid_generate_v4(), 'finance.manager@ldg.company', 'Phạm Thu Hương', 
  'Nữ', '1988-11-08', '0994876804', '001875507004', 
  'Thái Bình', 'Royal City, Thanh Xuân, Hà Nội', 
  4, 9, '2021-06-01', 'Active', 'OFFICIAL', 
- 'BIDV', '21510002345678', NOW(), NOW()),
+ 'BIDV', '21510002345678', 'Phạm Thu Hương', NOW(), NOW()),
 
 -- 5. Supply Chain Manager
 (5, 'EMP005', uuid_generate_v4(), 'sc.manager@ldg.company', 'Hoàng Văn Thái', 
  'Nam', '1991-08-24', '0968182935', '001840194005', 
  'Nghệ An', 'Mỹ Đình, Nam Từ Liêm, Hà Nội', 
  5, 11, '2023-05-20', 'Active', 'OFFICIAL', 
- 'VPBank', '123456789', NOW(), NOW()),
+ 'VPBank', '123456789', 'Hoàng Văn Thái', NOW(), NOW()),
 
 -- 6. HR Staff
 (6, 'EMP006', uuid_generate_v4(), 'hr.staff@ldg.company', 'Nguyễn Mai Châu', 
  'Nữ', '1995-09-01', '0941394816', '001794392006', 
  'Hà Nội', 'Hoàn Kiếm, Hà Nội', 
  1, 2, '2023-08-01', 'Active', 'OFFICIAL', 
- 'TPBank', '00012345678', NOW(), NOW()),
+ 'TPBank', '00012345678', 'Nguyễn Mai Châu', NOW(), NOW()),
 
 -- 7. Backend Dev
 (7, 'EMP007', uuid_generate_v4(), 'dev.be@ldg.company', 'Đỗ Quang Khải', 
  'Nam', '1996-12-12', '0977112233', '001234567007', 
  'Hưng Yên', 'Thanh Xuân, Hà Nội', 
  2, 4, '2024-01-15', 'Active', 'PROBATION', 
- 'Vietinbank', '108000123456', NOW(), NOW()),
+ 'Vietinbank', '108000123456', 'Đỗ Quang Khải', NOW(), NOW()),
 
 -- 8. Frontend Dev
 (8, 'EMP008', uuid_generate_v4(), 'dev.fe@ldg.company', 'Lê Thị Bưởi', 
  'Nữ', '1997-04-30', '0988223344', '001234567008', 
  'Bắc Ninh', 'Long Biên, Hà Nội', 
  2, 5, '2024-02-01', 'Active', 'PROBATION', 
- 'ACB', '1234567', NOW(), NOW()),
+ 'ACB', '1234567', 'Lê Thị Bưởi', NOW(), NOW()),
 
 -- 9. Sales Exec
 (9, 'EMP009', uuid_generate_v4(), 'sales.exec@ldg.company', 'Đặng Quốc Hùng', 
  'Nam', '1994-10-20', '0912345678', '001234567009', 
  'Hà Nam', 'Hà Đông, Hà Nội', 
  3, 8, '2023-11-11', 'Active', 'OFFICIAL', 
- 'VIB', '987654321', NOW(), NOW()),
+ 'VIB', '987654321', 'Đặng Quốc Hùng', NOW(), NOW()),
 
 -- 10. Accountant Staff
 (10, 'EMP010', uuid_generate_v4(), 'acc.staff@ldg.company', 'Vũ Thị Mận', 
  'Nữ', '1993-01-01', '0909090909', '001234567010', 
  'Vĩnh Phúc', 'Cầu Giấy, Hà Nội', 
  4, 10, '2022-10-10', 'Active', 'OFFICIAL', 
- 'Sacombank', '020012345678', NOW(), NOW())
+ 'Sacombank', '020012345678', 'Vũ Thị Mận', NOW(), NOW())
 
 ON CONFLICT (employee_id) DO NOTHING;
 
@@ -388,17 +400,18 @@ UPDATE departments SET manager_id = 5 WHERE department_id = 5; -- Supply Chain
 
 
 -- 5. TẠO HỢP ĐỒNG LƯƠNG (SALARY CONTRACTS)
-INSERT INTO salary_contracts (employee_id, base_salary, allowance, insurance_salary, effective_date, is_active) VALUES
-(1, 25000000, 2000000, 10000000, '2022-01-01', true), -- HR Mgr
-(2, 35000000, 3000000, 12000000, '2022-03-15', true), -- IT Mgr
-(3, 30000000, 5000000, 10000000, '2023-01-10', true), -- Sales Mgr (Allowance cao do xăng xe)
-(4, 28000000, 2000000, 10000000, '2021-06-01', true), -- Finance Mgr
-(5, 22000000, 3000000, 9000000,  '2023-05-20', true), -- SC Mgr
-(6, 12000000, 1000000, 6000000,  '2023-08-01', true), -- HR Staff
-(7, 18000000, 1500000, 8000000,  '2024-01-15', true), -- BE Dev
-(8, 16000000, 1500000, 8000000,  '2024-02-01', true), -- FE Dev
-(9, 10000000, 2000000, 5000000,  '2023-11-11', true), -- Sales Exec
-(10, 14000000, 1000000, 7000000, '2022-10-10', true)  -- Acc Staff
+-- [UPDATE] Đổi cột is_active thành status = 'ACTIVE'
+INSERT INTO salary_contracts (employee_id, base_salary, allowance, insurance_salary, effective_date, status) VALUES
+(1, 25000000, 2000000, 10000000, '2022-01-01', 'ACTIVE'), -- HR Mgr
+(2, 35000000, 3000000, 12000000, '2022-03-15', 'ACTIVE'), -- IT Mgr
+(3, 30000000, 5000000, 10000000, '2023-01-10', 'ACTIVE'), -- Sales Mgr (Allowance cao do xăng xe)
+(4, 28000000, 2000000, 10000000, '2021-06-01', 'ACTIVE'), -- Finance Mgr
+(5, 22000000, 3000000, 9000000,  '2023-05-20', 'ACTIVE'), -- SC Mgr
+(6, 12000000, 1000000, 6000000,  '2023-08-01', 'ACTIVE'), -- HR Staff
+(7, 18000000, 1500000, 8000000,  '2024-01-15', 'ACTIVE'), -- BE Dev
+(8, 16000000, 1500000, 8000000,  '2024-02-01', 'ACTIVE'), -- FE Dev
+(9, 10000000, 2000000, 5000000,  '2023-11-11', 'ACTIVE'), -- Sales Exec
+(10, 14000000, 1000000, 7000000, '2022-10-10', 'ACTIVE')  -- Acc Staff
 ON CONFLICT DO NOTHING;
 
 

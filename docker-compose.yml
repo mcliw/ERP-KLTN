@@ -11,6 +11,7 @@ services:
     volumes:
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
+      - face-service
       - gateway-service
     networks:
       - erp-network

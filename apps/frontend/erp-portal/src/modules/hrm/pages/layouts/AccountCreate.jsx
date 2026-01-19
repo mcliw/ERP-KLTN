@@ -1,41 +1,55 @@
-import React from "react";
-import EmployeeForm from "../../components/layouts/EmployeeForm";
-import { employeeService } from "../../services/employee.service";
+// apps/frontend/erp-portal/src/modules/hrm/pages/layouts/AccountCreate.jsx
+
+import AccountForm from "../../components/layouts/AccountForm";
+import { accountService } from "../../services/account.service";
+import { ROLES } from "../../../../shared/constants/roles";
 import { useCreateResource } from "../../../../shared/hooks/useCreateResource";
 import PageContainer from "../../../../shared/components/PageContainer";
 
-export default function EmployeeCreate() {
+/* =========================
+ * Options & Errors
+ * ========================= */
+const ROLE_OPTIONS = [
+  { value: ROLES.ADMIN, label: "Admin" },
+  { value: ROLES.HR_MANAGER, label: "HR Manager" },
+  { value: ROLES.HR_EMPLOYEE, label: "HR Employee" },
+  { value: ROLES.SCM_MANAGER, label: "SCM Manager" },
+  { value: ROLES.SCM_EMPLOYEE, label: "SCM Employee" },
+  { value: ROLES.SALES_CRM_MANAGER, label: "Sales CRM Manager" },
+  { value: ROLES.SALES_CRM_EMPLOYEE, label: "Sales CRM Employee" },
+  { value: ROLES.SUPPLY_CHAIN_MANAGER, label: "Supply Chain Manager" },
+  { value: ROLES.SUPPLY_CHAIN_EMPLOYEE, label: "Supply Chain Employee" },
+  { value: ROLES.FINANCE_ACCOUNTING_MANAGER, label: "Finance Accounting Manager" },
+  { value: ROLES.FINANCE_ACCOUNTING_EMPLOYEE, label: "Finance Accounting Employee" },
+];
+
+const ACCOUNT_ERRORS = {
+  username: "Tên đăng nhập đã tồn tại",
+  employeeCode: "Nhân viên này đã có tài khoản",
+};
+
+export default function AccountCreate() {
   const { submitting, handleSubmit, handleCancel } = useCreateResource(
-    (data) => employeeService.create(data),
-    "/hrm/ho-so-nhan-vien", // Redirect về danh sách sau khi tạo xong
+    (data) => accountService.create(data),
+    "/hrm/tai-khoan",
     {
-      resourceName: "hồ sơ nhân viên",
-      // Transform payload: Loại bỏ các trường thừa nếu cần
-      transformPayload: (formData) => {
-        const { avatarPreview, ...rest } = formData;
-        // Đảm bảo department/position gửi lên là String Code (IT, DEV...)
-        return rest;
-      },
+      resourceName: "tài khoản",
+      errorMessages: ACCOUNT_ERRORS,
       onSuccess: () => {
-         console.log("Tạo nhân viên thành công");
-      }
+        console.log("Đã tạo xong tài khoản mới");
+      },
     }
   );
 
   return (
-    <PageContainer 
-      title="Thêm mới hồ sơ nhân viên" 
-      breadcrumbs={[
-        { label: "Nhân sự", to: "/hrm/ho-so-nhan-vien" },
-        { label: "Thêm mới", active: true }
-      ]}
-    >
-      <EmployeeForm
+    <PageContainer title="Thêm mới tài khoản">
+      <AccountForm
         mode="create"
+        roleOptions={ROLE_OPTIONS}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         disabled={submitting}
-        checkCodeExists={employeeService.checkCodeExists?.bind(employeeService)}
+        checkUsernameExists={accountService.checkUsernameExists?.bind(accountService)}
       />
     </PageContainer>
   );
