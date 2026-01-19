@@ -39,7 +39,7 @@ def route_hrm_plan(module: str, message: str, auth: dict) -> Plan:
             needs_clarification=False,
             clarifying_question=None,
             steps=[
-                PlanStep(id="s1", tool="thong_tin_nhan_vien", args={"employee_code": emp_code}, save_as="emp")
+                PlanStep(id="s1", module = module, tool="thong_tin_nhan_vien", args={"employee_code": emp_code}, save_as="emp")
             ],
             final_response_template=None,
         )
@@ -54,6 +54,7 @@ def route_hrm_plan(module: str, message: str, auth: dict) -> Plan:
             steps=[
                 PlanStep(
                     id="s1",
+                    module = module,
                     tool="thong_tin_nhan_vien_theo_user",
                     args={"user_id": user_id},   # hoặc {} để executor inject
                     save_as="me",
@@ -79,7 +80,7 @@ def route_hrm_plan(module: str, message: str, auth: dict) -> Plan:
         intent="tim_nhan_vien",
         needs_clarification=False,
         clarifying_question=None,
-        steps=[PlanStep(id="s1", tool="tim_nhan_vien", args={"tu_khoa": msg}, save_as="candidates")],
+        steps=[PlanStep(id="s1", module = module, tool="tim_nhan_vien", args={"tu_khoa": msg}, save_as="candidates")],
         final_response_template=None,
     )
 

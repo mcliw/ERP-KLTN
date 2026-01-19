@@ -1,3 +1,4 @@
+# apps\services\erp_ai_chatbot\app\ai\module_registry.py
 from __future__ import annotations
 from typing import Dict, Optional
 from app.ai.tooling import ToolSpec

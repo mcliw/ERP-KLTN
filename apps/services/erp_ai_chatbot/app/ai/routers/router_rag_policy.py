@@ -21,6 +21,7 @@ def plan_route_rag_policy(module: str, message: str, auth: dict) -> Plan:
         steps=[
             PlanStep(
                 id="s1",
+                module = module,
                 tool="tra_cuu_chinh_sach",
                 args={"query": msg, "top_k": 5},
                 save_as="rag_hits",

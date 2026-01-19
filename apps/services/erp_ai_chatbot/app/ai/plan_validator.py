@@ -80,10 +80,15 @@ def validate_plan(plan: Plan, auth: Dict[str, Any], user_perms: Set[str]):
                 if a["target_user_id"] not in (None, user_id):
                     raise InvalidPlan(SELF_ONLY_MSG)
 
-        # 3) allowed_scopes theo TOOL_POLICIES (tầng tool)
-        allowed_scopes = policy.get("allowed_scopes", ["SELF"])
-        effective_scope = scope if scope in allowed_scopes else policy.get("default_scope", "SELF")
-        if effective_scope not in allowed_scopes:
+        # 3) allowed_scopes theo TOOL_POLICIES (tầng tool) - KHÔNG upgrade scope
+        allowed_scopes = policy.get("allowed_scopes") or ["SELF"]
+        default_scope = policy.get("default_scope") or allowed_scopes[0]
+
+        # effective_scope dùng để chọn field_policy/mask, nhưng KHÔNG được vượt scope thực tế
+        if scope in allowed_scopes:
+            effective_scope = scope
+        else:
+            # scope không nằm trong allowed_scopes => chặn luôn
             raise InvalidPlan("Bạn không có quyền truy cập chức năng này trong phạm vi hiện tại.")
 
         # 4) permission gating (chỉ check sau khi đã xử lý SELF-violation)

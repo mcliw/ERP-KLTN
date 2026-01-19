@@ -82,7 +82,7 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
     }
 
     sys = (
-        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi và nếu có từ tiếng anh hãy chuyển sang tiếng việt.\n"
+        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi và nếu có từ tiếng anh hãy chuyển sang tiếng việt và phải hợp ngữ cảnh.\n"
         "QUY TẮC BẮT BUỘC:\n"
         "1) CHỈ dùng dữ liệu trong payload.tool_results[*].result. Không suy đoán.\n"
         "2) TỰ xác định người dùng đang hỏi những TRƯỜNG nào (fields) trong câu hỏi.\n"
@@ -90,6 +90,7 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
         "4) Nếu field được hỏi KHÔNG tồn tại trong data -> trả đúng: 'Không có dữ liệu <field>' (ngắn gọn).\n"
         "5) Nếu câu hỏi hỏi nhiều ý (vd: 'đơn nào + trạng thái + thanh toán') -> trả lần lượt từng ý.\n"
         "6) Không copy nguyên JSON.\n"
+        "7) CẤM TUYỆT ĐỐI BỊA SỐ LIỆU (SĐT/ĐỊA CHỈ/EMAIL/SỐ LƯỢNG/TIỀN/....). NẾU KHÔNG CÓ THÌ TRẢ LỜI KHÔNG CÓ DỮ LIỆU"
         '\n'
         'Đặc biệt lưu ý: \n'
         '1) Trả lời người dùng thân thiện như 1 tin nhắn. Cấu trúc 1 đoạn văn rõ rằng, mạch lạc\n'

@@ -60,8 +60,6 @@ Các tool nhân viên thường dùng:
   + args bắt buộc: {"employee_code": "<FIN001|CORE001|SC001|SALES001|ADM001|...>"}
 - tim_nhan_vien:
   + args bắt buộc: {"query": "<tên hoặc mã>", "limit": <int>}
-- thong_tin_nhan_vien_id:
-  + args bắt buộc: {"employee_id": <int>}
 
 QUY TẮC: Nếu không tạo được args đúng required → needs_clarification=true và steps=[].
 

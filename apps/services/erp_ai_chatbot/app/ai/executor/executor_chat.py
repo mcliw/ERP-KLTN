@@ -9,42 +9,30 @@ from uuid import UUID
 from typing import Any, Dict, Optional
 from app.core.errors import PermissionDenied, InvalidPlan, ToolExecutionError 
 
-from app.ai.module_detector import detect_module_llm
+from app.ai.module_detector import detect_module_llm, detect_tasks_llm
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough, is_llm_available
 from app.ai.executor.executor_hrm import execute_chat_hrm
 from app.ai.executor.executor_supply_chain import execute_chat_supply_chain
 from app.ai.executor.executor_sale_crm import execute_chat_sale_crm
 from app.ai.executor.executor_finance_accounting import execute_chat_finance_accounting
 from app.ai.executor.executor_rag_policy import execute_chat_rag_policy
+from app.ai.auto_cross_planner import build_cross_plan_llm
+from app.ai.executor.executor_cross_plan import run_cross_plan
+
 
 VALID_MODULES = {"hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"}
 MODULE_DETECT_THRESHOLD = float(os.getenv("MODULE_DETECT_THRESHOLD", "0.60"))
+
+def _system_error_message(q: str) -> str:
+    q = (q or "").strip()
+    if q:
+        return f"Hệ thống gặp lỗi khi xử lý yêu cầu: {q}."
+    return "Hệ thống gặp lỗi khi xử lý yêu cầu."
 
 def _looks_like_policy(text: str) -> bool:
     t = (text or "").lower()
     keys = ["quy định", "chính sách", "hướng dẫn", "nội quy", "quy trình", "sổ tay", "policy", "handbook"]
     return any(k in t for k in keys)
-
-def _strip_policy_part(text: str) -> str:
-    # tách phần hỏi policy đơn giản: lấy từ "quy định/chính sách..." về sau
-    t = text or ""
-    lowers = t.lower()
-    marks = ["quy định", "chính sách", "hướng dẫn", "nội quy", "quy trình", "sổ tay", "policy", "handbook"]
-    idxs = [lowers.find(m) for m in marks if lowers.find(m) >= 0]
-    if not idxs:
-        return t
-    i = min(idxs)
-    return t[i:].strip()
-
-def _strip_db_part(text: str) -> str:
-    # tách phần DB đơn giản: lấy trước "và" nếu sau "và" là policy
-    t = text or ""
-    lowers = t.lower()
-    if " và " in lowers:
-        parts = t.split(" và ")
-        if len(parts) >= 2 and _looks_like_policy(parts[-1]):
-            return parts[0].strip()
-    return t.strip()
 
 def make_error_step(tool: str, message: str, code: str = "PERMISSION_DENIED", *, meta: dict | None = None, args: dict | None = None):
     return [{
@@ -61,6 +49,21 @@ def make_error_step(tool: str, message: str, code: str = "PERMISSION_DENIED", *,
         }
     }]
 
+DB_MODULES = {"hrm", "supply_chain", "sale_crm", "finance_accounting"}
+
+def _summarize_db_needs(db_questions: list[str]) -> str:
+    # gom gọn, không lan man
+    # ví dụ: "tôi đã nghỉ bao nhiêu ngày tháng này; bảng lương tháng 12"
+    uniq = []
+    for q in db_questions:
+        q = (q or "").strip()
+        if q and q not in uniq:
+            uniq.append(q)
+    if not uniq:
+        return ""
+    if len(uniq) == 1:
+        return uniq[0]
+    return "; ".join(uniq[:3])
 
 def _as_float(x, default=0.0) -> float:
     try:
@@ -83,12 +86,57 @@ def execute_chat_unified(
     selected_module: Optional[str] = None
     confidence: float = 0.0
 
-    # ===== PHA A Detect =====
+
+    # ===== PHA A (AUTO): build cross-module plan bằng LLM =====
     if module == "auto":
+        # 1) LLM tách task + build plan nhiều bước
+        auth = {"user_id": str(user_id) if user_id else None, "role": role}
+        plan = build_cross_plan_llm(msg, auth)
+
+        # 2) Nếu cần làm rõ
+        if plan.needs_clarification:
+            q = plan.clarifying_question or "Bạn muốn hỏi về nghiệp vụ ERP hay tra cứu chính sách?"
+            out = {
+                "answer": q,
+                "selected_module": None,
+                "confidence": 0.0,
+                "needs_clarification": True,
+                "clarifying_question": q,
+                "plan": plan.model_dump(),
+            }
+            if debug:
+                out["plan_debug"] = plan.model_dump()
+            return out
+
+        # 3) Nếu có steps => chạy cross-module executor
+        if plan.steps:
+            res = run_cross_plan(
+                plan,
+                user_id=user_id,
+                role=role,
+                debug=debug,
+            )
+
+            out = {
+                "answer": res.get("answer"),
+                "selected_module": "auto_multi",
+                "confidence": 1.0,
+                "plan": plan.model_dump(),
+            }
+
+            if debug:
+                out["steps"] = res.get("steps")
+                out["store"] = res.get("store")
+
+            return out
+
+        # 4) Fallback: không build được plan thì quay về detect module đơn
         det = detect_module_llm(message=msg, role=role)
         selected_module = det.get("selected_module")
         confidence = _as_float(det.get("confidence"), 0.0)
 
+        # ===== SINGLE TASK: fallback flow cũ (detect_module_llm) =====
+        # nếu tasks chỉ có 1 -> dùng detector cũ để giữ behavior hiện tại
         needs_clar = bool(det.get("needs_clarification"))
         if (not selected_module) or needs_clar or (confidence < MODULE_DETECT_THRESHOLD):
             q = det.get("clarifying_question") or "Bạn muốn hỏi thuộc module nào: hrm / supply_chain / sale_crm / finance_accounting?"
@@ -136,7 +184,7 @@ def execute_chat_unified(
         if debug and det:
             out["detector"] = det
         return out
-
+    
     # ===== PHA B/C Delegate + BẮT LỖI =====
     try:
         if selected_module == "hrm":
@@ -184,8 +232,12 @@ def execute_chat_unified(
 
     except (PermissionDenied, InvalidPlan) as e:
         msg_err = str(e)
-        step_infos = make_error_step("__permission_check__", msg_err, code="PERMISSION_DENIED",
-                                    meta={"module": selected_module or module, "reason": "rbac_or_scope", "question": msg})
+        step_infos = make_error_step(
+            "__permission_check__",
+            msg_err,
+            code="PERMISSION_DENIED",
+            meta={"module": selected_module or module, "reason": "rbac_or_scope", "question": msg}
+        )
         out = {"ok": False, "module": selected_module or module, "answer": msg_err, "steps": step_infos}
         if debug:
             out["debug_error"] = {"type": type(e).__name__, "message": msg_err}
@@ -195,7 +247,11 @@ def execute_chat_unified(
         tb = traceback.format_exc()
 
         step_infos = make_error_step("__system__", "Hệ thống gặp lỗi khi xử lý yêu cầu.", code="INTERNAL_ERROR")
-        out = {"ok": False, "module": selected_module or module, "answer": "Hệ thống gặp lỗi khi xử lý yêu cầu.", "steps": step_infos}
+        out = {"ok": False,
+            "module": selected_module or module,
+            "answer": "Hệ thống gặp lỗi khi xử lý yêu cầu.",
+            "steps": step_infos
+        }
 
         # ✅ chỉ bật khi debug=true để không lộ nội bộ
         if debug:
@@ -205,7 +261,6 @@ def execute_chat_unified(
                 "traceback": tb,
             }
         return out
-
 
     res = dict(res or {})
     res.setdefault("plan", {})

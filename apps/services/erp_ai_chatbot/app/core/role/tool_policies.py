@@ -133,37 +133,37 @@ TOOL_POLICIES = {
     "field_policy": {"DEPT": {"allow": ["leave_request_id","employee_id","status","leave_type","tu_ngay","den_ngay"], "mask": []},
                      "ALL":  {"allow": ["leave_request_id","employee_id","department_code","status","leave_type","tu_ngay","den_ngay"], "mask": []}},
   },
-
-  # SELF tool (ai cũng xem được chính mình)
   "thong_tin_nhan_vien_theo_user": {
-    "required_permissions": ["HRM_ACCOUNT_VIEW"],      # <--- đổi từ HRM_EMPLOYEE_VIEW
-    "allowed_scopes": ["SELF"],                        # <--- siết chỉ SELF
-    "default_scope": "SELF",
+    "required_permissions": ["HRM_ACCOUNT_VIEW"],
+    "allowed_scopes": ["SELF"],
     "field_policy": {
-      "SELF": {"allow": ["employee_id","employee_code","department_code","position","status","full_name"], "mask": []},
-    },
+      "SELF": {
+        "allow": ["employee_id","user_id","employee_code","full_name","status","department_code","department_name","position_id","position_title","email_company","phone","join_date","resign_date"],
+        "mask": []
+      }
+    }
   },
-
-  # Tools xem người khác (chỉ HR_MANAGER/ADMIN hoặc ai có quyền)
   "thong_tin_nhan_vien": {
     "required_permissions": ["HRM_EMPLOYEE_VIEW"],
-    "allowed_scopes": ["ALL"],                         # <--- siết ALL nếu bạn muốn chỉ HR xem người khác
-    "default_scope": "ALL",
+    "allowed_scopes": ["ALL"],
     "field_policy": {
-      "ALL": {"allow": ["employee_code","full_name","department_code","position","status"], "mask": ["email","phone"]},
-    },
+      "ALL": {
+        "allow": ["employee_id","employee_code","full_name","status","department_code","department_name","position_id","position_title","join_date","resign_date","email_company","phone"],
+        "mask": []
+      }
+    }
   },
 
   "tim_nhan_vien": {
     "required_permissions": ["HRM_EMPLOYEE_VIEW"],
     "allowed_scopes": ["ALL"],
-    "default_scope": "ALL",
     "field_policy": {
-      "ALL": {"allow": ["employee_id","employee_code","full_name","department_code"], "mask": ["email","phone"]},
-    },
+      "ALL": {
+        "allow": ["employee_id","employee_code","full_name","department_id","position_id"],
+        "mask": []
+      }
+    }
   },
-
-
   "danh_sach_ky_luong": {
     "required_permissions": ["HRM_SALARY_INFO_VIEW"],
     "allowed_scopes": ["DEPT", "ALL"],  

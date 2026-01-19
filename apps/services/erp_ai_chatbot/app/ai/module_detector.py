@@ -20,6 +20,9 @@ _client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else genai.Cl
 MODULES = ["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"]
 ModuleName = Literal["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"]
 
+TASK_MODULES = ["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy", "general_chat"]
+TaskModuleName = Literal["hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy", "general_chat"]
+
 # ====== output model ======
 class ModuleDetectOut(BaseModel):
     selected_module: Optional[ModuleName] = None
@@ -43,23 +46,49 @@ MODULE_DETECT_JSON_SCHEMA: Dict[str, Any] = {
     },
 }
 
-
 # ====== prompt (mô tả đủ sâu, tránh “của tôi” = sale_crm) ======
 MODULE_DESC = """
 Bạn là bộ PHÂN LOẠI MODULE cho Chatbot ERP. Bạn KHÔNG trả lời nghiệp vụ.
 Bạn CHỈ xuất JSON theo schema (selected_module, confidence, needs_clarification, clarifying_question). Không thêm text ngoài JSON.
 
 MỤC TIÊU:
-Chọn đúng 1 module phù hợp nhất: hrm / supply_chain / sale_crm / finance_accounting.
-
-NGUYÊN TẮC QUAN TRỌNG:
-- KHÔNG dựa vào đại từ “tôi/của tôi” để suy luận.
-  Câu hỏi có thể nói về: (1) bản thân người hỏi, (2) nhân viên/khách hàng/đối tác khác, (3) toàn bộ danh sách/tổng hợp.
-- Chỉ dựa vào “đối tượng nghiệp vụ” + “từ khóa/chứng từ/thực thể” xuất hiện trong câu.
-- Nếu đã chắc module (confidence >= 0.60) thì needs_clarification=false, KHÔNG hỏi lại chọn module.
+Chọn đúng 1 module phù hợp nhất:
+- hrm
+- supply_chain
+- sale_crm
+- finance_accounting
+- rag_policy
 
 ========================
-DẤU HIỆU NHẬN DIỆN THEO ĐỐI TƯỢNG NGHIỆP VỤ
+QUY TẮC PHÂN BIỆT QUAN TRỌNG NHẤT (DATA SOURCE RULE)
+========================
+1) Nếu câu hỏi là "quy định / chính sách / quy trình / hướng dẫn / nội quy / sổ tay / điều khoản / cách tính / công thức"
+   => CHỌN rag_policy.
+
+2) Nếu câu hỏi là "tính toán giả định" mà SỐ LIỆU NẰM NGAY TRONG CÂU HỎI (user tự đưa số):
+   - có số + %, + giảm/chiết khấu/voucher/flash sale, hoặc bài toán kiểu "bao nhiêu?"
+   => CHỌN rag_policy.
+   Ví dụ:
+   - "Laptop giá 20 triệu, giảm 10% còn bao nhiêu?"
+   - "Giả sử lương 10 triệu thì đóng BH bao nhiêu?"
+   - "Giá niêm yết 20tr, flash sale -2tr, voucher 10% tối đa 500k => thanh toán bao nhiêu?"
+
+3) CHỈ chọn các module DB (hrm/supply_chain/sale_crm/finance_accounting) khi user hỏi DỮ LIỆU THỰC TẾ đang có trong hệ thống
+   (cần tra DB mới biết): trạng thái đơn/hóa đơn/công nợ/tồn kho/lương tháng này/nghỉ phép tháng này...
+
+========================
+PHÂN BIỆT “CỦA TÔI” (CỰC QUAN TRỌNG)
+========================
+- “của tôi” hỏi QUY TẮC/LOGIC => rag_policy
+  Ví dụ: "Quy tắc chấm công của tôi tính thế nào?" => rag_policy
+
+- “của tôi” hỏi SỐ LIỆU THỰC TẾ (trạng thái hiện tại/tháng này/đã nghỉ bao nhiêu/lương bao nhiêu/đơn hàng của tôi)
+  => module DB tương ứng (hrm/sale_crm/finance_accounting/supply_chain)
+
+TUYỆT ĐỐI KHÔNG vì có chữ "tôi/của tôi" mà chọn sale_crm/hrm nếu nội dung là quy tắc/cách tính.
+
+========================
+DẤU HIỆU NHẬN DIỆN THEO ĐỐI TƯỢNG NGHIỆP VỤ (CHỈ KHI KHÔNG THUỘC rag_policy)
 ========================
 
 A) HRM (nhân sự)
@@ -193,6 +222,61 @@ OUTPUT
 - clarifying_question: null nếu không cần hỏi; có string nếu cần hỏi
 """
 
+class TaskItem(BaseModel):
+    module: TaskModuleName
+    question: str
+
+class TaskDetectOut(BaseModel):
+    needs_clarification: bool = False
+    clarifying_question: Optional[str] = None
+    tasks: list[TaskItem] = Field(default_factory=list)
+
+TASK_DETECT_JSON_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["needs_clarification", "clarifying_question", "tasks"],
+    "properties": {
+        "needs_clarification": {"type": "boolean"},
+        "clarifying_question": {"type": ["string", "null"]},
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["module", "question"],
+                "properties": {
+                    "module": {"type": "string", "enum": TASK_MODULES},
+                    "question": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
+TASK_DESC = """
+Bạn là bộ TÁCH NHIỆM VỤ (task decomposer) cho Chatbot ERP.
+Bạn KHÔNG chọn tool, KHÔNG trả lời nghiệp vụ.
+Bạn CHỈ xuất JSON theo schema: needs_clarification, clarifying_question, tasks.
+
+MỤC TIÊU:
+- Tách câu hỏi thành 1-3 tasks.
+- Mỗi task gồm:
+  - module: hrm | supply_chain | sale_crm | finance_accounting | rag_policy | general_chat
+  - question: viết lại ngắn gọn đúng ý cho task đó.
+
+QUY TẮC:
+1) DB modules (hrm/supply_chain/sale_crm/finance_accounting) dùng khi user hỏi dữ liệu thực tế trong hệ thống (nghỉ phép, chấm công, hóa đơn, công nợ, tồn kho, đơn hàng...).
+2) rag_policy dùng khi user hỏi quy định/chính sách/hướng dẫn/nội quy/quy trình/sổ tay.
+3) general_chat dùng khi user hỏi chuyện xã giao/không thuộc ERP và không cần tra cứu DB/chính sách.
+4) Nếu một câu vừa có DB vừa có policy => tasks phải có cả 2 (1 task DB + 1 task rag_policy).
+5) Không cần dựa vào từ 'và' hay dấu câu; cứ hiểu đúng ý và tách.
+6) Nếu quá mơ hồ không biết tách => needs_clarification=true và hỏi 1 câu ngắn.
+
+GỢI Ý:
+1) Nếu câu chứa mã nhân viên/mã chứng từ (FIN004, PO-..., INV-...) và hỏi trạng thái/phòng/active…” → ưu tiên DB module tương ứng.
+2) Nếu câu có từ ‘quy tắc/quy định/chính sách/hướng dẫn’ hoặc hỏi ‘tính như thế nào/cách tính’ theo quy trình” → rag_policy.
+
+OUTPUT: chỉ JSON, không thêm chữ.
+"""
+
 def detect_module_llm(message: str, role: str | None = None) -> dict:
     msg = (message or "").strip()
     if not msg:
@@ -238,4 +322,44 @@ def detect_module_llm(message: str, role: str | None = None) -> dict:
             "needs_clarification": True,
             "clarifying_question": "Bộ phân loại module đang bận. Bạn chọn module: hrm / supply_chain / sale_crm / finance_accounting?",
             "error": f"detector_exception:{type(e).__name__}:{e}",
+        }
+
+def detect_tasks_llm(message: str, role: str | None = None) -> dict:
+    msg = (message or "").strip()
+    if not msg:
+        return {
+            "needs_clarification": True,
+            "clarifying_question": "Bạn muốn hỏi về nghiệp vụ ERP hay tra cứu chính sách?",
+            "tasks": [],
+            "error": "empty_message",
+        }
+
+    try:
+        resp = _client.models.generate_content(
+            model=_GEMINI_DETECT_MODEL,
+            contents=f"USER_MESSAGE:\n{msg}\nROLE:\n{role or ''}",
+            config={
+                "system_instruction": TASK_DESC,
+                "temperature": 0.0,
+                "response_mime_type": "application/json",
+                "response_json_schema": TASK_DETECT_JSON_SCHEMA,
+            },
+        )
+        text = (resp.text or "").strip()
+        data = json.loads(text) if text else {}
+        out = TaskDetectOut.model_validate(data)
+
+        # ép tối thiểu 1 task nếu LLM trả rỗng
+        if (not out.needs_clarification) and (not out.tasks):
+            out = out.model_copy(update={
+                "tasks": [TaskItem(module="general_chat", question=msg)]
+            })
+
+        return {**out.model_dump(), "error": None}
+    except Exception as e:
+        return {
+            "needs_clarification": False,
+            "clarifying_question": None,
+            "tasks": [{"module": "general_chat", "question": msg}],
+            "error": f"task_detector_exception:{type(e).__name__}:{e}",
         }
