@@ -6,6 +6,7 @@ import { formatDate } from "../../../../shared/utils/format";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 import { hasPermission } from "../../../../shared/utils/permission";
 import { FaCheck, FaTimes, FaUndo } from "react-icons/fa";
+import { useToast } from "../../../../shared/components/ToastProvider";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
@@ -15,6 +16,7 @@ export default function OnLeaveDetail() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_LEAVE_UPDATE);
+  const toast = useToast();
 
   const { data: onLeave, loading, setData } = useFetchDetail(onLeaveService.getById, id);
 
@@ -29,9 +31,9 @@ export default function OnLeaveDetail() {
     if (!window.confirm("Duyệt đơn nghỉ này?")) return;
     try {
       await onLeaveService.approve(id, user?.name || "Admin");
-      alert("Đã duyệt đơn thành công!");
+      toast.success("Đã duyệt đơn thành công!");
       navigate("/hrm/nghi-phep");
-    } catch (e) { alert("Lỗi: " + e.message); }
+    } catch (e) { toast.error("Lỗi: " + e.message); }
   };
 
   const handleReject = async () => {
@@ -39,9 +41,9 @@ export default function OnLeaveDetail() {
     if (!reason?.trim()) return;
     try {
       await onLeaveService.reject(id, reason, user?.name || "Admin");
-      alert("Đã từ chối đơn!");
+      toast.error("Đã từ chối đơn!");
       navigate("/hrm/nghi-phep");
-    } catch (e) { alert("Lỗi: " + e.message); }
+    } catch (e) { toast.error("Lỗi: " + e.message); }
   };
 
   return (
@@ -54,8 +56,8 @@ export default function OnLeaveDetail() {
             {!isDeleted && onLeave.status === "Chờ duyệt" && canEdit && (
               <>
                 <EditButton onClick={() => navigate(`/hrm/nghi-phep/${id}/chinh-sua`)} />
-                <button className="btn-success" onClick={handleApprove}><FaCheck /> Duyệt</button>
-                <button className="btn-danger" onClick={handleReject}><FaTimes /> Từ chối</button>
+                <button className="btn-success" onClick={handleApprove}><FaCheck /> <span>Duyệt</span></button>
+                <button className="btn-danger" onClick={handleReject}><FaTimes /> <span>Từ chối</span></button>
               </>
             )}
           </div>

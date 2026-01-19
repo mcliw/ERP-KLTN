@@ -14,8 +14,8 @@ import {
 
 export const hrmMenu = [
   {
-    label: "Dashboard",
-    path: "/hrm/dashboard",
+    label: "Trang chủ Nhân sự",
+    path: "/hrm/trang-chu-nhan-su",
     icon: <FaTachometerAlt />,
     // Trong file permission, HRM_REPORT_VIEW đã là mảng ['ADMIN', 'CFO'...] nên gán trực tiếp
     roles: HRM_PERMISSIONS.HRM_REPORT_VIEW, 
