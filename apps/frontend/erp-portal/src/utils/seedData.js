@@ -1,4 +1,4 @@
-import db from "../data/db.json";
+import db from "../data/hrm_db.json";
 
 export const seedDatabase = () => {
   // Kiểm tra xem localStorage đã có dữ liệu chưa

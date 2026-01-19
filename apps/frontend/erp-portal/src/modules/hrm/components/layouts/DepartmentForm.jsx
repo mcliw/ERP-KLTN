@@ -11,7 +11,7 @@ import {
   FormSelect,
   FormTextarea,
   FormActions,
-} from "../common/FormCommon";
+} from "../../../../shared/components/FormCommon";
 import { useToast } from "../../../../shared/components/ToastProvider";
 
 /* ==============================

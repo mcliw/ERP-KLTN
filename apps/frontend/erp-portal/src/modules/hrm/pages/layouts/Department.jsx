@@ -13,7 +13,7 @@ import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions"
 import { hasPermission } from "../../../../shared/utils/permission";
 import { useToast } from "../../../../shared/components/ToastProvider";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================
@@ -25,7 +25,7 @@ export default function Department() {
   const navigate = useNavigate();
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.DEPARTMENT_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_DEPARTMENT_UPDATE);
 
   const { data: departments, total, loading, refresh } = useAsyncData(
     () => departmentService.getAll(params), 

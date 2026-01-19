@@ -13,7 +13,7 @@ import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 import { useToast } from "../../../../shared/components/ToastProvider";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================
@@ -29,7 +29,7 @@ export default function OnLeave() {
   const { user } = useAuthStore();
   const { departmentMap, positionMap } = useLookupMaps();
 
-  const canManage = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
+  const canManage = HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(user?.role);
 
   const { data: allLeaves, loading, refresh } = useAsyncData(onLeaveService.getAll);
 

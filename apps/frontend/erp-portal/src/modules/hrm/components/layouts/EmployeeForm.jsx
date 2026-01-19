@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from "react";
 import { employeeCreateSchema, employeeUpdateSchema } from "../../validations/employee.schema";
-import { useFormManager, FormInput, FormSelect, FormActions } from "../common/FormCommon";
+import { useFormManager, FormInput, FormSelect, FormActions } from "../../../../shared/components/FormCommon";
 import { departmentService } from "../../services/department.service";
 import { positionService } from "../../services/position.service";
 import { useToast } from "../../../../shared/components/ToastProvider";

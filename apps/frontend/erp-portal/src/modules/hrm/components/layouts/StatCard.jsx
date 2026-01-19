@@ -1,4 +1,4 @@
-import "../styles/statCard.css";
+import "../../../../shared/styles/statCard.css";
 
 export default function StatCard({ title, value, note }) {
   return (

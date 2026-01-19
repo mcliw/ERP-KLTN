@@ -10,7 +10,7 @@ import {
   StatusBadge,
   EmptyRow,
   formatDate,
-} from "../common/TableComponents";
+} from "../../../../shared/components/TableComponents";
 
 const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
@@ -71,7 +71,7 @@ export default function OnLeaveTable({
 
               const statusLower = String(o.status || "").toLowerCase();
               const isPending = statusLower === "chờ duyệt";
-              const isManager = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
+              const isManager = HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(user?.role);
               const canEditOrDelete = isManager || isPending;
 
               return (

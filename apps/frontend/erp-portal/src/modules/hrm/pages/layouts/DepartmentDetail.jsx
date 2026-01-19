@@ -11,13 +11,13 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 export default function DepartmentDetail() {
   const { code } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.DEPARTMENT_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_DEPARTMENT_UPDATE);
 
   // 1. Fetch Department Info
   const { data: department, loading: deptLoading } = useFetchDetail(departmentService.getByCode, code);

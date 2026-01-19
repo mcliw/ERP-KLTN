@@ -4,7 +4,8 @@ import {
   TableActions,
   EmptyRow,
   formatDate
-} from "../common/TableComponents";
+} from "../../../../shared/components/TableComponents";
+
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
 // Hàm chuẩn hóa mã để tìm kiếm trong Map không phân biệt hoa thường/khoảng trắng

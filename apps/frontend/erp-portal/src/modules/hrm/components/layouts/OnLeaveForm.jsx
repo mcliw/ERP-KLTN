@@ -8,7 +8,7 @@ import {
   FormSelect,
   FormTextarea,
   FormActions,
-} from "../common/FormCommon";
+} from "../../../../shared/components/FormCommon";
 import { employeeService } from "../../services/employee.service";
 import { departmentService } from "../../services/department.service";
 import { positionService } from "../../services/position.service";
@@ -54,7 +54,7 @@ export default function OnLeaveForm({
   const toast = useToast();
 
   const canUpdateStatus = useMemo(
-    () => HRM_PERMISSIONS.LEAVE_EDIT.includes(currentUser?.role),
+    () => HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(currentUser?.role),
     [currentUser]
   );
 

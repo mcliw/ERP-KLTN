@@ -9,14 +9,14 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 export default function PositionDetail() {
   const { code } = useParams();
   const navigate = useNavigate();
   const { departmentMap } = useLookupMaps();
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.POSITION_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_POSITION_UPDATE);
 
   const { data: position, loading } = useFetchDetail(positionService.getByCode, code);
 

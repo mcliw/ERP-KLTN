@@ -14,7 +14,7 @@ import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions"
 import { hasPermission } from "../../../../shared/utils/permission";
 import { useToast } from "../../../../shared/components/ToastProvider";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================
@@ -27,7 +27,7 @@ export default function Account() {
   const toast = useToast();
 
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.ACCOUNT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_ACCOUNT_UPDATE);
 
   // Fetch data
   const { data: accounts, loading, refresh } = useAsyncData(accountService.getAll);

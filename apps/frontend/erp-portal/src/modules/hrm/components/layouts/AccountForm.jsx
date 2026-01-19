@@ -6,7 +6,7 @@ import {
   FormSelect,
   FormPassword,
   FormActions,
-} from "../common/FormCommon";
+} from "../../../../shared/components/FormCommon";
 import { employeeService } from "../../services/employee.service";
 import { useToast } from "../../../../shared/components/ToastProvider";
 

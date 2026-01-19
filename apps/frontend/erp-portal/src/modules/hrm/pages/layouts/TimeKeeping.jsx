@@ -24,7 +24,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
 // Styles
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 import "../../../../shared/styles/button.css";
 
 /* =========================
@@ -38,7 +38,7 @@ export default function TimeKeeping() {
 
   // 1. Auth & Permission
   const user = useAuthStore((s) => s.user);
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.TIMEKEPPING || "TIMEKEEPING_EDIT");
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_TIME_KEEPING_UPDATE || "TIMEKEEPING_EDIT");
 
   // State bật/tắt Camera
   const [showCamera, setShowCamera] = useState(false);

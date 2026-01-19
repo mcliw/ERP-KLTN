@@ -14,7 +14,7 @@ export default function OnLeaveDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.LEAVE_EDIT);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_LEAVE_UPDATE);
 
   const { data: onLeave, loading, setData } = useFetchDetail(onLeaveService.getById, id);
 

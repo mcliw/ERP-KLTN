@@ -4,7 +4,7 @@ import { FaArrowLeft, FaUndo, FaTrash } from "react-icons/fa";
 import DepartmentTable from "../../components/layouts/DepartmentTable";
 import { departmentService } from "../../services/department.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function DepartmentRestore() {
   const navigate = useNavigate();

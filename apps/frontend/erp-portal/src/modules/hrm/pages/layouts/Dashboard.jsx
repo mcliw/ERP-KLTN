@@ -26,7 +26,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { useToast } from "../../../../shared/components/ToastProvider";
 
 // Import CSS riêng
-import "../styles/dashboard.css";
+import "../../../../shared/styles/dashboard.css";
 
 /* =====================
  * Sub-Components (Biểu đồ CSS thuần)
@@ -116,8 +116,8 @@ export default function HRMDashboard() {
   const user = useAuthStore((s) => s.user);
 
   // --- PERMISSIONS ---
-  const canEditEmployee = hasPermission(user?.role, HRM_PERMISSIONS.EMPLOYEE_EDIT);
-  const canViewSalaryInfo = hasPermission(user?.role, HRM_PERMISSIONS.SALARY || "HRM_SALARY_VIEW");
+  const canEditEmployee = hasPermission(user?.role, HRM_PERMISSIONS.HRM_EMPLOYEE_UPDATE);
+  const canViewSalaryInfo = hasPermission(user?.role, HRM_PERMISSIONS.HRM_SALARY_INFO_VIEW || "HRM_SALARY_VIEW");
   
   // --- STATE ---
   // State tổng hợp từ dashboard.service
@@ -277,7 +277,7 @@ export default function HRMDashboard() {
 
   return (
     <div className="dashboard-wrap">
-      <div className="d-flex justify-content-between align-items-center mb-4" style={{display: 'inline-flex', alignItems: 'center', gap: 1000}}>
+      <div className="d-flex justify-content-between align-items-center mb-4" style={{display: 'grid', alignItems: 'center', gridTemplateColumns: 'auto auto'}}>
         <div>
           <h1 className="mb-1">Dashboard Nhân sự</h1>
         </div>
@@ -292,7 +292,7 @@ export default function HRMDashboard() {
           ) : (
             <FaFileDownload className="me-2" />
           )}
-          {isExporting ? "Đang xuất..." : "Xuất báo cáo"}
+          <span>{isExporting ? "Đang xuất..." : "Xuất báo cáo"}</span>
         </button>
       </div>
 

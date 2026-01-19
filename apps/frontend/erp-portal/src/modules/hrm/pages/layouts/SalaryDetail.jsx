@@ -12,7 +12,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 // Helper format tiền tệ cục bộ
 const formatCurrency = (value) => {
@@ -26,7 +26,7 @@ export default function SalaryDetail() {
   const user = useAuthStore((s) => s.user);
   
   // Kiểm tra quyền (Tuỳ chỉnh theo file permission thực tế của bạn)
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.SALARY_EDIT || "salary.edit");
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_SALARY_INFO_UPDATE || "salary.edit");
 
   // 1. Fetch Salary Info
   // Service getById đã enrich thông tin nhân viên (employeeName, employeeCode)

@@ -5,7 +5,7 @@ import EmployeeTable from "../../components/layouts/EmployeeTable";
 import { employeeService } from "../../services/employee.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
 import { useLookupMaps } from "../../hooks/useLookupMaps";
-import "../styles/document.css";
+import "../../../../shared/styles/document.css";
 
 export default function EmployeeDocumentRestore() {
   const navigate = useNavigate();

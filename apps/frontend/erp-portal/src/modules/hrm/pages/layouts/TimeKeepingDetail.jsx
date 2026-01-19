@@ -14,7 +14,7 @@ import { hasPermission } from "../../../../shared/utils/permission";
 import { 
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton 
 } from "../../../../shared/components/DetailLayout";
-import "../styles/detail.css";
+import "../../../../shared/styles/detail.css";
 
 export default function TimeKeepingDetail() {
   const { id } = useParams();
@@ -22,7 +22,7 @@ export default function TimeKeepingDetail() {
   const user = useAuthStore((s) => s.user);
   
   // Kiểm tra quyền Edit chấm công (cần đảm bảo constant này tồn tại)
-  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.TIMEKEEPING_EDIT || "TIMEKEEPING_EDIT");
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_TIME_KEEPING_UPDATE || "TIMEKEEPING_EDIT");
 
   // 1. Fetch TimeKeeping Info
   const { data: record, loading: recordLoading } = useFetchDetail(timeKeepingService.getById, id);
