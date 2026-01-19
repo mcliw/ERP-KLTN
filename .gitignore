@@ -8,8 +8,9 @@ certs/
 *.pkl
 *.key
 GOOGLE_API_KEY
-**env
+**/.env/
 apps/services/face-recognition-attendance-system/vid_test/*MOV
 apps/services/face-recognition-attendance-system/vid_test/*mp4
 apps/services/face-recognition-atendance-system/dataset/
 /apps/services/venv/
+.env

@@ -10,7 +10,6 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 
 from app.db.chat_database import ChatBase  # đúng file bạn có
 
-
 class ChatConversation(ChatBase):
     __tablename__ = "chat_conversation"
 
@@ -22,7 +21,6 @@ class ChatConversation(ChatBase):
     is_active = Column(Boolean, default=True, nullable=False)
 
     messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
-
 
 class ChatMessage(ChatBase):
     __tablename__ = "chat_message"
