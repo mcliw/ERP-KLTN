@@ -5,6 +5,7 @@ import Login from "../auth/layouts/Login";
 import ForgotPassword from "../auth/layouts/ForgotPassword";
 import MainLayout from "../layouts/MainLayout";
 import hrmRoutes from "../modules/hrm/routes";
+import supplychainRoutes from "../modules/supply-chain/routes";
 
 export default function AppRoutes() {
   return (
@@ -19,6 +20,7 @@ export default function AppRoutes() {
         {/* ERP Layout */}
         <Route element={<MainLayout />}>
           {hrmRoutes}
+          {supplychainRoutes}
         </Route>
       </Routes>
     </BrowserRouter>

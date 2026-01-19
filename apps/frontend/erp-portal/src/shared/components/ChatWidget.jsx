@@ -78,7 +78,7 @@ export default function ChatWidget() {
             <div className="chat-avatar">
               <FaRobot />
             </div>
-            <h6 className="m-0 fw-bold">Trợ lý AI</h6>
+            <h6 className="m-0 fw-bold" style={{margin: 0}}>Trợ lý AI</h6>
             <span className="online-status" style={{marginLeft: 60}}>● Đang hoạt động</span>
           </div>
           <button className="btn-close-chat" onClick={() => setIsOpen(false)}>
