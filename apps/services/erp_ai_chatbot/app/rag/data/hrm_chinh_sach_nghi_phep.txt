@@ -1,0 +1,45 @@
+TÀI LIỆU: CHÍNH SÁCH NGHỈ PHÉP (LEAVE POLICY)
+MÃ TÀI LIỆU: HRM-LEAVE-01
+
+CHƯƠNG 1: CÁC LOẠI HÌNH NGHỈ PHÉP
+
+Hệ thống HRM ghi nhận 3 loại hình nghỉ phép chính (Leave Types):
+
+ Điều 1. Nghỉ phép năm (Mã: ANNUAL)
+1. Định mức: Mỗi nhân viên chính thức có 12 ngày phép/năm. Cứ 5 năm thâm niên được cộng thêm 1 ngày.
+2. Quy tắc tính lương: Hưởng 100% lương thực tế.
+3. Quy định sử dụng:
+   - Nghỉ từ 1-2 ngày: Báo trước 1 ngày.
+   - Nghỉ từ 3 ngày trở lên: Báo trước 1 tuần và bàn giao công việc.
+   - Phép năm không dùng hết có thể bảo lưu tối đa đến hết Quý 1 năm sau.
+
+ Điều 2. Nghỉ ốm (Mã: SICK)
+1. Định nghĩa: Nghỉ do ốm đau, tai nạn hoặc đi khám thai (đối với nữ).
+2. Yêu cầu chứng từ: Phải upload ảnh chụp "Giấy nghỉ hưởng BHXH" hoặc Giấy ra viện lên hệ thống khi tạo đơn.
+3. Quy tắc tính lương:
+   - Công ty KHÔNG trả lương cho ngày nghỉ ốm.
+   - Cơ quan Bảo hiểm xã hội (BHXH) chi trả trợ cấp ốm đau theo quy định pháp luật (thường là 75% mức lương đóng BHXH).
+
+ Điều 3. Nghỉ không lương (Mã: UNPAID)
+1. Định nghĩa: Nghỉ việc riêng khi đã hết phép năm hoặc lý do cá nhân không thuộc diện hưởng lương.
+2. Quy tắc tính lương: Trừ 100% lương của ngày nghỉ đó (Lương tháng = Lương thỏa thuận / Số ngày công chuẩn  Số ngày làm việc thực tế).
+3. Giới hạn: Không quá 30 ngày/năm (trừ trường hợp được Ban Giám đốc phê duyệt đặc biệt).
+
+ CHƯƠNG 2: QUY TRÌNH ĐĂNG KÝ & PHÊ DUYỆT
+
+ Điều 4. Quy trình tạo đơn (Request Flow)
+1. Bước 1: Nhân viên vào module HRM -> Đăng ký nghỉ phép.
+2. Bước 2: Chọn loại nghỉ (`ANNUAL`/`SICK`/`UNPAID`), ngày bắt đầu - kết thúc, và nhập lý do (`reason`).
+3. Bước 3: Hệ thống kiểm tra số dư phép (đối với `ANNUAL`). Nếu đủ -> Chuyển trạng thái `PENDING`. Nếu thiếu -> Báo lỗi.
+
+ Điều 5. Phê duyệt (Approval)
+1. Người duyệt: Quản lý trực tiếp (`approver_id`).
+2. Thời hạn duyệt: Trong vòng 24h kể từ khi nhận đơn.
+3. Hệ quả:
+   - APPROVED: Hệ thống tự động trừ phép (nếu là ANNUAL) và cập nhật bảng chấm công thành trạng thái `LEAVE`.
+   - REJECTED: Phép được hoàn lại, nhân viên phải đi làm bình thường.
+   - CANCELLED: Nhân viên có thể hủy đơn nếu đơn chưa được duyệt hoặc chưa đến ngày nghỉ.
+
+ CHƯƠNG 3: CÁC TRƯỜNG HỢP ĐẶC BIỆT (Special Cases)
+- Nghỉ ma chay/Cưới hỏi: Được tính là nghỉ hưởng lương (Paid Leave) nhưng trên hệ thống hiện tại tạm thời xếp vào nhóm `ANNUAL` hoặc duyệt riêng ngoài hệ thống (tùy cấu hình).
+- Nghỉ nửa ngày: Hệ thống hỗ trợ đăng ký nghỉ 0.5 ngày (Sáng hoặc Chiều).

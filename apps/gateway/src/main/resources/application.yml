@@ -1,0 +1,53 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
+
+jwt:
+  secret: ${JWT_SECRET}
+
+spring:
+  application:
+    name: gateway-service
+  
+  main:
+    web-application-type: reactive
+
+  # --- Security Configuration (Resource Server) ---
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jws-algorithm: HS512 # Phải khớp với thuật toán ký bên Identity Service
+
+  # --- Spring Cloud Gateway Configuration ---
+  cloud:
+    gateway:
+      # A. Global CORS (Cho phép Frontend gọi vào)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://ldgcompany.local"
+              - "https://store.local"
+              - "http://localhost:3000" # Frontend Dev
+              - "http://localhost:5173" # Vite Dev
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.http.server.reactive: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "gateway, health, info"
+  endpoint:
+    gateway:
+      enabled: true

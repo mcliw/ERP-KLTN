@@ -1,37 +1,25 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/OnLeaveFilter.jsx
 
-import { FaSearch, FaTimes } from "react-icons/fa";
-import "../styles/filter.css";
-
-const safeArray = (v) => (Array.isArray(v) ? v : []);
+import { FilterWrapper, FilterSearch, FilterSelect } from "../../../../shared/components/FilterComponents";
 
 export default function OnLeaveFilter({
-  // values
   keyword = "",
   department = "",
   leaveType = "",
   status = "",
-
-  // options
   departmentOptions = [],
   leaveTypeOptions = [],
   statusOptions = [],
-
-  // handlers
   onKeywordChange,
   onDepartmentChange,
   onLeaveTypeChange,
   onStatusChange,
   onClear,
 }) {
-  const canClear =
-    keyword || department || leaveType || status;
+  const hasFilter = keyword || department || leaveType || status;
 
   const handleClear = () => {
-    if (onClear) {
-      onClear();
-      return;
-    }
+    if (onClear) return onClear();
     onKeywordChange?.("");
     onDepartmentChange?.("");
     onLeaveTypeChange?.("");
@@ -39,79 +27,39 @@ export default function OnLeaveFilter({
   };
 
   return (
-    <div className="filters">
-      {/* SEARCH */}
-      <div className="search-wrap">
-        <FaSearch className="search-icon" />
-        <input
-          className="search-input"
-          name="keyword"
-          value={keyword}
-          placeholder="Tìm theo mã NV hoặc họ tên"
-          onChange={(e) =>
-            onKeywordChange?.(e.target.value)
-          }
-        />
+    <FilterWrapper>
+      {/* Search */}
+      <FilterSearch
+        keyword={keyword}
+        onKeywordChange={onKeywordChange}
+        placeholder="Tìm theo mã NV hoặc họ tên"
+        hasFilter={hasFilter}
+        onClear={handleClear}
+      />
 
-        {canClear && (
-          <button
-            type="button"
-            className="clear-btn"
-            onClick={handleClear}
-            title="Xoá bộ lọc"
-          >
-            <FaTimes />
-          </button>
-        )}
-      </div>
-
-      {/* DEPARTMENT */}
-      <select
-        className="input"
+      {/* Department Select */}
+      <FilterSelect
         value={department}
-        onChange={(e) =>
-          onDepartmentChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả phòng ban</option>
-        {safeArray(departmentOptions).map((d) => (
-          <option key={d.value} value={d.value}>
-            {d.label}
-          </option>
-        ))}
-      </select>
+        onChange={onDepartmentChange}
+        options={departmentOptions}
+        defaultLabel="Tất cả phòng ban"
+      />
 
-      {/* LEAVE TYPE */}
-      <select
-        className="input"
+      {/* Leave Type Select */}
+      <FilterSelect
         value={leaveType}
-        onChange={(e) =>
-          onLeaveTypeChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả loại nghỉ</option>
-        {safeArray(leaveTypeOptions).map((t) => (
-          <option key={t.value} value={t.value}>
-            {t.label}
-          </option>
-        ))}
-      </select>
+        onChange={onLeaveTypeChange}
+        options={leaveTypeOptions}
+        defaultLabel="Tất cả loại nghỉ"
+      />
 
-      {/* STATUS */}
-      <select
-        className="input"
+      {/* Status Select */}
+      <FilterSelect
         value={status}
-        onChange={(e) =>
-          onStatusChange?.(e.target.value)
-        }
-      >
-        <option value="">Tất cả trạng thái</option>
-        {safeArray(statusOptions).map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-    </div>
+        onChange={onStatusChange}
+        options={statusOptions}
+        defaultLabel="Tất cả trạng thái"
+      />
+    </FilterWrapper>
   );
 }

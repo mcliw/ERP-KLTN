@@ -1,24 +1,23 @@
-# Sử dụng tag đơn giản và chắc chắn tồn tại
-FROM golang:1.24-alpine AS builder
-
+# --- Stage 1: Build (Chuyển từ alpine sang bản chuẩn để tương thích Protobuf/gRPC) ---
+# Sử dụng bản eclipse-temurin (thay vì alpine) để có sẵn glibc
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Copy file cấu hình module trước
-COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+# 1. Copy pom.xml và tải dependencies
+COPY pom.xml .
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn dependency:go-offline -B
 
-# Copy mã nguồn và build
-COPY backend/ . 
-RUN go build -o main .
+# 2. Copy source code và thực hiện build
+COPY src ./src
+# Build sẽ thành công vì môi trường này chạy được các plugin native của Protobuf
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn package -DskipTests -B
 
-# Stage chạy (Runtime) cực nhẹ
-FROM alpine:latest
-WORKDIR /root/
-COPY --from=builder /app/main .
-
-# Các biến môi trường nên để ở docker-compose.yml, 
-# nhưng nếu cần ở đây thì khai báo đúng:
-ENV MINIO_SERVER_ACCESS_KEY=minioadmin
+# --- Stage 2: Final (Tiếp tục dùng Alpine để Image nhẹ) ---
+FROM eclipse-temurin:21-jre-alpine AS final
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
-CMD ["./main"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

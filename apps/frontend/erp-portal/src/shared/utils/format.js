@@ -1,0 +1,1 @@
+export const formatDate = (v) => v ? new Date(v).toLocaleDateString("vi-VN") : "—";

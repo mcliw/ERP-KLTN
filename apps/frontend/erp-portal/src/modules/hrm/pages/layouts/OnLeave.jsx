@@ -1,103 +1,49 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/OnLeave.jsx
 
 import { useNavigate } from "react-router-dom";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import OnLeaveTable from "../../components/layouts/OnLeaveTable";
 import OnLeaveFilter from "../../components/layouts/OnLeaveFilter";
+import PageHeader from "../../../../shared/components/PageHeader";
 import { onLeaveService } from "../../services/onLeave.service";
 import { useLookupMaps } from "../../hooks/useLookupMaps";
-import "../styles/document.css";
-import "../../../../shared/styles/button.css";
-import { FaPlus, FaRecycle } from "react-icons/fa";
+import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
+import { useClientPagination } from "../../../../shared/hooks/useClientPagination";
 import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
+import { useToast } from "../../../../shared/components/ToastProvider";
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
+import "../../../../shared/styles/document.css";
+import "../../../../shared/styles/button.css";
+
+/* =========================
+ * Helpers
+ * ========================= */
+const normalizeText = (v) => String(v || "").trim().toLowerCase();
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function OnLeave() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const toast = useToast();
 
-  const [onLeaves, setOnLeaves] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuthStore();
+  const { departmentMap, positionMap } = useLookupMaps();
+
+  const canManage = HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(user?.role);
+
+  const { data: allLeaves, loading, refresh } = useAsyncData(onLeaveService.getAll);
 
   const [keyword, setKeyword] = useState("");
   const [department, setDepartment] = useState("");
-  const { departmentMap, positionMap } = useLookupMaps();
   const [leaveType, setLeaveType] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
 
-  const pageSize = 7;
+  // options
+  const departmentOptions = useMemo(
+    () => Object.entries(departmentMap || {}).map(([value, label]) => ({ value, label })),
+    [departmentMap]
+  );
 
-  /* -------------------- FETCH DATA -------------------- */
-  useEffect(() => {
-    onLeaveService.getAll().then((data) => {
-      setOnLeaves(data);
-      setLoading(false);
-    });
-  }, []);
-
-  /* -------------------- FILTER -------------------- */
-  const filteredOnLeaves = useMemo(() => {
-    // console.log("Current User:", user);
-
-    return onLeaves.filter((e) => {
-      const canViewAll = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
-
-      if (!canViewAll) {
-        // Lấy mã nhân viên của user đang đăng nhập
-        // Ưu tiên lấy employeeCode, nếu không có thì lấy id (username)
-        const currentUserCode = user?.employeeCode || user?.id;
-
-        // Nếu vẫn không lấy được mã định danh -> Chặn hết (để an toàn)
-        if (!currentUserCode) {
-          return false;
-        }
-
-        // So sánh: Chấp nhận nếu khớp employeeCode HOẶC khớp id (username)
-        // Dùng toString() và trim() để tránh lỗi dữ liệu (ví dụ "NV1" vs "NV1 ")
-        const codeInRow = e.employeeCode?.toString().trim();
-        const codeInUser = currentUserCode.toString().trim();
-
-        if (codeInRow !== codeInUser) {
-          return false;
-        }
-      }
-
-      const kw = keyword.toLowerCase();
-
-      const matchKeyword =
-        e.employeeCode?.toLowerCase().includes(kw) ||
-        e.employeeName?.toLowerCase().includes(kw);
-
-      const matchDepartment = department
-        ? e.department === department
-        : true;
-
-      const matchLeaveType = leaveType
-        ? e.leaveType === leaveType
-        : true;
-
-      const matchStatus = status ? e.status === status : true;
-
-      return (
-        matchKeyword &&
-        matchDepartment &&
-        matchLeaveType &&
-        matchStatus
-      );
-    });
-  }, [onLeaves, keyword, department, leaveType, status, user]);
-
-  /* -------------------- FILTER OPTIONS -------------------- */
-
-  // Phòng ban (từ departmentMap)
-  const departmentOptions = useMemo(() => {
-    return Object.entries(departmentMap || {}).map(
-      ([value, label]) => ({ value, label })
-    );
-  }, [departmentMap]);
-
-  // Loại nghỉ
   const leaveTypeOptions = useMemo(
     () => [
       { value: "Nghỉ phép", label: "Nghỉ phép" },
@@ -107,7 +53,6 @@ export default function OnLeave() {
     []
   );
 
-  // Trạng thái
   const statusOptions = useMemo(
     () => [
       { value: "Chờ duyệt", label: "Chờ duyệt" },
@@ -117,126 +62,127 @@ export default function OnLeave() {
     []
   );
 
-  // Kiểm tra quyền
-  const checkPermission = (item) => {
-    const isPending = item.status === "Chờ duyệt";
-    const isManager = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
-    
-    return isManager || isPending;
-  };
+  // phân quyền xem dữ liệu
+  const accessibleLeaves = useMemo(() => {
+    if (canManage) return allLeaves;
 
-  /* -------------------- PAGINATION -------------------- */
-  const totalPages = Math.ceil(
-    filteredOnLeaves.length / pageSize
+    const currentUserCode = user?.employeeCode || user?.id;
+    if (!currentUserCode) return [];
+
+    const me = normalizeCode(currentUserCode);
+
+    return allLeaves.filter(
+      (e) => normalizeCode(e.employeeCode) === me
+    );
+  }, [allLeaves, canManage, user]);
+
+  const filteredOnLeaves = useMemo(() => {
+    const kw = normalizeText(keyword);
+
+    return accessibleLeaves.filter((e) => {
+      // mặc định: ẩn record đã xoá mềm ở trang document
+      if (isSoftDeleted(e.deletedAt)) return false;
+
+      const matchKeyword =
+        !kw ||
+        normalizeText(e.employeeCode).includes(kw) ||
+        normalizeText(e.employeeName).includes(kw);
+
+      const matchDepartment = !department || normalizeCode(e.department) === normalizeCode(department);
+      const matchLeaveType = !leaveType || e.leaveType === leaveType;
+      const matchStatus = !status || e.status === status;
+
+      return matchKeyword && matchDepartment && matchLeaveType && matchStatus;
+    });
+  }, [accessibleLeaves, keyword, department, leaveType, status]);
+
+  const { paginatedData, page, totalPages, goToPrev, goToNext } =
+    useClientPagination(filteredOnLeaves, 7);
+
+  const canEditOrDelete = useCallback(
+    (item) => {
+      const isPending = String(item.status || "").trim().toLowerCase() === "chờ duyệt";
+      return canManage || isPending;
+    },
+    [canManage]
   );
 
-  const paginatedOnLeaves = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredOnLeaves.slice(start, start + pageSize);
-  }, [filteredOnLeaves, page]);
+  const handleClearFilter = useCallback(() => {
+    setKeyword("");
+    setDepartment("");
+    setLeaveType("");
+    setStatus("");
+  }, []);
 
-  if (loading)
-    return <div style={{ padding: 20 }}>Đang tải...</div>;
+  const handleEdit = useCallback(
+    (item) => {
+      if (!canEditOrDelete(item)) {
+        toast.info("Chỉ có thể chỉnh sửa đơn ở trạng thái 'Chờ duyệt'.");
+        return;
+      }
+      navigate(`/hrm/nghi-phep/${item.id}/chinh-sua`);
+    },
+    [canEditOrDelete, navigate, toast]
+  );
+
+  const handleDelete = useCallback(
+    async (item) => {
+      if (!canEditOrDelete(item)) {
+        toast.info("Chỉ có thể xóa đơn ở trạng thái 'Chờ duyệt'.");
+        return;
+      }
+
+      if (!window.confirm("Xóa đơn nghỉ này?")) return;
+
+      try {
+        await onLeaveService.remove(item.id);
+        toast.error("Đã xoá đơn nghỉ");
+        refresh();
+      } catch (err) {
+        toast.error(err?.message || "Không thể xoá đơn nghỉ");
+      }
+    },
+    [canEditOrDelete, refresh, toast]
+  );
+
+  if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
 
   return (
     <div className="main-document">
-      {/* HEADER */}
-      <div className="page-header">
-        <h2>Quản lý đơn nghỉ</h2>
+      <PageHeader
+        title="Quản lý đơn nghỉ"
+        createLabel="Tạo đơn nghỉ"
+        onCreate={() => navigate("/hrm/nghi-phep/them-moi")}
+        onRestore={() => navigate("/hrm/nghi-phep/khoi-phuc")}
+      />
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            className="btn-primary"
-            onClick={() =>
-              navigate("/hrm/nghi-phep/them-moi")
-            }
-          >
-            <FaPlus />
-            <span>Tạo đơn nghỉ</span>
-          </button>
-
-          {/* ♻️ KHÔI PHỤC */}
-          <button
-            className="btn-restore"
-            onClick={() =>
-              navigate("/hrm/nghi-phep/khoi-phuc")
-            }
-          >
-            <FaRecycle />
-            <span>Khôi phục</span>
-          </button>
-        </div>
-      </div>
-
-      {/* FILTER */}
       <OnLeaveFilter
         keyword={keyword}
         department={department}
         leaveType={leaveType}
         status={status}
-
         departmentOptions={departmentOptions}
         leaveTypeOptions={leaveTypeOptions}
         statusOptions={statusOptions}
-
-        onKeywordChange={(v) => {
-          setKeyword(v);
-          setPage(1);
-        }}
-        onDepartmentChange={(v) => {
-          setDepartment(v);
-          setPage(1);
-        }}
-        onLeaveTypeChange={(v) => {
-          setLeaveType(v);
-          setPage(1);
-        }}
-        onStatusChange={(v) => {
-          setStatus(v);
-          setPage(1);
-        }}
-        onClear={() => {
-          setKeyword("");
-          setDepartment("");
-          setLeaveType("");
-          setStatus("");
-          setPage(1);
-        }}
+        onKeywordChange={setKeyword}
+        onDepartmentChange={setDepartment}
+        onLeaveTypeChange={setLeaveType}
+        onStatusChange={setStatus}
+        onClear={handleClearFilter}
       />
 
-      {/* TABLE */}
       <OnLeaveTable
-        data={paginatedOnLeaves}
+        data={paginatedData}
         departmentMap={departmentMap}
         positionMap={positionMap}
         page={page}
         totalPages={totalPages}
-        onPrev={() => setPage((p) => Math.max(p - 1, 1))}
-        onNext={() =>
-          setPage((p) => Math.min(p + 1, totalPages))
-        }
-        onRowClick={(item) =>
-          navigate(`/hrm/nghi-phep/${item.id}`)
-        }
-        onView={(item) =>
-          navigate(`/hrm/nghi-phep/${item.id}`)
-        }
-        onEdit={(item) => {
-          if (!checkPermission(item)) {
-             alert("Bạn chỉ có thể chỉnh sửa đơn ở trạng thái 'Chờ duyệt'");
-             return;
-          }
-          navigate(`/hrm/nghi-phep/${item.id}/chinh-sua`)
-        }}
-        onDelete={async (item) => {
-          if (!checkPermission(item)) {
-             alert("Bạn chỉ có thể xóa đơn ở trạng thái 'Chờ duyệt'");
-             return;
-          }
-          if (!window.confirm("Xóa đơn nghỉ này?")) return;
-          await onLeaveService.remove(item.id);
-          setOnLeaves((prev) => prev.filter((x) => x.id !== item.id));
-        }}
+        onPrev={goToPrev}
+        onNext={goToNext}
+        onRowClick={(item) => navigate(`/hrm/nghi-phep/${item.id}`)}
+        onView={(item) => navigate(`/hrm/nghi-phep/${item.id}`)}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
       />
     </div>
   );

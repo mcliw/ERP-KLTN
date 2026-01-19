@@ -16,6 +16,5 @@ google-genai
 langchain-google-genai
 pydantic
 python-dotenv
+mcp[cli]
 tzdata
-chromadb
-python

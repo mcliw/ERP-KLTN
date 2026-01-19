@@ -1,52 +1,59 @@
-scalar Date
+# 1. PHẦN BẮT BUỘC: Query (Lấy dữ liệu)
+type Query {
+    # Truy vấn thông tin tài khoản hiện tại (ví dụ)
+    me: User
+    # Query kiểm tra hệ thống
+    ping: String
+}
+
+# 2. PHẦN MUTATION: Đăng ký & Đăng nhập
+type Mutation {
+    # Đăng ký tài khoản mới
+    register(input: RegisterRequest!): User!
+    
+    # Đăng nhập lấy Token
+    login(input: LoginRequest!): AuthResponse!
+}
+
+# --- Định nghĩa các Object trả về ---
 
 type User {
     id: ID!
     email: String!
-    role: Role!
-    status: String!
-    lastLoginAt: Date
+    fullName: String
+    status: String
+    role: Role
 }
 
 type Role {
+    id: ID!
     name: String!
-    permissions: [String]!
+    description: String
+    permissions: [Permission]
 }
 
-type AuthPayload {
+type Permission {
+    id: ID!
+    code: String!
+    description: String
+}
+
+type AuthResponse {
     accessToken: String!
-    refreshToken: String!
-    user: User!
+    tokenType: String!
 }
 
-# Input cho đăng ký Portal (Nội bộ)
-input PortalRegisterInput {
+# --- Định nghĩa Input cho Login/Register ---
+
+input RegisterRequest {
+    id: ID 
     email: String!
     password: String!
-    roleName: String!         # Role muốn tạo (VD: HR_MANAGER, EMPLOYEE)
-    departmentCode: String    # Mã phòng ban (Bắt buộc nếu tạo Employee)
-    jobTitle: String          # Chức vụ (Bắt buộc nếu tạo Employee)
+    roleName: String
 }
 
-# Input cho đăng ký Store (Khách hàng)
-input StoreRegisterInput {
+input LoginRequest {
     email: String!
     password: String!
-    # Không cần role, tự động là CUSTOMER
 }
 
-type Mutation {
-    login(email: String!, password: String!): AuthPayload
-    
-    # Chỉ Admin hoặc HR Manager mới gọi được
-    registerPortalUser(input: PortalRegisterInput!): User!
-    
-    # Public cho khách hàng
-    registerStoreUser(input: StoreRegisterInput!): User!
-    
-    refreshToken(token: String!): AuthPayload
-}
-
-type Query {
-    me: User!
-}

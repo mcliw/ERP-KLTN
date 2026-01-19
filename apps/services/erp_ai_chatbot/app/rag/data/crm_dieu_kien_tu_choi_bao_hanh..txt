@@ -1,0 +1,53 @@
+TÀI LIỆU CHI TIẾT BẢO HÀNH VÀ ĐIỀU KIỆN TỪ CHỐI BẢO HÀNH
+MÃ TÀI LIỆU CRM WARRANTY DETAIL 01
+
+CHƯƠNG 1. QUY ĐỊNH VỀ THỜI GIAN BẢO HÀNH CHI TIẾT
+
+Điều 1. Thời hạn bảo hành cho từng loại linh kiện
+1. Đối với Thân máy Main body:
+- Bảo hành 12 tháng đối với các sản phẩm máy mới bóc hộp (Brand new).
+- Bảo hành 6 tháng đối với các sản phẩm máy cũ, máy 99% hoặc máy đã qua sử dụng.
+2. Đối với Màn hình hiển thị và Nguồn:
+- Bảo hành 12 tháng theo gói bảo hành tiêu chuẩn mặc định của nhà sản xuất.
+- Hoặc bảo hành theo thời gian của gói bảo hành mở rộng Care+ nếu khách hàng có mua thêm dịch vụ này.
+3. Đối với Pin của thiết bị:
+- Bảo hành 12 tháng hoặc giới hạn 500 lần sạc tùy theo điều kiện nào đến trước.
+- Quy định thay thế: Nếu pin bị chai quá 20% dung lượng thiết kế trong thời gian bảo hành này sẽ được thay thế pin mới miễn phí.
+4. Đối với Phụ kiện đi kèm:
+- Các phụ kiện tiêu hao trong hộp như Củ sạc nguồn, dây cáp kết nối dữ liệu được bảo hành 6 tháng.
+
+Điều 2. Thời gian cam kết xử lý bảo hành
+1. Thời gian kiểm tra:
+- Tối đa 24 giờ kể từ khi trung tâm tiếp nhận máy từ khách hàng để xác định lỗi.
+2. Thời gian sửa chữa:
+- Từ 3 đến 7 ngày làm việc để thực hiện sửa chữa hoặc thay thế linh kiện.
+- Thời gian này không tính các ngày nghỉ cuối tuần (Thứ 7, Chủ nhật) và các ngày Lễ tết.
+3. Cam kết mượn máy:
+- Nếu quá 15 ngày mà việc sửa chữa chưa hoàn tất, công ty sẽ hỗ trợ giải pháp tạm thời.
+- Khách hàng sẽ được mượn một thiết bị tương đương để sử dụng trong lúc chờ đợi nhận lại máy của mình.
+
+CHƯƠNG 2. ĐIỀU KIỆN TỪ CHỐI BẢO HÀNH
+
+Sản phẩm sẽ bị MẤT QUYỀN BẢO HÀNH hoàn toàn nếu vi phạm các điều sau đây:
+
+1. Mất tem hoặc Rách tem bảo hành:
+- Sản phẩm khi mang đến không còn nguyên tem bảo hành chính hãng.
+- Các tem niêm phong dán trên các ốc vít của máy bị chọc thủng, rách hoặc có dấu hiệu tẩy xóa.
+
+2. Tác động vật lý từ bên ngoài:
+- Máy bị cong khung sườn, vênh vỏ do ngồi đè lên hoặc va đập.
+- Màn hình bị nứt vỡ, chảy mực do va chạm.
+- Máy bị cấn móp các góc cạnh do rơi rớt trong quá trình sử dụng.
+
+3. Vào nước hoặc bị ngấm Chất lỏng:
+- Kỹ thuật viên sẽ kiểm tra giấy quỳ tím bên trong thiết bị.
+- Nếu giấy quỳ tím đổi màu đỏ chứng tỏ máy đã bị ẩm mốc hoặc ngấm nước.
+- Lưu ý: Quy định này áp dụng kể cả với các dòng máy có tiêu chuẩn kháng nước IP68, vì hãng sản xuất không bảo hành các lỗi liên quan đến vào nước.
+
+4. Can thiệp phần mềm hệ thống trái phép:
+- Máy đã bị thực hiện Root (đối với Android) hoặc Jailbreak (đối với iOS).
+- Máy bị khóa các tài khoản bảo mật cá nhân như iCloud hoặc Samsung Account mà khách hàng không thoát ra được.
+
+5. Côn trùng xâm nhập:
+- Mainboard hoặc các linh kiện bên trong bị oxy hóa, chập cháy.
+- Nguyên nhân được xác định là do côn trùng như kiến, gián chui vào làm tổ bên trong thiết bị.

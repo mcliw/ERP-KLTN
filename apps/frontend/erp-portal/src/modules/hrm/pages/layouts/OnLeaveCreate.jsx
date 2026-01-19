@@ -1,33 +1,34 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/OnLeaveCreate.jsx
 
-import { useNavigate } from "react-router-dom";
 import OnLeaveForm from "../../components/layouts/OnLeaveForm";
 import { onLeaveService } from "../../services/onLeave.service";
 import { useAuthStore } from "../../../../auth/auth.store";
+import { useCreateResource } from "../../../../shared/hooks/useCreateResource";
+import PageContainer from "../../../../shared/components/PageContainer";
 
 export default function OnLeaveCreate() {
-  const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  const handleCreate = async (data) => {
-    try {
-      await onLeaveService.create(data);
-    } catch (e) {
-      alert("Có lỗi khi tạo đơn nghỉ");
-      return;
+  const { submitting, handleSubmit, handleCancel } = useCreateResource(
+    (data) => onLeaveService.create(data),
+    "/hrm/nghi-phep",
+    {
+      resourceName: "đơn nghỉ phép",
+      onSuccess: () => {
+        console.log("Đã tạo xong đơn nghỉ phép mới");
+      },
     }
-
-    navigate("/hrm/nghi-phep");
-  };
+  );
 
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer title="Tạo đơn nghỉ phép">
       <OnLeaveForm
         mode="create"
         currentUser={user}
-        onSubmit={handleCreate}
-        onCancel={() => navigate(-1)}
+        onSubmit={handleSubmit}
+        onCancel={handleCancel}
+        disabled={submitting}
       />
-    </div>
+    </PageContainer>
   );
 }

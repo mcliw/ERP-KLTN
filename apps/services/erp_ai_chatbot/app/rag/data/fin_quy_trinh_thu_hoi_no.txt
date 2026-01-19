@@ -1,0 +1,62 @@
+ TÀI LIỆU: QUY TRÌNH THU HỒI CÔNG NỢ & KỊCH BẢN NHẮC NỢ
+ MÃ TÀI LIỆU: FIN-DEBT-COLLECT-01
+ CÔNG CỤ HỖ TRỢ: Module Finance (AR Aging Report)
+
+---
+
+ GIAI ĐOẠN 1: TRƯỚC HẠN THANH TOÁN (PRE-DUE)
+
+ Bước 1. Nhắc nợ nhẹ nhàng (Reminder)
+- Thời điểm: 03 ngày trước ngày đáo hạn (`due_date`).
+- Hành động: Hệ thống gửi Email tự động thông báo sắp đến hạn.
+- Mục tiêu: Nhắc nhở khách hàng không quên lịch, gửi kèm sao kê (`Statement`) để đối chiếu.
+
+---
+
+ GIAI ĐOẠN 2: QUÁ HẠN (OVERDUE)
+
+Kế toán công nợ chạy tool `ar_qua_han` để lấy danh sách và thực hiện theo các bước:
+
+ Bước 2. Quá hạn 1 - 15 ngày (Soft Collection)
+- Trạng thái: Nợ quá hạn Nhóm 1.
+- Hành động: Gửi Email nhắc nợ lần 1.
+- Kịch bản Email:
+  > "Kính gửi [Tên Khách Hàng],
+  > Hệ thống của chúng tôi ghi nhận hóa đơn số [Ref] trị giá [Amount] đã quá hạn thanh toán vào ngày [Due Date].
+  > Có thể Quý khách đã bận rộn nên sơ suất. Rất mong Quý khách kiểm tra và sắp xếp thanh toán sớm để tránh phát sinh phí phạt chậm trả.
+  > Trân trọng."
+
+ Bước 3. Quá hạn 16 - 30 ngày (Firm Collection)
+- Trạng thái: Nợ quá hạn Nhóm 2.
+- Hành động:
+  1. Gửi Email nhắc nợ lần 2 (Cảnh báo tính lãi).
+  2. Nhân viên Sale gọi điện trực tiếp.
+- Biện pháp kỹ thuật: Hệ thống tự động TẠM KHÓA quyền đặt hàng mới (`Credit Hold`) nếu tổng nợ vượt hạn mức cho phép.
+
+ Bước 4. Quá hạn 31 - 60 ngày (Hard Collection)
+- Trạng thái: Nợ xấu tiềm tàng.
+- Hành động:
+  1. Gửi Công văn yêu cầu thanh toán (bản cứng) có dấu đỏ công ty.
+  2. Gọi điện thoại yêu cầu cam kết ngày trả nợ cụ thể.
+- Kịch bản Gọi điện:
+  > "Chào anh/chị, tôi gọi từ bộ phận Kế toán. Khoản nợ của bên mình đã quá hạn hơn 1 tháng. Theo quy định, chúng tôi buộc phải dừng cung cấp dịch vụ hoàn toàn và tính lãi phạt 0.05%/ngày. Đề nghị anh/chị thanh toán trước ngày [Date] để chúng tôi mở lại hệ thống."
+
+ Bước 5. Quá hạn trên 60 ngày (Legal Action)
+- Trạng thái: Nợ xấu (Bad Debt).
+- Hành động:
+  1. Chuyển hồ sơ sang Bộ phận Pháp chế (Legal Dept).
+  2. Gửi Thư cảnh báo khởi kiện (Letter of Demand).
+  3. Trích lập dự phòng phải thu khó đòi (Hạch toán Nợ 642 / Có 2293).
+
+---
+
+ CHƯƠNG 3: CHÍNH SÁCH PHẠT & MIỄN TRỪ
+
+ Điều 1. Phạt chậm trả (Late Fee)
+- Áp dụng lãi suất 0.05% trên ngày (khoảng 18%/năm) tính trên số dư nợ quá hạn.
+- Phí phạt sẽ được xuất thành một hóa đơn dịch vụ tài chính riêng hoặc cộng vào kỳ thanh toán sau.
+
+ Điều 2. Thẩm quyền miễn giảm
+Trong trường hợp khách hàng gặp khó khăn tài chính thực sự và có văn bản xin gia hạn:
+- Kế toán trưởng: Được quyền miễn lãi phạt nếu thanh toán gốc ngay.
+- Giám đốc Tài chính: Được quyền gia hạn thêm tối đa 30 ngày (Reschedule).

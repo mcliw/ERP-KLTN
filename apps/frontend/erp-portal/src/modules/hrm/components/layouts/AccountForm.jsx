@@ -1,465 +1,250 @@
-// apps/frontend/erp-portal/src/modules/hrm/components/layouts/AccountForm.jsx
-
-import { useEffect, useMemo, useRef, useState } from "react";
-import "../styles/form.css";
+import { useMemo, useEffect, useState } from "react";
+import { accountCreateSchema, accountUpdateSchema } from "../../validations/account.schema"; 
 import {
-  accountCreateSchema,
-  accountUpdateSchema,
-} from "../../validations/account.schema";
-import { FaSave, FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
+  useFormManager,
+  FormInput,
+  FormSelect,
+  FormPassword,
+  FormActions,
+} from "../../../../shared/components/FormCommon";
 import { employeeService } from "../../services/employee.service";
-import { positionService } from "../../services/position.service";
-import { departmentService } from "../../services/department.service";
+import { useToast } from "../../../../shared/components/ToastProvider";
 
 const DEFAULT_FORM = {
-  username: "",
-  employeeCode: "",
-  department: "",
-  position: "",
-  role: "",
-  status: "Hoạt động",
+  userId: "",
+  email: "",
   password: "",
   confirmPassword: "",
+  role: "",
+  employeeId: "",
+  fullName: "",
+  department: "",
+  position: "",
+  status: "ACTIVE",
 };
 
 export default function AccountForm({
   mode = "create",
-  initialData = null,
-  roleOptions = [],
   onSubmit,
   onCancel,
+  initialData = {},
+  roleOptions = [], // Prop cần kiểm tra kỹ
 }) {
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [errors, setErrors] = useState({});
-  const [infoMessage, setInfoMessage] = useState("");
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const initialSnapshotRef = useRef(null);
-
-  /* ================= LOAD POSITIONS ================= */
-  const [positionMap, setPositionMap] = useState({});
-
-  useEffect(() => {
-    const loadPositions = async () => {
-      try {
-        const list = await positionService.getAll();
-        const map = {};
-        list.forEach((p) => {
-          map[p.code] = p.name;
-        });
-        setPositionMap(map);
-      } catch (err) {
-        console.error("Không tải được danh sách chức vụ", err);
-        setPositionMap({});
-      }
-    };
-
-    loadPositions();
-  }, []);
-
-  /* ================= LOAD DEPARTMENTS ================= */
-  const [departmentMap, setDepartmentMap] = useState({});
-
-  useEffect(() => {
-    const loadDepartments = async () => {
-      try {
-        const list = await departmentService.getAll();
-        const map = {};
-        list.forEach((p) => {
-          map[p.code] = p.name;
-        });
-        setDepartmentMap(map);
-      } catch (err) {
-        console.error("Không tải được danh sách chức vụ", err);
-        setDepartmentMap({});
-      }
-    };
-
-    loadDepartments();
-  }, []);
-
-  /* ================= LOAD EMPLOYEES ================= */
+  const { toast } = useToast();
   const [employees, setEmployees] = useState([]);
-  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [loadingEmp, setLoadingEmp] = useState(false);
+
+  // --- DEBUG LOG: Kiểm tra Props đầu vào ---
+  console.group("DEBUG ACCOUNT_FORM");
+  console.log("1. Mode:", mode);
+  console.log("2. RoleOptions nhận được:", roleOptions);
+  console.log("   - Là mảng?", Array.isArray(roleOptions));
+  
+  // Nếu roleOptions bị lỗi, in cảnh báo
+  if (!Array.isArray(roleOptions)) {
+    console.error("LỖI NGHIÊM TRỌNG: roleOptions không phải là mảng!", roleOptions);
+  }
+  console.groupEnd();
+  // ----------------------------------------
+
+  const {
+    form,
+    errors,
+    isDirty,
+    handleChange,
+    setForm,
+    handleSubmit,
+  } = useFormManager({  // <--- Thêm dấu ngoặc nhọn { để gom thành 1 object
+    initialValues: initialData || DEFAULT_FORM, // Merge với default nếu null
+    mode: mode,
+    schema: mode === "create" ? accountCreateSchema : accountUpdateSchema
+  });
 
   useEffect(() => {
-    const loadEmployees = async () => {
+    const fetchEmployees = async () => {
+      setLoadingEmp(true);
       try {
-        setLoadingEmployees(true);
-        const list = await employeeService.getAll();
-        const active = list.filter(
-          (e) => !e.status || e.status === "Đang làm việc"
+        console.log("3. Bắt đầu gọi API Employee...");
+        const response = await employeeService.getAll();
+        console.log("4. Raw Response từ Service:", response);
+
+        // Logic an toàn để lấy mảng
+        const rawData = response.data;
+        let allEmployees = [];
+
+        if (Array.isArray(rawData)) {
+            allEmployees = rawData;
+        } else if (rawData && Array.isArray(rawData.content)) {
+            allEmployees = rawData.content;
+        } else if (rawData && Array.isArray(rawData.items)) {
+            allEmployees = rawData.items;
+        } else {
+            console.warn("   - API trả về data lạ, không tìm thấy mảng:", rawData);
+        }
+
+        console.log("5. Danh sách nhân viên sau khi xử lý:", allEmployees);
+        
+        // Lọc nhân viên
+        const availableEmployees = allEmployees.filter(emp => 
+          emp.status === 'OFFICIAL' || emp.status === 'PROBATION'
         );
-        setEmployees(active);
-      } catch (err) {
-        console.error("Không tải được danh sách nhân viên", err);
-        setEmployees([]);
+        console.log("6. Nhân viên khả dụng (sau filter):", availableEmployees);
+
+        setEmployees(availableEmployees);
+      } catch (error) {
+        console.error("Lỗi tải nhân viên:", error);
+        toast.error("Không thể tải danh sách nhân viên");
       } finally {
-        setLoadingEmployees(false);
+        setLoadingEmp(false);
       }
     };
-    loadEmployees();
+
+    fetchEmployees();
   }, []);
 
-  /* ================= LOAD EDIT DATA ================= */
-  useEffect(() => {
-    if (mode === "edit" && initialData) {
-      const nextForm = {
-        ...DEFAULT_FORM,
-        ...initialData,
-        // edit: để trống password / confirmPassword
-        password: "",
-        confirmPassword: "",
-      };
-      setForm(nextForm);
-      initialSnapshotRef.current = { ...nextForm };
-    }
-  }, [mode, initialData]);
+  const handleEmployeeSelect = (e) => {
+    const selectedId = e.target.value;
+    const selectedEmp = employees.find(emp => emp.id === selectedId);
 
-  /* ================= HANDLERS ================= */
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setInfoMessage("");
-
-    setErrors((prev) => {
-      if (!prev[name]) return prev;
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleEmployeeChange = (e) => {
-    const code = e.target.value;
-
-    if (!code) {
-      setForm((prev) => ({
+    if (selectedEmp) {
+      setForm(prev => ({
         ...prev,
-        employeeCode: "",
-        department: "",
-        position: "",
+        employeeId: selectedEmp.id,
+        userId: selectedEmp.accountId,
+        email: selectedEmp.email,
+        fullName: selectedEmp.fullName,
+        department: selectedEmp.department ? selectedEmp.department.name : "N/A",
+        position: selectedEmp.position ? selectedEmp.position.name : "N/A",
       }));
-      return;
+    } else {
+      setForm(prev => ({
+        ...prev,
+        employeeId: "", userId: "", email: "", fullName: "", department: "", position: ""
+      }));
     }
-
-    const emp = employees.find((x) => x.code === code);
-    if (!emp) return;
-
-    setInfoMessage("");
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next.employeeCode;
-      return next;
-    });
-
-    setForm((prev) => ({
-      ...prev,
-      employeeCode: emp.code,
-      department: emp.department || "",
-      position: emp.position || "",
-    }));
   };
 
-  const renderError = (field) =>
-    errors[field] && <span className="error">{errors[field]}</span>;
-
-  /* ================= DIRTY CHECK ================= */
-  const isDirty = useMemo(() => {
-    if (mode !== "edit") return true;
-    if (!initialSnapshotRef.current) return false;
-
+  // --- SAFE CHECK CHO MẢNG TRƯỚC KHI RENDER ---
+  // Nếu employees hoặc roleOptions không phải mảng, code sẽ crash tại .map()
+  // Chúng ta chặn trước và return UI báo lỗi để biết nguyên nhân.
+  
+  if (!Array.isArray(roleOptions)) {
     return (
-      JSON.stringify(form) !== JSON.stringify(initialSnapshotRef.current)
+      <div style={{ padding: 20, color: 'red', border: '1px solid red' }}>
+        <h3>⛔ Lỗi dữ liệu RoleOptions</h3>
+        <p>Frontend đang nhận được `roleOptions` là: <b>{typeof roleOptions}</b> (Mong đợi: Array)</p>
+        <p>Giá trị: {JSON.stringify(roleOptions)}</p>
+        <p>👉 Vui lòng kiểm tra file <code>AccountCreate.jsx</code> xem đã import <code>ROLE_OPTIONS</code> chưa.</p>
+      </div>
     );
-  }, [mode, form]);
+  }
 
-  /* ================= SUBMIT ================= */
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  // Generate options an toàn
+  const safeEmployeeOptions = Array.isArray(employees) ? employees.map(e => ({
+      value: e.id,
+      label: `${e.code} - ${e.fullName}`
+  })) : [];
 
-    if (mode === "edit" && !isDirty) {
-      setInfoMessage("Không có thay đổi nào để lưu.");
-      return;
-    }
-
-    const pw = String(form.password || "");
-    const cpw = String(form.confirmPassword || "");
-
-    // ✅ CHECK PASSWORD RULES (giữ đúng logic bạn đang dùng)
-    if (mode === "create") {
-      if (!pw) {
-        setErrors((prev) => ({ ...prev, password: "Mật khẩu bắt buộc" }));
-        document.querySelector(`[name="password"]`)?.focus();
-        return;
-      }
-      if (pw.length < 6) { // thêm kiểm tra 6 ký tự
-        setErrors((prev) => ({ ...prev, password: "Mật khẩu phải ít nhất 6 ký tự" }));
-        document.querySelector(`[name="password"]`)?.focus();
-        return;
-      }
-      if (!cpw) {
-        setErrors((prev) => ({
-          ...prev,
-          confirmPassword: "Vui lòng xác nhận mật khẩu",
-        }));
-        document.querySelector(`[name="confirmPassword"]`)?.focus();
-        return;
-      }
-      if (pw !== cpw) {
-        setErrors((prev) => ({
-          ...prev,
-          confirmPassword: "Mật khẩu xác nhận không khớp",
-        }));
-        document.querySelector(`[name="confirmPassword"]`)?.focus();
-        return;
-      }
-    }
-
-    if (mode === "edit") {
-      const hasAny = !!pw || !!cpw;
-      if (hasAny) {
-        if (!pw) {
-          setErrors((prev) => ({
-            ...prev,
-            password: "Vui lòng nhập mật khẩu mới",
-          }));
-          document.querySelector(`[name="password"]`)?.focus();
-          return;
-        }
-        if (pw.length < 6) { // thêm kiểm tra 6 ký tự
-          setErrors((prev) => ({ ...prev, password: "Mật khẩu phải ít nhất 6 ký tự" }));
-          document.querySelector(`[name="password"]`)?.focus();
-          return;
-        }
-        if (!cpw) {
-          setErrors((prev) => ({
-            ...prev,
-            confirmPassword: "Vui lòng xác nhận mật khẩu mới",
-          }));
-          document.querySelector(`[name="confirmPassword"]`)?.focus();
-          return;
-        }
-        if (pw !== cpw) {
-          setErrors((prev) => ({
-            ...prev,
-            confirmPassword: "Mật khẩu xác nhận không khớp",
-          }));
-          document.querySelector(`[name="confirmPassword"]`)?.focus();
-          return;
-        }
-      }
-    }
-
-    const schema =
-      mode === "create" ? accountCreateSchema : accountUpdateSchema;
-
-    // ❗ LOẠI confirmPassword TRƯỚC KHI VALIDATE
-    const { confirmPassword, ...payload } = form;
-
-    const result = schema.safeParse(payload);
-
-    if (!result.success) {
-      const fieldErrors = {};
-      result.error.issues.forEach((err) => {
-        fieldErrors[err.path[0]] = err.message;
-      });
-
-      setErrors(fieldErrors);
-
-      const firstErrorField = Object.keys(fieldErrors)[0];
-      document.querySelector(`[name="${firstErrorField}"]`)?.focus();
-      return;
-    }
-
-    setErrors({});
-
-    const confirmMessage =
-      mode === "create"
-        ? "Bạn có chắc chắn muốn tạo tài khoản này?"
-        : "Bạn có chắc chắn muốn lưu thay đổi tài khoản này?";
-
-    if (!window.confirm(confirmMessage)) return;
-
-    onSubmit?.(payload);
-  };
-
-  /* ================= RENDER ================= */
   return (
-    <form className="department-form" onSubmit={handleSubmit}>
-      <h3>{mode === "create" ? "Tạo tài khoản" : "Cập nhật tài khoản"}</h3>
+    <form onSubmit={handleSubmit} className="account-form">
+      {/* Hiển thị thông báo debug nhỏ để biết form đang chạy chế độ test */}
+      <div style={{background: '#fff3cd', padding: '5px 10px', marginBottom: 10, fontSize: 12}}>
+         🛠️ Debug Mode: Loaded {employees.length} employees | {roleOptions.length} roles
+      </div>
 
       <div className="form-grid">
-        {/* Username */}
-        <div className="form-group">
-          <label>Tên đăng nhập *</label>
-          <input
-            name="username"
-            value={form.username}
+        <div className="form-section">
+          <h4 style={{marginBottom: '15px', color: 'var(--primary-color)'}}>Thông tin đăng nhập</h4>
+          
+          <FormInput
+            label="Email (Tên đăng nhập)"
+            name="email"
+            value={form.email}
             onChange={handleChange}
+            required
+            error={errors.email}
+            readOnly={!!form.employeeId}
+            placeholder="Tự động điền từ nhân viên"
+          />
+
+          <FormPassword
+            label="Mật khẩu"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            required={mode === "create"}
+            error={errors.password}
+          />
+
+          <FormPassword
+            label="Xác nhận mật khẩu"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            required={mode === "create"}
+            error={errors.confirmPassword}
+          />
+
+          <FormSelect
+            label="Phân quyền (Role)"
+            name="role"
+            value={form.role}
+            onChange={handleChange}
+            required
+            options={roleOptions} // Đây là chỗ thường gây crash nếu roleOptions lỗi
+            error={errors.role}
+            placeholder="-- Chọn vai trò --"
+          />
+        </div>
+
+        <div className="form-section">
+          <h4 style={{marginBottom: '15px', color: 'var(--primary-color)'}}>Thông tin nhân sự</h4>
+
+          <FormSelect
+            label="Chọn Nhân Viên"
+            name="employeeId"
+            value={form.employeeId}
+            onChange={handleEmployeeSelect}
+            required
+            options={safeEmployeeOptions}
+            error={errors.employeeId}
             disabled={mode === "edit"}
+            placeholder={loadingEmp ? "Đang tải..." : "-- Chọn nhân viên --"}
           />
-          {renderError("username")}
-        </div>
 
-        {/* Nhân viên */}
-        <div className="form-group">
-          <label>Nhân viên *</label>
-          <select
-            value={form.employeeCode}
-            onChange={handleEmployeeChange}
-            disabled={loadingEmployees || mode === "edit"}
-          >
-            <option value="">
-              {loadingEmployees ? "Đang tải..." : "-- Chọn --"}
-            </option>
-            {employees.map((e) => (
-              <option key={e.code} value={e.code}>
-                {e.code} - {e.name}
-              </option>
-            ))}
-          </select>
-          {renderError("employeeCode")}
-        </div>
+          <FormInput
+            label="Họ và tên"
+            name="fullName"
+            value={form.fullName}
+            readOnly
+            disabled
+            className="input-disabled-custom"
+          />
 
-        {/* Phòng ban */}
-        <div className="form-group">
-          <label>Phòng ban</label>
-          <input
-            value={departmentMap[form.department] || "—"}
+          <FormInput
+            label="Phòng ban"
+            name="department"
+            value={form.department}
+            readOnly
+            disabled
+          />
+
+          <FormInput
+            label="Chức vụ"
+            name="position"
+            value={form.position}
+            readOnly
             disabled
           />
         </div>
-
-        {/* Chức vụ */}
-        <div className="form-group">
-          <label>Chức vụ</label>
-          <input
-            value={positionMap[form.position] || "—"}
-            disabled
-          />
-        </div>
-
-        {/* Mật khẩu */}
-        <div className="form-group">
-          <label>Mật khẩu {mode === "create" && "*"}</label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              placeholder={mode === "edit" ? "Để trống nếu không đổi" : ""}
-              style={{ width: "100%" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Xem mật khẩu"}
-              title={showPassword ? "Ẩn mật khẩu" : "Xem mật khẩu"}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                padding: 0,
-                display: "inline-flex",
-                alignItems: "center",
-              }}
-            >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </button>
-          </div>
-          {renderError("password")}
-        </div>
-
-        {/* Phân quyền */}
-        <div className="form-group">
-          <label>Phân quyền *</label>
-          <select name="role" value={form.role} onChange={handleChange}>
-            <option value="">-- Chọn quyền --</option>
-            {roleOptions.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-          {renderError("role")}
-        </div>
-
-        {/* Xác nhận mật khẩu */}
-        <div className="form-group">
-          <label>Xác nhận mật khẩu {mode === "create" && "*"}</label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              name="confirmPassword"
-              value={form.confirmPassword}
-              onChange={handleChange}
-              placeholder={mode === "edit" ? "Để trống nếu không đổi" : ""}
-              style={{ width: "100%" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword((v) => !v)}
-              aria-label={
-                showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Xem xác nhận mật khẩu"
-              }
-              title={showConfirmPassword ? "Ẩn" : "Xem"}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                padding: 0,
-                display: "inline-flex",
-                alignItems: "center",
-              }}
-            >
-              {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
-            </button>
-          </div>
-          {renderError("confirmPassword")}
-        </div>
-
-        {/* Trạng thái */}
-        <div className="form-group">
-          <label>Trạng thái</label>
-          <select name="status" value={form.status} onChange={handleChange}>
-            <option value="Hoạt động">Hoạt động</option>
-            {mode === "edit" && (
-              <option value="Ngưng hoạt động">Ngưng hoạt động</option>
-            )}
-          </select>
-        </div>
       </div>
 
-      {infoMessage && <div className="info-message">{infoMessage}</div>}
-
-      <div className="form-actions">
-        <button
-          type="submit"
-          className="btn-primary"
-          title={mode === "edit" && !isDirty ? "Chưa có thay đổi để lưu" : ""}
-        >
-          <FaSave style={{ marginRight: 5 }} />
-          {mode === "create" ? "Tạo tài khoản" : "Lưu thay đổi"}
-        </button>
-
-        <button type="button" className="btn-secondary" onClick={onCancel}>
-          <FaTimes />
-          <span>Hủy</span>
-        </button>
-      </div>
+      <FormActions
+        mode={mode}
+        isDirty={isDirty}
+        onCancel={onCancel}
+        submitLabel={mode === "create" ? "Tạo tài khoản" : "Cập nhật"}
+      />
     </form>
   );
 }

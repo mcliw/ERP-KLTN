@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: identity
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'update' for development, change to 'validate' or 'none' for production
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  graphql:
+  path: /graphql
+  graphiql:
+    enabled: true
+    path: /graphiql
+
+  flyway:
+    baseline-on-migrate: true
+    check-location: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+      context-path: /identity
+
+
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400

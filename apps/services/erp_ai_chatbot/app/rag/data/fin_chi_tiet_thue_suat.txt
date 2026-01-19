@@ -1,0 +1,56 @@
+ TÀI LIỆU: DANH MỤC HÀNG HÓA & MỨC THUẾ SUẤT GTGT ÁP DỤNG
+ CĂN CỨ: LUẬT THUẾ GTGT, NGHỊ ĐỊNH 15/2022, NGHỊ ĐỊNH 44/2023
+ MÃ TÀI LIỆU: FIN-TAX-RATE-01
+
+---
+
+ CHƯƠNG 1: NGUYÊN TẮC ÁP DỤNG
+Khi tạo hóa đơn (`ARInvoice`) hoặc nhập hóa đơn đầu vào (`APInvoice`), Kế toán viên phải chọn đúng mã thuế suất (`tax_rate`) cho từng dòng hàng.
+
+ Điều 1. Đối tượng không chịu thuế (KCT)
+- Định nghĩa: Hàng hóa/dịch vụ không thuộc diện đánh thuế GTGT. Doanh nghiệp không được khấu trừ thuế đầu vào.
+- Danh mục:
+  1. Sản phẩm trồng trọt, chăn nuôi, thủy sản chưa chế biến thành các sản phẩm khác hoặc chỉ qua sơ chế thông thường.
+  2. Phần mềm máy tính, dịch vụ phần mềm (Software license, SaaS).
+  3. Dịch vụ y tế, thú y.
+  4. Dạy học, dạy nghề.
+  5. Chuyển quyền sử dụng đất.
+
+ Điều 2. Thuế suất 0% (Export)
+- Định nghĩa: Áp dụng cho hàng hóa, dịch vụ xuất khẩu ra nước ngoài hoặc vào khu phi thuế quan.
+- Điều kiện bắt buộc:
+  1. Có hợp đồng bán hàng/gia công xuất khẩu.
+  2. Có chứng từ thanh toán qua ngân hàng.
+  3. Có tờ khai hải quan (đối với hàng hóa).
+
+---
+
+ CHƯƠNG 2: CÁC MỨC THUẾ SUẤT THÔNG DỤNG (5%, 8%, 10%)
+
+ Điều 3. Thuế suất 5% (Hàng thiết yếu)
+Áp dụng cho các mặt hàng phục vụ đời sống và sản xuất nông nghiệp:
+1. Nước sạch: Nước sạch phục vụ sản xuất và sinh hoạt (trừ nước đóng chai).
+2. Nông nghiệp: Phân bón, quặng để sản xuất phân bón; thuốc phòng trừ sâu bệnh.
+3. Thực phẩm: Thực phẩm tươi sống ở khâu kinh doanh thương mại; Đường; Phụ phẩm đường; Lúa, gạo, ngô, khoai, sắn.
+4. Y tế: Thiết bị, dụng cụ y tế chuyên dùng (Máy soi, chiếu, chụp; Dụng cụ chỉnh hình; Bông, băng y tế).
+5. Giáo dục: Đồ dùng dạy học (Mô hình, tranh ảnh, thước kẻ, bảng).
+
+ Điều 4. Thuế suất 8% (Giảm thuế)
+Theo chính sách hỗ trợ phục hồi kinh tế (có hiệu lực theo từng giai đoạn Nghị định), mức 10% được giảm xuống 8%.
+QUY TẮC LOẠI TRỪ (QUAN TRỌNG):
+Áp dụng 8% cho tất cả, TRỪ các nhóm sau đây (vẫn giữ 10%):
+1. Viễn thông & CNTT: Dịch vụ viễn thông, hoạt động lập trình máy vi tính, dịch vụ tư vấn CNTT.
+2. Tài chính - Ngân hàng: Dịch vụ tài chính, ngân hàng, chứng khoán, bảo hiểm.
+3. Bất động sản: Kinh doanh bất động sản.
+4. Kim loại & Khoáng sản: Sản phẩm khai khoáng, kim loại đúc sẵn, than cốc, dầu mỏ tinh chế, hoá chất cơ bản.
+5. Hàng chịu thuế TTĐB: Rượu, bia, thuốc lá, xe ô tô.
+
+Mẹo cho Bot: Khi người dùng hỏi "Laptop chịu thuế mấy %?", Bot cần kiểm tra xem thời điểm đó có Nghị định giảm thuế không. Nếu có -> 8%. Nếu không -> 10%.
+
+ Điều 5. Thuế suất 10% (Phổ thông)
+Áp dụng cho tất cả các hàng hóa, dịch vụ còn lại không thuộc các nhóm trên.
+- Hàng điện tử, điện lạnh (Tivi, Tủ lạnh, Máy giặt).
+- Hàng may mặc, thời trang.
+- Dịch vụ ăn uống, khách sạn, du lịch.
+- Dịch vụ vận tải, kho bãi.
+- Nước giải khát, nước đóng chai (khác nước sạch 5%).

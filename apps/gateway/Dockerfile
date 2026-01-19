@@ -1,15 +1,23 @@
-FROM maven:3.9.11-eclipse-temurin-21-alpine AS build
+# --- Stage 1: Build (Chuyển từ alpine sang bản chuẩn để tương thích Protobuf/gRPC) ---
+# Sử dụng bản eclipse-temurin (thay vì alpine) để có sẵn glibc
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
-COPY pom.xml .
-RUN mvn dependency:go-offline
+
+# 1. Copy pom.xml và tải dependencies
+COPY pom.xml . 
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn dependency:go-offline -B
+
+# 2. Copy source code và thực hiện build
 COPY src ./src
-RUN mvn clean package -DskipTests
+# Build sẽ thành công vì môi trường này chạy được các plugin native của Protobuf
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn package -DskipTests -B
 
-FROM eclipse-temurin:17-jre-alpine
+# --- Stage 2: Final (Tiếp tục dùng Alpine để Image nhẹ) ---
+FROM eclipse-temurin:21-jre-alpine AS final
 WORKDIR /app
-
 COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
