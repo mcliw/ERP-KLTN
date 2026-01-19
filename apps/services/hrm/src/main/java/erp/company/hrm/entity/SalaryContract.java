@@ -1,5 +1,6 @@
 package erp.company.hrm.entity;
 
+import erp.company.hrm.entity.enums.SalaryStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
@@ -11,6 +12,7 @@ import java.time.LocalDate;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class SalaryContract extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +34,8 @@ public class SalaryContract extends BaseEntity {
     @Column(name = "effective_date", nullable = false)
     private LocalDate effectiveDate;
 
-    @Column(name = "is_active")
-    private Boolean isActive;
+    // [UPDATE] Thay thế is_active boolean bằng status Enum
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private SalaryStatus status;
 }

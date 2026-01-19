@@ -1,22 +1,20 @@
 package erp.company.hrm.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
+import lombok.*;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DepartmentDto {
-    private String id;
-    private String code;
-    private String name;
-    private String description;
-    private String status;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+@Builder
+public class DepartmentDTO {
+    private Integer id;             // Mapping from departmentId
+    private String code;            // Form: Mã phòng ban
+    private String name;            // Form: Tên phòng ban
+    private String description;     // Form: Mô tả
+    private String status;          // Form: "Hoạt động" | "Ngưng hoạt động"
+    
+    // Fields cho Table/View
+    private Integer managerId;
+    private String managerName;     // Table: Trưởng phòng
+    private Integer employeeCount;  // Table: Số NV
 }

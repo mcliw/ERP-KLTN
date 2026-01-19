@@ -11,6 +11,7 @@ services:
     volumes:
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
+      - face-service
       - gateway-service
     networks:
       - erp-network
@@ -113,6 +114,7 @@ services:
     image: arsneonci/hrm-service:latest
     container_name: hrm-service
     environment:
+      - JWT_SECRET=${JWT_SECRET}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-hrm:5432/hrm_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard

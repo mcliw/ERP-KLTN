@@ -1,78 +1,139 @@
 package erp.company.hrm.services.impl;
 
-import erp.company.hrm.dto.DepartmentDto;
+import erp.company.hrm.dto.DepartmentDTO;
 import erp.company.hrm.entity.Department;
+import erp.company.hrm.entity.Employee;
 import erp.company.hrm.repository.DepartmentRepository;
+import erp.company.hrm.repository.EmployeeRepository;
 import erp.company.hrm.services.DepartmentService;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class DepartmentServiceImpl implements DepartmentService {
 
     private final DepartmentRepository departmentRepository;
+    private final EmployeeRepository employeeRepository; // Để map manager name
 
     @Override
-    public Page<DepartmentDto> getDepartments(String keyword, String status, Pageable pageable) {
+    public Page<DepartmentDTO> getDepartments(String keyword, String status, Pageable pageable) {
         Specification<Department> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-
-            // [LƯU Ý]: Entity Department/BaseEntity bạn gửi chưa có trường deletedAt. 
-            // Nếu muốn dùng Soft Delete, hãy thêm private LocalDateTime deletedAt vào BaseEntity.
-            // Tạm thời comment dòng này để code chạy được:
-            // predicates.add(cb.isNull(root.get("deletedAt")));
-
-            // 1. Tìm kiếm theo keyword (code hoặc name)
-            if (StringUtils.hasText(keyword)) {
-                String likePattern = "%" + keyword.toLowerCase() + "%";
+            
+            if (keyword != null && !keyword.isEmpty()) {
+                String likeKey = "%" + keyword.toLowerCase() + "%";
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("code")), likePattern),
-                        cb.like(cb.lower(root.get("name")), likePattern)
+                        cb.like(cb.lower(root.get("name")), likeKey),
+                        cb.like(cb.lower(root.get("code")), likeKey)
                 ));
             }
-
-            // 2. Lọc theo trạng thái
-            // Vì Entity dùng Boolean (true/false) nhưng API nhận String ("Hoạt động"...)
-            // Cần convert logic lọc:
-            if (StringUtils.hasText(status)) {
-                boolean statusBool = "Hoạt động".equalsIgnoreCase(status);
-                predicates.add(cb.equal(root.get("status"), statusBool));
+            
+            if (status != null && !status.isEmpty()) {
+                boolean isActive = "Hoạt động".equalsIgnoreCase(status) || "Active".equalsIgnoreCase(status);
+                predicates.add(cb.equal(root.get("status"), isActive));
             }
-
+            
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        // Hàm này giờ đã hoạt động nhờ sửa Repository
         Page<Department> page = departmentRepository.findAll(spec, pageable);
-
-        return page.map(this::mapToDto);
+        return page.map(this::mapToDTO);
     }
 
-    private DepartmentDto mapToDto(Department entity) {
-        // Convert status từ Boolean sang String để khớp với Frontend
-        String statusStr = (entity.getStatus() != null && entity.getStatus()) 
-                           ? "Hoạt động" 
-                           : "Ngưng hoạt động";
+    @Override
+    public List<DepartmentDTO> getAllActiveDepartments() {
+        return departmentRepository.findAll().stream()
+                .filter(Department::getStatus)
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
 
-        return DepartmentDto.builder()
-                // [SỬA LỖI]: Dùng getDepartmentId() thay vì getId()
-                // Convert Integer sang String vì DTO yêu cầu String (như db.json)
-                .id(String.valueOf(entity.getDepartmentId())) 
+    @Override
+    public DepartmentDTO getDepartmentById(Integer id) {
+        Department dept = departmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng ban: " + id));
+        return mapToDTO(dept);
+    }
+
+    @Override
+    public DepartmentDTO createDepartment(DepartmentDTO dto) {
+        if (departmentRepository.existsByCode(dto.getCode())) {
+            throw new RuntimeException("Mã phòng ban đã tồn tại: " + dto.getCode());
+        }
+        Department entity = new Department();
+        entity.setCode(dto.getCode());
+        updateEntityFromDTO(entity, dto);
+        return mapToDTO(departmentRepository.save(entity));
+    }
+
+    @Override
+    public DepartmentDTO updateDepartment(Integer id, DepartmentDTO dto) {
+        Department entity = departmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng ban: " + id));
+
+        // Logic FE: Không cho đổi code, nên bỏ qua setCode
+        
+        // Logic chặn deactivate nếu còn nhân viên
+        if ("Ngưng hoạt động".equals(dto.getStatus()) && entity.getStatus()) {
+            long empCount = employeeRepository.countByDepartment_DepartmentId(id);
+            if (empCount > 0) {
+                throw new RuntimeException("Không thể ngưng hoạt động vì còn nhân viên");
+            }
+        }
+        
+        updateEntityFromDTO(entity, dto);
+        return mapToDTO(departmentRepository.save(entity));
+    }
+
+    @Override
+    public void deleteDepartment(Integer id) {
+        long empCount = employeeRepository.countByDepartment_DepartmentId(id);
+        if (empCount > 0) {
+            throw new RuntimeException("Không thể xóa phòng ban đang có nhân viên");
+        }
+        departmentRepository.deleteById(id);
+    }
+
+    // --- Helpers ---
+    private DepartmentDTO mapToDTO(Department entity) {
+        // Cần đếm nhân viên để trả về cho Table
+        long count = employeeRepository.countByDepartment_DepartmentId(entity.getDepartmentId());
+        
+        return DepartmentDTO.builder()
+                .id(entity.getDepartmentId())
                 .code(entity.getCode())
                 .name(entity.getName())
                 .description(entity.getDescription())
-                .status(statusStr)
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
+                .status(Boolean.TRUE.equals(entity.getStatus()) ? "Hoạt động" : "Ngưng hoạt động")
+                .managerId(entity.getManager() != null ? entity.getManager().getEmployeeId() : null)
+                .managerName(entity.getManager() != null ? entity.getManager().getFullName() : null)
+                .employeeCount((int) count)
                 .build();
+    }
+
+    private void updateEntityFromDTO(Department entity, DepartmentDTO dto) {
+        entity.setName(dto.getName());
+        entity.setDescription(dto.getDescription());
+        
+        if (dto.getStatus() != null) {
+            entity.setStatus("Hoạt động".equalsIgnoreCase(dto.getStatus()));
+        }
+        
+        // Logic update manager (nếu có logic chọn manager từ dropdown)
+        if (dto.getManagerId() != null) {
+            Employee manager = employeeRepository.findById(dto.getManagerId()).orElse(null);
+            entity.setManager(manager);
+        }
     }
 }

@@ -40,19 +40,31 @@ export default function TimeKeeping() {
   const user = useAuthStore((s) => s.user);
   const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_TIME_KEEPING_UPDATE || "TIMEKEEPING_EDIT");
 
-  // State bật/tắt Camera
   const [showCamera, setShowCamera] = useState(false);
 
-  // 2. Data Fetching
+  // ==================================================================
+  // ✅ [FIX 1]: Sửa lỗi Loop khi gọi Department
+  // ==================================================================
+  const fetchDepartments = useCallback(() => {
+    // Thêm enrich: false để tránh gọi lồng API ở backend (đề phòng backend chưa fix triệt để)
+    return departmentService.getAll({ includeDeleted: false, enrich: false });
+  }, []);
+
+  const { data: departments } = useAsyncData(fetchDepartments);
+
+  // ==================================================================
+  // ⚠️ [FIX 2]: Gọi TimeKeeping (Hiện tại không loop nhưng nên bọc useCallback cho chắc chắn)
+  // ==================================================================
+  const fetchTimeKeepings = useCallback(() => {
+    // Gọi API. Lưu ý: Nếu muốn tối ưu, hãy truyền { date: ... } vào đây
+    return timeKeepingService.getAll(); 
+  }, []);
+
   const { 
     data: timeKeepings, 
     loading: loadingTimeKeeping, 
     refresh 
-  } = useAsyncData(timeKeepingService.getAll);
-
-  const { data: departments } = useAsyncData(() => 
-    departmentService.getAll({ includeDeleted: false })
-  );
+  } = useAsyncData(fetchTimeKeepings);
 
   // 3. Filter State
   const [keyword, setKeyword] = useState("");

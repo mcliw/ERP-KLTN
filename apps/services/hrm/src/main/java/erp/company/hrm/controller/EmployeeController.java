@@ -1,72 +1,74 @@
 package erp.company.hrm.controller;
 
-import erp.company.hrm.dto.EmployeeDto;
-import erp.company.hrm.entity.Employee;
-import erp.company.hrm.entity.enums.EmployeeStatus;
+import erp.company.hrm.dto.EmployeeDTO;
 import erp.company.hrm.services.EmployeeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/employees")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 public class EmployeeController {
 
     private final EmployeeService employeeService;
 
     @GetMapping
-    public ResponseEntity<List<EmployeeDto>> getAllEmployees() {
-        List<Employee> employees = employeeService.getAllEmployees();
-        
-        // Chuyển đổi Entity sang DTO để khớp với db.json
-        List<EmployeeDto> employeeDtos = employees.stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(employeeDtos);
+    public ResponseEntity<List<EmployeeDTO>> getEmployees(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer department, // FE gửi department ID hoặc Code
+            @RequestParam(required = false) Integer position,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String code, // Support getByCode
+            @PageableDefault(size = 1000) Pageable pageable
+    ) {
+        String searchKey = (code != null && !code.isEmpty()) ? code : keyword;
+        return ResponseEntity.ok(employeeService.getEmployees(searchKey, department, position, gender, status, pageable).getContent());
     }
 
-    private EmployeeDto convertToDto(Employee emp) {
-        return EmployeeDto.builder()
-                .id(emp.getEmployeeId())
-                .code(emp.getEmployeeCode())
-                .name(emp.getFullName())
-                .gender(emp.getGender())
-                .dob(emp.getBirthday())
-                .email(emp.getEmail())
-                .phone(emp.getPhone())
-                // Kiểm tra null an toàn cho department và position
-                .department(emp.getDepartment() != null ? emp.getDepartment().getCode() : "") 
-                .position(emp.getPosition() != null ? emp.getPosition().getCode() : "")
-                .status(mapStatus(emp.getStatusEmpl()))
-                .avatarUrl(emp.getAvatarUrl())
-                .joinDate(emp.getJoinDate())
-                .hometown(emp.getHometown())
-                .cccd(emp.getIdentityCard())
-                .bankAccount(emp.getBankAccountNumber())
-                .bankAccountName(emp.getFullName() != null ? emp.getFullName().toUpperCase() : "")
-                .build();
+    @GetMapping("/{id}")
+    public ResponseEntity<EmployeeDTO> getEmployeeById(@PathVariable Integer id) {
+        return ResponseEntity.ok(employeeService.getEmployeeById(id));
     }
-    
+
     @PostMapping
-    public ResponseEntity<EmployeeDto> createEmployee(@RequestBody EmployeeDto employeeDto) {
-        Employee newEmployee = employeeService.createEmployee(employeeDto);
-        // Trả về DTO của nhân viên vừa tạo
-        return ResponseEntity.ok(convertToDto(newEmployee));
+    public ResponseEntity<EmployeeDTO> createEmployee(@RequestBody EmployeeDTO dto) {
+        // FE gửi JSON chứa cả Base64 string của file (avatarUrl, contractUrl...)
+        // Service cần xử lý chuỗi Base64 này hoặc lưu link
+        return ResponseEntity.ok(employeeService.createEmployee(dto));
     }
 
-    private String mapStatus(EmployeeStatus status) {
-        if (status == null) return "";
-        // Giả sử Enum có giá trị ACTIVE, RESIGNED, v.v.
-        switch (status.name()) {
-            case "ACTIVE": return "Đang làm việc";
-            case "RESIGNED": return "Đã nghỉ việc";
-            case "ON_LEAVE": return "Nghỉ phép";
-            default: return "Khác";
-        }
+    @PutMapping("/{id}")
+    public ResponseEntity<EmployeeDTO> updateEmployee(@PathVariable Integer id, @RequestBody EmployeeDTO dto) {
+        return ResponseEntity.ok(employeeService.updateEmployee(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteEmployee(@PathVariable Integer id) {
+        employeeService.deleteEmployee(id); // Xử lý Hard delete
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- Endpoints Upload File (Nếu FE muốn tách việc upload ra khỏi JSON payload) ---
+    
+    @PostMapping(value = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> uploadAvatar(@PathVariable Integer id, @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(employeeService.uploadAvatar(id, file));
+    }
+
+    @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> uploadDocument(
+            @PathVariable Integer id, 
+            @RequestParam("type") String docType, 
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(employeeService.uploadDocument(id, docType, file));
     }
 }

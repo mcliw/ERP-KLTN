@@ -3,23 +3,24 @@ package erp.company.hrm.dto;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SalaryContractDto {
-    private Integer contractId;
-    private String employeeId;
-    private String employeeName;
-    private BigDecimal baseSalary;
-    private BigDecimal allowance;
-    private BigDecimal insuranceSalary;
-    private LocalDate effectiveDate;
-    private Boolean isActive;
+@Builder
+public class SalaryContractDTO {
+    private Integer id;                 // contractId
+    private Integer employeeId;         // Form: employeeId
+    private String employeeCode;        // Table: hiển thị
+    private String employeeName;        // Table: hiển thị
 
-    // BaseEntity fields
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private BigDecimal baseSalary;      // Form: Lương cơ bản
+    private BigDecimal allowance;       // Form: Phụ cấp
+    private BigDecimal insuranceSalary; // Form: Mức đóng bảo hiểm
+    
+    private LocalDate effectiveDate;    // Form: Ngày hiệu lực
+    
+    // Form có 3 trạng thái: "Dự thảo", "Hiệu lực", "Hết hạn". 
+    // Entity hiện tại chỉ có Boolean is_active -> Cần sửa Entity/DB
+    private String status;              
 }

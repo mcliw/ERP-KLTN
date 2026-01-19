@@ -295,3 +295,10 @@ volumes:
   sales-data:
   accounting-data:
   chroma-data:
+  
+mkdir -p services
+mkdir -p repository
+mkdir -p entity
+mkdir -p controller
+mkdir -p constant
+mkdir -p dto

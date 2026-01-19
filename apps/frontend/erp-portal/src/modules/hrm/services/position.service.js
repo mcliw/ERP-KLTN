@@ -1,11 +1,12 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/position.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn chính xác tới file axiosClient.js
 import { employeeService } from "./employee.service";
 
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3001/positions";
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/positions";
 
 const STATUS = {
   ACTIVE: "Hoạt động",
@@ -31,31 +32,17 @@ const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
 /* =========================
  * Internal Logic (Enrich Data)
  * ========================= */
 const enrichPositionData = (position, allEmployees) => {
-  const posCode = normalizeCode(position?.code);
-
-  const assignees = (Array.isArray(allEmployees) ? allEmployees : []).filter(
-    (e) =>
-      !isSoftDeleted(e?.deletedAt) &&
-      String(e?.status || "").trim() === EMP_STATUS.WORKING &&
-      normalizeCode(e?.position) === posCode
+  const posCode = position.code;
+  const assignees = allEmployees.filter(
+    (e) => e.position === posCode && e.status === EMP_STATUS.WORKING && !isSoftDeleted(e.deletedAt)
   );
 
   return {
     ...position,
-    assignees,
     assigneeCount: assignees.length,
   };
 };
@@ -65,16 +52,14 @@ const enrichPositionData = (position, allEmployees) => {
  * ========================= */
 const validators = {
   async checkHasActiveAssignees(posCode) {
-    const employees = await employeeService.getAll({ includeDeleted: false });
-
-    const hasActive = (Array.isArray(employees) ? employees : []).some(
-      (e) =>
-        !isSoftDeleted(e?.deletedAt) &&
-        String(e?.status || "").trim() === EMP_STATUS.WORKING &&
-        normalizeCode(e?.position) === normalizeCode(posCode)
+    const employees = await employeeService.getAll();
+    const activeInPos = employees.filter(
+      (e) => e.position === posCode && e.status === EMP_STATUS.WORKING && !isSoftDeleted(e.deletedAt)
     );
 
-    if (hasActive) throw new Error(ERROR_MSGS.HAS_ASSIGNEES);
+    if (activeInPos.length > 0) {
+      throw new Error(ERROR_MSGS.HAS_ASSIGNEES);
+    }
   },
 };
 
@@ -84,52 +69,59 @@ const validators = {
 export const positionService = {
   async getAll({ includeDeleted = false, enrich = true } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      // Sử dụng axiosClient thay cho fetch
+      const positions = await axiosClient.get(API_URL);
 
-      const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
-        const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
-        const tb = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
-        return tb - ta;
-      });
+      let result = Array.isArray(positions) ? positions : [];
 
-      const filtered = includeDeleted
-        ? sortedData
-        : sortedData.filter((p) => !isSoftDeleted(p?.deletedAt));
+      if (!includeDeleted) {
+        result = result.filter((p) => !isSoftDeleted(p.deletedAt));
+      }
 
-      if (!enrich) return filtered;
+      if (enrich) {
+        const employees = await employeeService.getAll({ includeDeleted: true, enrich: false });
+        result = result.map((p) => enrichPositionData(p, employees));
+      }
 
-      const employees = await employeeService.getAll({ includeDeleted: true });
-      return filtered.map((p) => enrichPositionData(p, employees));
+      return result.sort((a, b) => normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
     } catch (error) {
       console.error(ERROR_MSGS.FETCH_FAILED, error);
       return [];
     }
   },
 
-  /**
-   * Lấy chi tiết theo code (GET ?code=...)
-   * + hỗ trợ enrich để có assigneeCount/assignees cho màn edit
-   */
+  async getById(id) {
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
+  },
+
   async getByCode(code, { enrich = true } = {}) {
     try {
       const targetCode = normalizeCode(code);
-      const response = await fetch(`${API_URL}?code=${encodeURIComponent(targetCode)}`);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL, {
+        params: { code: targetCode },
+      });
 
       const pos = Array.isArray(data) && data.length > 0 ? data[0] : null;
-      if (!pos || !enrich) return pos;
 
-      const employees = await employeeService.getAll({ includeDeleted: true });
-      return enrichPositionData(pos, employees);
+      if (pos && enrich) {
+        const employees = await employeeService.getAll({ includeDeleted: true });
+        return enrichPositionData(pos, employees);
+      }
+
+      return pos;
     } catch {
       return null;
     }
   },
 
   async checkCodeExists(code) {
-    const item = await this.getByCode(code, { enrich: false });
-    return !!item;
+    const pos = await this.getByCode(code, { enrich: false });
+    return !!pos;
   },
 
   async create(data) {
@@ -138,65 +130,36 @@ export const positionService = {
     const exists = await this.checkCodeExists(code);
     if (exists) throw new Error(ERROR_MSGS.EXISTS);
 
-    const capacityNum = Number(data?.capacity ?? 1);
     const newPosition = {
       ...data,
       code,
-      status: data?.status || STATUS.ACTIVE,
-      capacity: Number.isFinite(capacityNum) ? capacityNum : 1,
+      status: data.status || STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newPosition),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newPosition);
   },
 
-  /**
-   * Cập nhật (PUT) theo id
-   * Rule: KHÔNG cho chuyển sang "Ngưng hoạt động" nếu còn NV WORKING đang đảm nhận
-   */
   async update(code, data) {
-    try {
-      const targetCode = normalizeCode(code);
+    const targetCode = normalizeCode(code);
 
-      const current = await this.getByCode(targetCode, { enrich: false });
-      if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-      const nextStatus = (data?.status ?? current.status)?.trim();
-
-      // Chỉ check khi có ý định chuyển ACTIVE -> INACTIVE
-      if (nextStatus === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
-        await validators.checkHasActiveAssignees(targetCode);
-      }
-
-      const nextCapacity = Number(data?.capacity ?? current?.capacity ?? 1);
-
-      const updatedPosition = {
-        ...current,
-        ...data,
-        code: targetCode,
-        capacity: Number.isFinite(nextCapacity) ? nextCapacity : Number(current?.capacity ?? 1),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const response = await fetch(`${API_URL}/${current.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedPosition),
-      });
-
-      return handleResponse(response);
-    } catch (error) {
-      if (error?.message) throw error;
-      throw new Error(ERROR_MSGS.UPDATE_FAILED);
+    if (data.status === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
+      await validators.checkHasActiveAssignees(targetCode);
     }
+
+    const updatedPosition = {
+      ...current,
+      ...data,
+      code: targetCode,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedPosition);
   },
 
   async remove(code) {
@@ -215,13 +178,7 @@ export const positionService = {
       updatedAt: now,
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
   async restore(code) {
@@ -237,20 +194,13 @@ export const positionService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
   },
 
   async destroy(code) {
     const current = await this.getByCode(code, { enrich: false });
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${current.id}`, { method: "DELETE" });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };
