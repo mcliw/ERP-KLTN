@@ -1,0 +1,24 @@
+package erp.company.hrm.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class PositionDto {
+    private String id;
+    private String code;
+    private String name;
+    private String description;
+    private String status; // "Hoạt động" | "Ngưng hoạt động"
+    private String department; // Trả về Mã phòng ban (Department Code)
+    private Integer capacity;
+    
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+}

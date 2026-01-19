@@ -62,10 +62,10 @@ services:
     depends_on:
       - identity-service
       - hrm-service
-      - supply-chain-service
+#      - supply-chain-service
 #      - ai-service
-      - sales-service
-      - accounting-service
+#      - sales-service
+#      - accounting-service
     networks:
       - erp-network
 
@@ -133,141 +133,6 @@ services:
     networks:
       - erp-network
 
-  # 3. Supply Chain Service
-  supply-chain-service:
-    build: 
-      context: ./apps/services/supply-chain
-    env_file:
-    - .env
-    image: arsneonci/supply-chain-service:latest
-    container_name: supply-chain-service
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-supply:5432/supply_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
-    depends_on:
-      - db-supply
-    networks:
-      - erp-network
-
-  db-supply:
-    image: postgres:15-alpine
-    container_name: db-supply
-    environment:
-      - POSTGRES_DB=supply_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=DEADlift12Hard
-    volumes:
-      - supply-data:/var/lib/postgresql/data
-    networks:
-      - erp-network
-# 4. Sales CRM Service (Java)
-  sales-service:
-    build: 
-      context: ./apps/services/sales
-    image: arsneonci/sales-service:latest
-    container_name: sales-service
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-sales:5432/sales_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
-    depends_on:
-      - db-sales
-    networks:
-      - erp-network
-
-  db-sales:
-    image: postgres:15-alpine
-    container_name: db-sales
-    environment:
-      - POSTGRES_DB=sales_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=DEADlift12Hard
-    volumes:
-      - sales-data:/var/lib/postgresql/data
-    networks:
-      - erp-network
-
-  # 5. Accounting Service (Java)
-  accounting-service:
-    build: 
-      context: ./apps/services/accounting
-    image: arsneonci/accounting-service:latest
-    container_name: accounting-service
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-accounting:5432/accounting_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
-    depends_on:
-      - db-accounting
-    networks:
-      - erp-network
-
-  db-accounting:
-    image: postgres:15-alpine
-    container_name: db-accounting
-    environment:
-      - POSTGRES_DB=accounting_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=DEADlift12Hard
-    volumes:
-      - accounting-data:/var/lib/postgresql/data
-    networks:
-      - erp-network
-  # 6. AI Assistant Service (Python FastAPI)
-#  ai-service:
-#    build: 
-#      context: ./apps/services/erp_ai_chatbot
-#    image: arsneonci/ai-service:latest
-#    container_name: ai-service
-#    environment:
-#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
-#    depends_on:
-#      - db-ai
-#    networks:
-#      - erp-network
-#  db-ai:
-#    image: postgres:15-alpine
-#    container_name: db-ai
-#    environment:
-#      - POSTGRES_DB=ai_db
-#      - POSTGRES_USER=postgres
-#      - POSTGRES_PASSWORD=DEADlift12Hard
-#    volumes:
-#      - ai-data:/var/lib/postgresql/data
-#    networks:
-#      - erp-network
-
-  # 6. Face Recognition Service (Python FastAPI)
-#  face-service:
-#      context: ./apps/services/face-recognition-attendance-system
-#    image: arsneonci/face-service:latest
-#    container_name: face-service
-#    environment:
-#      # Kết nối database PostgreSQL
-#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-hrm:5432/hrm_db
-#      # Cấu hình kết nối ChromaDB (Server mode)
-#      - CHROMA_DB_HOST=chromadb
-#      - CHROMA_DB_PORT=8000
-#    depends_on:
-#      - db-hrm
-#      - chromadb # Chờ ChromaDB khởi động xong
-#    networks:
-#      - erp-network
-
-#  chromadb:
-#    image: chromadb/chroma:latest
-#    container_name: chromadb_container
-#    volumes:
-      # Mount volume để không bị mất dữ liệu khuôn mặt khi restart
-#      - chroma-data:/chroma/chroma
-#    ports:
-#      - "8000:8000"
-#    environment:
-#      - IS_PERSISTENT=TRUE
-#      - ANONYMIZED_TELEMETRY=FALSE
-#    networks:
-#      - erp-network
 
 networks:
   erp-network:
@@ -276,8 +141,3 @@ networks:
 volumes:
   identity-data:
   hrm-data:
-  supply-data:
-  ai-data:
-  sales-data:
-  accounting-data:
-  chroma-data:
