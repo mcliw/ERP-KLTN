@@ -6,6 +6,7 @@
 const BASE_URL = "http://localhost:3002";
 const API_URL = `${BASE_URL}/current_stock`;
 const TRANSACTION_API_URL = `${BASE_URL}/inventory_transaction_logs`;
+const BIN_API_URL = `${BASE_URL}/bin_locations`;
 
 export const TRANSACTION_TYPES = {
   INBOUND: "INBOUND",
@@ -23,6 +24,7 @@ const ERROR_MSGS = {
   REQUIRED_FIELDS: "Vui lòng nhập đầy đủ Kho, Vị trí và Sản phẩm",
   NEGATIVE_QTY: "Số lượng không thể âm",
   HAS_STOCK: "Không thể xóa khi vẫn còn tồn kho (On Hand > 0)",
+  CAPACITY_EXCEEDED: "Số lượng khả dụng vượt quá sức chứa tối đa của vị trí này",
 };
 
 /* =========================
@@ -75,6 +77,29 @@ const validators = {
     }
   },
 
+  async checkBinCapacity(binId, quantityAvailable) {
+    if (!binId) return;
+
+    try {
+      // 1. Lấy thông tin Bin để xem max_capacity
+      const response = await fetch(`${BIN_API_URL}/${binId}`);
+      if (!response.ok) return; // Nếu không tìm thấy bin thì bỏ qua check (hoặc throw lỗi tùy logic)
+      
+      const binData = await response.json();
+      const maxCapacity = Number(binData.max_capacity) || 0;
+
+      // 2. Kiểm tra logic
+      // Nếu max_capacity = 0 nghĩa là không giới hạn (tùy quy ước, ở đây giả sử > 0 mới check)
+      if (maxCapacity > 0 && Number(quantityAvailable) > maxCapacity) {
+         throw new Error(ERROR_MSGS.CAPACITY_EXCEEDED);
+      }
+    } catch (error) {
+      // Ném lỗi ra ngoài để hàm create/update bắt được
+      if (error.message === ERROR_MSGS.CAPACITY_EXCEEDED) throw error;
+      console.error("Check capacity failed:", error); 
+    }
+  },
+
   validateQuantities(data) {
     if (data.quantity_on_hand < 0 || data.quantity_allocated < 0) {
       throw new Error(ERROR_MSGS.NEGATIVE_QTY);
@@ -82,10 +107,19 @@ const validators = {
   },
 
   async checkBusinessRules(data, currentId = null) {
+    // 1. Check trùng sản phẩm
     if (data.warehouse_id && data.bin_id && data.product_id) {
       await this.checkStockUnique(data.warehouse_id, data.bin_id, data.product_id, currentId);
     }
+    
+    // 2. Validate số âm
     this.validateQuantities(data);
+
+    // 3. Check sức chứa vị trí
+    // Chỉ check khi có bin_id và quantity_available
+    if (data.bin_id && data.quantity_available !== undefined) {
+        await this.checkBinCapacity(data.bin_id, data.quantity_available);
+    }
   },
 };
 
@@ -168,6 +202,10 @@ export const inventoryService = {
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
     const mergedData = { ...current, ...data };
+
+    mergedData.quantity_available = calculateAvailable(mergedData.quantity_on_hand, mergedData.quantity_allocated);
+
+    await validators.checkBusinessRules(mergedData, id);
     
     if (
       mergedData.warehouse_id !== current.warehouse_id ||

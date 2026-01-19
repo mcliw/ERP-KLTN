@@ -7,18 +7,9 @@ import {
   DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton
 } from "../../../../shared/components/DetailLayout";
 import "../../../../shared/styles/detail.css";
+import { FaCheck, FaTimes } from "react-icons/fa";
 
 // Helper style cho status
-// const getStatusColor = (status) => {
-//   switch (status) {
-//     case "APPROVED": return "success";
-//     case "REJECTED": return "danger";
-//     case "COMPLETED": return "primary";
-//     case "CANCELLED": return "secondary";
-//     default: return "warning"; // DRAFT
-//   }
-// };
-
 const getStatusColor = (status) => {
   switch (status) {
     case "APPROVED": return "text-success font-weight-bold";
@@ -43,7 +34,7 @@ export default function PurchaseRequestDetail() {
   // 1. Fetch dữ liệu Master + Items
   const { data: pr, loading } = useFetchDetail(purchaseRequestService.getById, id);
 
-  // 2. Effect: Khi có PR data -> Load thêm các data tham chiếu (NV, PB, SP) để hiển thị tên
+  // 2. Effect: Khi có PR data -> Load thêm các data tham chiếu
   useEffect(() => {
     if (!pr) return;
 
@@ -51,24 +42,19 @@ export default function PurchaseRequestDetail() {
 
     const fetchReferenceData = async () => {
       try {
-        // Gọi song song 3 API để lấy dữ liệu map
-        // Lưu ý: Products nằm ở port 3002 (chung server supply chain)
         const [emps, depts, products] = await Promise.all([
-          purchaseRequestService.getEmployeesRef(),   // Port 3001
-          purchaseRequestService.getDepartmentsRef(), // Port 3001
+          purchaseRequestService.getEmployeesRef(),   
+          purchaseRequestService.getDepartmentsRef(), 
           purchaseRequestService.getProductsRef(),
         ]);
 
         if (mounted) {
-          // A. Map Người yêu cầu
           const requester = emps.find(e => String(e.id) === String(pr.requester_id));
           const requesterName = requester ? requester.name : `ID: ${pr.requester_id} (Không tìm thấy)`;
 
-          // B. Map Phòng ban
           const dept = depts.find(d => String(d.id) === String(pr.department_id));
           const deptName = dept ? dept.name : `ID: ${pr.department_id} (Không tìm thấy)`;
 
-          // C. Map Tên sản phẩm { id: "Tên SP" }
           const prodMap = {};
           if (pr.items && Array.isArray(pr.items)) {
              pr.items.forEach(item => {
@@ -89,24 +75,76 @@ export default function PurchaseRequestDetail() {
     return () => { mounted = false; };
   }, [pr]);
 
-  // Logic hiển thị Loading / Not Found
+  // --- XỬ LÝ PHÊ DUYỆT / TỪ CHỐI ---
+  const handleApprove = async () => {
+    if (!window.confirm("Bạn có chắc chắn muốn PHÊ DUYỆT yêu cầu này?")) return;
+    try {
+      await purchaseRequestService.approve(id);
+      alert("Đã phê duyệt thành công!");
+      window.location.reload(); 
+    } catch (error) {
+      console.error(error);
+      alert("Có lỗi xảy ra khi phê duyệt: " + error.message);
+    }
+  };
+
+  const handleReject = async () => {
+    // 1. Hiện popup nhập lý do
+    const reason = window.prompt("Vui lòng nhập lý do từ chối:");
+
+    // 2. Nếu bấm Cancel (null) thì dừng
+    if (reason === null) return;
+
+    // 3. Nếu để trống -> Bắt buộc nhập
+    if (reason.trim() === "") {
+      alert("Vui lòng nhập lý do từ chối để tiếp tục!");
+      return;
+    }
+
+    try {
+      // 4. Gọi API kèm lý do
+      await purchaseRequestService.reject(id, reason);
+      alert("Đã từ chối yêu cầu.");
+      window.location.reload(); 
+    } catch (error) {
+      console.error(error);
+      alert("Có lỗi xảy ra khi từ chối: " + error.message);
+    }
+  };
+  // ------------------------------------
+
   if (loading) return <div style={{ padding: 20 }}>Đang tải dữ liệu...</div>;
   if (!pr) return <div style={{ padding: 20 }}>Không tìm thấy phiếu yêu cầu</div>;
 
-  // Logic ẩn nút sửa (Business Rule)
-  const canEdit = !["APPROVED", "COMPLETED", "CANCELLED"].includes(pr.status) && !pr.deletedAt;
+  // Logic hiển thị nút
+  const isFinalState = ["APPROVED", "REJECTED", "COMPLETED", "CANCELLED"].includes(pr.status);
+  const canEdit = !isFinalState && !pr.deletedAt;
+  const canApprove = !isFinalState && !pr.deletedAt;
 
   return (
     <div className="main-detail">
       <DetailHeader
         title="Chi tiết yêu cầu mua hàng"
         onBack={() => navigate("/supply-chain/yeu-cau-mua-hang")}
-        actions={canEdit && (
-          <EditButton
-            label="Chỉnh sửa"
-            onClick={() => navigate(`/supply-chain/yeu-cau-mua-hang/${id}/chinh-sua`)}
-          />
-        )}
+        actions={
+          <div className="d-flex align-items-center" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            {/* Nhóm nút Duyệt / Từ chối */}
+            {canApprove && (
+              <>
+                <button className="btn-success" onClick={handleApprove}><FaCheck /> <span>Duyệt</span></button>
+                <button className="btn-danger" onClick={handleReject}><FaTimes /> <span>Từ chối</span></button>
+              </>
+            )}
+
+            {/* Nút Sửa */}
+            {canEdit && (
+              <EditButton
+                label="Chỉnh sửa"
+                onClick={() => navigate(`/supply-chain/yeu-cau-mua-hang/${id}/chinh-sua`)}
+              />
+            )}
+          </div>
+        }
       />
 
       {/* Top Section */}
@@ -118,6 +156,19 @@ export default function PurchaseRequestDetail() {
         isDeleted={Boolean(pr.deletedAt)}
       />
 
+      {/* --- HIỂN THỊ LÝ DO TỪ CHỐI (Nếu bị từ chối) --- */}
+      {pr.status === "REJECTED" && pr.rejection_reason && (
+          <div 
+            className="profile-item" 
+            style={{ marginTop: 15, color: "#ef4444" }}
+          >
+            <strong><i className="fa fa-exclamation-triangle mr-1"></i> Lý do từ chối:</strong>
+            <div className="mt-1" style={{ whiteSpace: "pre-wrap" }}>
+              {pr.rejection_reason}
+            </div>
+          </div>
+      )}
+
       {/* Thông tin chung */}
       <DetailSection title="Thông tin chung">
         <DetailGrid>
@@ -127,16 +178,16 @@ export default function PurchaseRequestDetail() {
           <DetailItem label="Ngày tạo phiếu" value={formatDate(pr.createdAt)} />
         </DetailGrid>
 
-        {/* Lý do mua hàng - Full width */}
+        {/* Lý do mua hàng */}
         <div className="profile-item full-width mt-3" style={{marginTop: 15}}>
-           <div className="profile-label">Lý do / Diễn giải</div>
+           <div className="profile-label">Lý do / Diễn giải (Người yêu cầu)</div>
            <div className="profile-value" style={{ whiteSpace: "pre-wrap" }}>
              {pr.reason || "—"}
            </div>
         </div>
       </DetailSection>
 
-      {/* Danh sách sản phẩm (Master-Detail) */}
+      {/* Danh sách sản phẩm */}
       <DetailSection title={`Danh sách sản phẩm (${pr.items?.length || 0})`}>
          {(!pr.items || pr.items.length === 0) ? (
             <div className="text-muted fst-italic py-2">Không có sản phẩm nào trong phiếu này.</div>
@@ -157,7 +208,6 @@ export default function PurchaseRequestDetail() {
                                  <td className="text-center">{index + 1}</td>
                                  <td>
                                      <span className="font-weight-bold">
-                                         {/* Hiển thị tên từ Map, nếu chưa load xong thì hiện ID */}
                                          {refNames.productNames[item.product_id] || item.product_id}
                                      </span>
                                  </td>

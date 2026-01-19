@@ -32,6 +32,13 @@ import WarehouseDetail from "./pages/layouts/WarehouseDetail";
 import WarehouseEdit from "./pages/layouts/WarehouseEdit";
 import WarehouseRestore from "./pages/layouts/WarehouseRestore";
 
+// --- Bins ---
+import Bin from "./pages/layouts/Bin";
+import BinCreate from "./pages/layouts/BinCreate";
+import BinDetail from "./pages/layouts/BinDetail";
+import BinEdit from "./pages/layouts/BinEdit";
+import BinRestore from "./pages/layouts/BinRestore";
+
 // --- Inventory ---
 import Inventory from "./pages/layouts/Inventory";
 import InventoryCreate from "./pages/layouts/InventoryCreate";
@@ -45,6 +52,20 @@ import PurchaseRequestCreate from "./pages/layouts/PurchaseRequestCreate";
 import PurchaseRequestDetail from "./pages/layouts/PurchaseRequestDetail";
 import PurchaseRequestEdit from "./pages/layouts/PurchaseRequestEdit";
 import PurchaseRequestRestore from "./pages/layouts/PurchaseRequestRestore";
+
+// --- Quotation ---
+import Quotation from "./pages/layouts/Quotation";
+import QuotationCreate from "./pages/layouts/QuotationCreate";
+import QuotationDetail from "./pages/layouts/QuotationDetail";
+import QuotationEdit from "./pages/layouts/QuotationEdit";
+import QuotationRestore from "./pages/layouts/QuotationRestore";
+
+// --- PurchaseOrder ---
+import PurchaseOrder from "./pages/layouts/PurchaseOrder";
+import PurchaseOrderCreate from "./pages/layouts/PurchaseOrderCreate";
+import PurchaseOrderDetail from "./pages/layouts/PurchaseOrderDetail";
+import PurchaseOrderEdit from "./pages/layouts/PurchaseOrderEdit";
+import PurchaseOrderRestore from "./pages/layouts/PurchaseOrderRestore";
 
 const supplychainRoutes = (
   <>
@@ -225,6 +246,50 @@ const supplychainRoutes = (
     />
 
     {/* =========================================
+        Routes for Bins (Vị trí)
+       ========================================= */}
+    <Route
+      path="/supply-chain/vi-tri-kho"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <Bin />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/vi-tri-kho/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_CREATE}>
+          <BinCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/vi-tri-kho/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_RESTORE}>
+          <BinRestore />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/vi-tri-kho/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <BinDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/vi-tri-kho/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_UPDATE}>
+          <BinEdit />
+        </RequireAuth>
+      }
+    />
+
+    {/* =========================================
         Routes for Inventory (Tồn kho) - NEW
        ========================================= */}
     <Route
@@ -309,6 +374,94 @@ const supplychainRoutes = (
       element={
         <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_UPDATE}>
           <PurchaseRequestEdit />
+        </RequireAuth>
+      }
+    />
+
+    {/* =========================================
+        Routes for Quotation (Báo giá)
+       ========================================= */}
+    <Route
+      path="/supply-chain/bao-gia"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <Quotation />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/bao-gia/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_CREATE}>
+          <QuotationCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/bao-gia/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_RESTORE}>
+          <QuotationRestore />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/bao-gia/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <QuotationDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/bao-gia/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_UPDATE}>
+          <QuotationEdit />
+        </RequireAuth>
+      }
+    />
+
+    {/* =========================================
+        Routes for PurchaseOrder (Đơn mua hàng)
+       ========================================= */}
+    <Route
+      path="/supply-chain/don-mua-hang"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <PurchaseOrder />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/don-mua-hang/them-moi"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_CREATE}>
+          <PurchaseOrderCreate />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/don-mua-hang/khoi-phuc"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_RESTORE}>
+          <PurchaseOrderRestore />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/don-mua-hang/:id"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <PurchaseOrderDetail />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/supply-chain/don-mua-hang/:id/chinh-sua"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_UPDATE}>
+          <PurchaseOrderEdit />
         </RequireAuth>
       }
     />

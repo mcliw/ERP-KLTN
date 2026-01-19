@@ -7,7 +7,7 @@
 const SC_API_URL = "http://localhost:3002"; 
 const API_URL = `${SC_API_URL}/purchase_requests`;
 const ITEM_API_URL = `${SC_API_URL}/pr_items`;
-const PRODUCT_API_URL = `${SC_API_URL}/products`; // <--- MỚI: Endpoint sản phẩm
+const PRODUCT_API_URL = `${SC_API_URL}/products`;
 
 // 2. HRM Service (Chứa Employees, Departments) - Port 3001
 const HRM_API_URL = "http://localhost:3001"; 
@@ -27,6 +27,7 @@ const ERROR_MSGS = {
   ITEM_FETCH_FAILED: "Không thể tải danh sách sản phẩm",
   UPDATE_FAILED: "Không thể cập nhật dữ liệu",
   CANNOT_DELETE_APPROVED: "Không thể xóa phiếu đã được duyệt",
+  CANNOT_EDIT_APPROVED: "Không thể chỉnh sửa phiếu khi đã được Phê duyệt, Hoàn tất hoặc Đã hủy.",
 };
 
 /* =========================
@@ -138,14 +139,22 @@ export const purchaseRequestService = {
   async update(id, data) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+
+    const lockedStatuses = [STATUS.APPROVED, STATUS.COMPLETED, STATUS.CANCELLED];
+    if (lockedStatuses.includes(current.status)) {
+        throw new Error(ERROR_MSGS.CANNOT_EDIT_APPROVED);
+    }
+
     if (data.pr_code && data.pr_code !== current.pr_code) {
         await validators.checkBusinessRules(data, id);
     }
+    
     const updatedPR = {
       ...current, ...data,
       items: undefined, 
       updatedAt: new Date().toISOString(),
     };
+    
     const response = await fetch(`${API_URL}/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -153,6 +162,51 @@ export const purchaseRequestService = {
     });
     return handleResponse(response);
   },
+
+  // --- NEW: CHỨC NĂNG DUYỆT / TỪ CHỐI ---
+
+  async approve(id) {
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+
+    // Có thể thêm logic kiểm tra: Nếu đã Cancelled thì không cho Approve...
+    
+    const approvedPR = {
+      ...current,
+      items: undefined, // json-server thường ko cần gửi lại items khi update parent
+      status: STATUS.APPROVED,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "PUT", // Hoặc PATCH
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(approvedPR),
+    });
+    return handleResponse(response);
+  },
+
+  async reject(id, reason) {
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+
+    const rejectedPR = {
+      ...current,
+      items: undefined,
+      status: STATUS.REJECTED,
+      rejection_reason: reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rejectedPR),
+    });
+    return handleResponse(response);
+  },
+
+  // ----------------------------------------
 
   async remove(id) {
     const current = await this.getById(id);
@@ -194,9 +248,7 @@ export const purchaseRequestService = {
   },
 
   // --- 2. REFERENCE DATA FUNCTIONS ---
-  // Các hàm này dùng để lấy dữ liệu tham chiếu (Dropdown, Map tên...)
 
-  // Lấy nhân viên từ HRM (Port 3001)
   async getEmployeesRef() {
     try {
       const response = await fetch(`${HRM_API_URL}/employees`);
@@ -208,7 +260,6 @@ export const purchaseRequestService = {
     }
   },
 
-  // Lấy phòng ban từ HRM (Port 3001)
   async getDepartmentsRef() {
     try {
       const response = await fetch(`${HRM_API_URL}/departments`);
@@ -220,8 +271,6 @@ export const purchaseRequestService = {
     }
   },
 
-  // Lấy sản phẩm từ Supply Chain (Port 3002)
-  // <--- HÀM BẠN CẦN THÊM
   async getProductsRef() {
     try {
       const response = await fetch(PRODUCT_API_URL);

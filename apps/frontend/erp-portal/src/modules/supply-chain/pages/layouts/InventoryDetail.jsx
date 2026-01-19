@@ -28,21 +28,18 @@ export default function InventoryDetail() {
   const navigate = useNavigate();
 
   /* =========================================
-   * 1. Data Fetching (Stock + Related Info + History)
+   * 1. Data Fetching
    * ========================================= */
   const fetchData = useCallback(async () => {
-    // 1. Lấy thông tin record tồn kho
     const stock = await inventoryService.getById(id);
     if (!stock) return null;
 
-    // 2. Lấy thông tin tham chiếu (Product, Warehouse, Bin) song song
     const BASE_URL = "http://localhost:3002";
     const [product, warehouse, bin, transactions] = await Promise.all([
       fetch(`${BASE_URL}/products/${stock.product_id}`).then(res => res.json()).catch(() => ({ name: `SP #${stock.product_id}`, sku: "N/A" })),
       fetch(`${BASE_URL}/warehouses/${stock.warehouse_id}`).then(res => res.json()).catch(() => ({ name: `Kho #${stock.warehouse_id}` })),
       fetch(`${BASE_URL}/bin_locations/${stock.bin_id}`).then(res => res.json()).catch(() => ({ code: `Bin #${stock.bin_id}` })),
       
-      // 3. Lấy lịch sử giao dịch
       inventoryService.getTransactionHistory({
           warehouseId: stock.warehouse_id,
           productId: stock.product_id,
@@ -63,12 +60,8 @@ export default function InventoryDetail() {
 
   const { stock, product, warehouse, bin, transactions } = data;
 
-  // Tính toán trạng thái hiển thị
   const isOutOfStock = stock.quantity_available <= 0;
   const statusLabel = isOutOfStock ? "Hết hàng / Đã cấp phát hết" : "Sẵn sàng bán";
-  
-  // Custom Status Badge style (Giả lập CSS class)
-  const statusClass = isOutOfStock ? "status-inactive" : "status-active"; // inactive = đỏ/xám, active = xanh
 
   return (
     <div className="main-detail">
@@ -83,19 +76,16 @@ export default function InventoryDetail() {
         }
       />
 
-      {/* Top Section: Nhấn mạnh vào Sản phẩm và Vị trí */}
       <DetailTop
         title={product.name}
         subtitle={`${product.sku ? `SKU: ${product.sku}` : ''} • ${warehouse.name} • ${bin.code}`}
         status={statusLabel}
-        // Hack: dùng prop isDeleted của DetailTop để truyền class màu (nếu component hỗ trợ) 
-        // hoặc custom render logic status
         isDeleted={isOutOfStock} 
       />
 
       <div className="detail-body">
-          {/* Section 1: Số lượng quan trọng */}
-          <DetailSection title="Tổng quan số lượng">
+          {/* Section 1: Số lượng & Ghi chú */}
+          <DetailSection title="Thông tin chi tiết">
             <DetailGrid>
               <div className="profile-item">
                  <label>Tồn thực tế (On Hand)</label>
@@ -115,10 +105,21 @@ export default function InventoryDetail() {
               </div>
 
               <DetailItem label="Cập nhật lần cuối" value={formatDate(stock.updatedAt)} />
+
+              {/* === THÊM MỚI: HIỂN THỊ GHI CHÚ === */}
+              {/* Sử dụng gridColumn: 1 / -1 để chiếm trọn chiều ngang */}
+              <div className="profile-item full-width" style={{ gridColumn: "1 / -1", marginTop: "10px", paddingTop: "10px", borderTop: "1px dashed #eee" }}>
+                <div className="profile-label">Ghi chú / Mô tả bổ sung</div>
+                <div className="profile-value" style={{ whiteSpace: "pre-wrap", color: stock.notes ? "inherit" : "#999" }}>
+                   {stock.notes || "Không có ghi chú"}
+                </div>
+              </div>
+              {/* ================================== */}
+
             </DetailGrid>
           </DetailSection>
 
-          {/* Section 2: Thông tin vị trí chi tiết */}
+          {/* Section 2: Thông tin vị trí lưu trữ */}
           <DetailSection title="Thông tin vị trí lưu trữ">
             <DetailGrid>
               <DetailItem label="Kho hàng" value={warehouse.name} />
@@ -126,7 +127,6 @@ export default function InventoryDetail() {
               <DetailItem label="Vị trí (Bin)" value={bin.code} />
               <DetailItem label="Sức chứa tối đa Bin" value={bin.max_capacity ? `${bin.max_capacity} đơn vị` : "Không giới hạn"} />
               
-              {/* Hiển thị full width địa chỉ */}
               <div className="profile-item full-width" style={{ gridColumn: "1 / -1" }}>
                 <div className="profile-label">Địa chỉ kho</div>
                 <div className="profile-value">{warehouse.address || "—"}</div>
@@ -134,7 +134,7 @@ export default function InventoryDetail() {
             </DetailGrid>
           </DetailSection>
 
-          {/* Section 3: Lịch sử giao dịch (Inventory Transaction Logs) */}
+          {/* Section 3: Lịch sử giao dịch */}
           <DetailSection title="Lịch sử giao dịch (Transaction Logs)">
             {transactions.length === 0 ? (
                 <div style={{ padding: "10px", color: "#666" }}>Chưa có giao dịch nào được ghi nhận.</div>
@@ -157,7 +157,11 @@ export default function InventoryDetail() {
                             return (
                                 <tr key={log.id}>
                                     <td>{formatDate(log.transaction_date)}</td>
-                                    <td className="font-medium">{conf.label || log.type}</td>
+                                    <td className="font-medium" style={{ color: conf.color ? "" : "inherit" }}>
+                                        {/* Lưu ý: class text-success/danger trong map config cần CSS tương ứng, 
+                                            hoặc dùng style inline nếu chưa có class */}
+                                        {conf.label || log.type}
+                                    </td>
                                     <td>
                                         <span className="badge-outline">{log.reference_code || "-"}</span>
                                     </td>

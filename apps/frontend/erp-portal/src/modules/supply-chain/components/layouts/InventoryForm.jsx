@@ -28,6 +28,7 @@ const DEFAULT_FORM = {
   product_id: "",
   quantity_on_hand: 0,
   quantity_allocated: 0,
+  notes: "",
 };
 
 /* ==============================
@@ -116,6 +117,23 @@ export default function InventoryForm({
     if (calculatedAvailable < 0) {
         toast.error("Số lượng tồn kho không thể nhỏ hơn số lượng đã cấp phát!");
         return;
+    }
+
+    if (form.bin_id) {
+        // Tìm thông tin bin đang chọn trong danh sách options
+        const selectedBin = binOptions.find(
+            b => String(b.id) === String(form.bin_id)
+        );
+
+        if (selectedBin) {
+            const maxCapacity = Number(selectedBin.max_capacity) || 0;
+            // Nếu có thiết lập sức chứa (> 0) và số lượng khả dụng vượt quá
+            if (maxCapacity > 0 && calculatedAvailable > maxCapacity) {
+                toast.error(`Vượt quá sức chứa! Vị trí này chỉ chứa tối đa ${maxCapacity} đơn vị.`);
+                // Focus lại vào ô nhập số lượng nếu cần
+                return; // Dừng submit
+            }
+        }
     }
 
     if (!validate(form)) return;
@@ -234,9 +252,22 @@ export default function InventoryForm({
                 disabled
                 style={{ fontWeight: "bold", color: calculatedAvailable > 0 ? "#28a745" : "#dc3545", backgroundColor: "#e9ecef" }}
             />
-            <small className="form-text text-muted">
+            <small className="form-text text-muted" style={{marginLeft: 0}}>
                 Tự động tính: Tồn kho - Cấp phát
             </small>
+        </div>
+
+        <div className="form-group" style={{ gridColumn: "1 / -1", marginTop: "10px" }}>
+           <label>Ghi chú bổ sung</label>
+           <textarea
+             className="form-control"
+             name="notes"
+             rows="3"
+             placeholder="Nhập ghi chú về lô hàng, lý do điều chỉnh..."
+             value={form.notes || ""}
+             onChange={handleChange}
+             style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
+           />
         </div>
 
       </div>

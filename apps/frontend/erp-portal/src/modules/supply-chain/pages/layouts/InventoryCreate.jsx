@@ -49,12 +49,14 @@ export default function InventoryCreate() {
           ...formData,
           // Ép kiểu ID về số nguyên (vì value của select HTML thường là string)
           warehouse_id: Number(formData.warehouse_id),
-          bin_id: Number(formData.bin_id),
-          product_id: Number(formData.product_id),
+          bin_id: formData.bin_id,
+          product_id: formData.product_id,
           
           // Số lượng
           quantity_on_hand: Number(formData.quantity_on_hand),
           quantity_allocated: Number(formData.quantity_allocated || 0),
+
+          notes: formData.notes || "",
           
           // quantity_available sẽ được tính ở Service, không cần gửi (hoặc gửi tùy logic BE)
         };

@@ -76,12 +76,13 @@ export default function InventoryEdit() {
         return {
           ...rest,
           // Đảm bảo gửi lên là số nguyên (Form HTML trả về string)
-          quantity_on_hand: Number(rest.quantity_on_hand),
-          quantity_allocated: Number(rest.quantity_allocated),
+          quantity_on_hand: Number(rest.quantity_on_hand || 0),
+          quantity_allocated: Number(rest.quantity_allocated || 0),
           // Các Key ID giữ nguyên (Form Edit đã disable nhưng vẫn cần gửi để validate BE)
           warehouse_id: Number(rest.warehouse_id),
-          bin_id: Number(rest.bin_id),
-          product_id: Number(rest.product_id),
+          bin_id: rest.bin_id,
+          product_id: rest.product_id,
+          notes: rest.notes || "",
         };
       }
     }

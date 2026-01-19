@@ -16,15 +16,19 @@ export default function PurchaseRequestCreate() {
       transformPayload: (formData) => {
         return {
             ...formData,
-            // Đảm bảo các khóa ngoại là kiểu số
-            requester_id: Number(formData.requester_id),
-            department_id: Number(formData.department_id),
+            // [SỬA LỖI] Không ép kiểu Number() cho ID nữa vì dữ liệu là String ("69ca", "8503"...)
+            requester_id: formData.requester_id, 
+            department_id: formData.department_id,
             
-            // Xử lý mảng items: ép kiểu số cho product_id và quantity
+            // Xử lý mảng items
             items: formData.items.map(item => ({
                 ...item,
-                product_id: Number(item.product_id),
+                // ID sản phẩm cũng giữ nguyên là String
+                product_id: item.product_id,
+                
+                // Chỉ ép kiểu Số cho số lượng
                 quantity_requested: Number(item.quantity_requested),
+                
                 // expected_date giữ nguyên string YYYY-MM-DD
             }))
         };

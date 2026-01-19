@@ -42,6 +42,12 @@ export const supplychainMenu = [
     roles: [HRM_PERMISSIONS.HRM_SALARY_INFO_VIEW],
   },
   {
+    label: "Vị trí",
+    path: "/supply-chain/vi-tri-kho",
+    icon: <FaWarehouse />,
+    roles: [HRM_PERMISSIONS.HRM_SALARY_INFO_VIEW],
+  },
+  {
     label: "Tồn kho",
     path: "/supply-chain/ton-kho",
     icon: <FaWarehouse />,
@@ -54,14 +60,14 @@ export const supplychainMenu = [
     roles: [HRM_PERMISSIONS.HRM_DEPARTMENT_VIEW],
   },
   {
-    label: "Xuất kho",
-    path: "/supply-chain/xuat-kho",
-    icon: <FaShippingFast />,
-    roles: [HRM_PERMISSIONS.HRM_POSITION_VIEW],
+    label: "Báo giá",
+    path: "/supply-chain/bao-gia",
+    icon: <FaClipboardCheck />,
+    roles: [HRM_PERMISSIONS.HRM_ACCOUNT_VIEW],
   },
   {
-    label: "Kiểm kê",
-    path: "/supply-chain/kiem-ke",
+    label: "Đơn mua hàng",
+    path: "/supply-chain/don-mua-hang",
     icon: <FaClipboardCheck />,
     roles: [HRM_PERMISSIONS.HRM_ACCOUNT_VIEW],
   },

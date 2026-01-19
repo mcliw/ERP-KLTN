@@ -45,7 +45,7 @@ export default function PurchaseRequest() {
   const employees = data?.emps || [];
   const departments = data?.depts || [];
 
-  // --- 2. XỬ LÝ MAP DỮ LIỆU & FILTER (Như cũ) ---
+  // --- 2. XỬ LÝ MAP DỮ LIỆU & FILTER ---
   
   const [keyword, setKeyword] = useState("");
   const [departmentId, setDepartmentId] = useState("");
@@ -78,19 +78,31 @@ export default function PurchaseRequest() {
 
   const { paginatedData, page, totalPages, goToPrev, goToNext } = useClientPagination(filteredData, 10);
 
+  // --- 3. ACTIONS HANDLERS ---
+
   const handleDelete = async (item) => {
     if (["APPROVED", "COMPLETED"].includes(item.status)) {
         toast.error("Không thể xóa phiếu đã được duyệt hoặc hoàn thành.");
         return;
     }
+
     if (!window.confirm(`Bạn có chắc muốn xóa phiếu "${item.pr_code}"?`)) return;
+    
     try {
       await purchaseRequestService.remove(item.id);
-      toast.error(`Đã xoá phiếu "${item.pr_code}"`);
+      toast.success(`Đã xoá phiếu "${item.pr_code}" thành công`); // Fix: Dùng toast.success
       refresh();
     } catch (err) {
       toast.error(err?.message || "Không thể xoá phiếu");
     }
+  };
+
+  const handleEdit = (item) => {
+    if (["APPROVED", "COMPLETED", "CANCELLED", "REJECTED"].includes(item.status)) {
+      toast.error("Không thể chỉnh sửa phiếu này do trạng thái đã khóa.");
+      return;
+    }
+    navigate(`/supply-chain/yeu-cau-mua-hang/${item.id}/chinh-sua`);
   };
 
   const handleClearFilter = () => {
@@ -133,7 +145,7 @@ export default function PurchaseRequest() {
         onNext={goToNext}
         onRowClick={(item) => navigate(`/supply-chain/yeu-cau-mua-hang/${item.id}`)}
         onView={(item) => navigate(`/supply-chain/yeu-cau-mua-hang/${item.id}`)}
-        onEdit={(item) => navigate(`/supply-chain/yeu-cau-mua-hang/${item.id}/chinh-sua`)}
+        onEdit={handleEdit}
         onDelete={handleDelete}
       />
     </div>

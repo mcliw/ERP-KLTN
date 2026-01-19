@@ -41,6 +41,43 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
   // Schema thay đổi tùy mode
   const currentSchema = mode === "create" ? purchaseRequestCreateSchema : purchaseRequestUpdateSchema;
 
+  const handleRequesterChange = (e) => {
+    const selectedEmpId = e.target.value;
+
+    // 1. Tìm object nhân viên
+    const selectedEmp = employees.find(emp => String(emp.id) === String(selectedEmpId));
+    
+    let targetDeptId = "";
+
+    if (selectedEmp) {
+      // Lấy giá trị department từ nhân viên (VD: "IT" như trong ảnh)
+      const empDeptValue = selectedEmp.department; 
+
+      // 2. Tìm trong danh sách departments (master data) xem phòng nào khớp
+      // Ta so sánh empDeptValue với cả id, name hoặc code của phòng ban để tìm ra ID đúng
+      const foundDept = departments.find(d => 
+        String(d.id) === String(empDeptValue) || // Trường hợp data lưu ID trực tiếp
+        d.name === empDeptValue ||               // Trường hợp data lưu Tên (VD: "IT")
+        d.code === empDeptValue                  // Trường hợp data lưu Mã (nếu có)
+      );
+
+      if (foundDept) {
+        targetDeptId = foundDept.id;
+      } else {
+        // Fallback: Nếu không tìm thấy trong list, cứ thử set giá trị gốc 
+        // (phòng trường hợp ID chính là "IT")
+        targetDeptId = empDeptValue;
+      }
+    }
+
+    // 3. Cập nhật Form
+    setForm(prev => ({
+      ...prev,
+      requester_id: selectedEmpId,
+      department_id: targetDeptId ? String(targetDeptId) : ""
+    }));
+  };
+
   // Prepare Initial Values
   const safeInitialValues = useMemo(() => {
     if (!initialData) return DEFAULT_FORM;
@@ -52,8 +89,12 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
     return {
       ...DEFAULT_FORM,
       ...initialData,
+      // Đảm bảo convert sang string rỗng nếu null/undefined để tránh warning component controlled/uncontrolled
+      requester_id: initialData.requester_id ? String(initialData.requester_id) : "", 
+      department_id: initialData.department_id ? String(initialData.department_id) : "",
       items: items.map(item => ({
         ...item,
+        product_id: item.product_id ? String(item.product_id) : "",
         expected_date: item.expected_date ? item.expected_date.split("T")[0] : ""
       })),
       request_date: initialData.request_date ? initialData.request_date.split("T")[0] : "",
@@ -91,8 +132,6 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
         }
       } catch (err) {
         console.error("Load refs error", err);
-        // Không dùng toast lỗi ở đây để tránh spam nếu 1 trong 2 server chưa bật, 
-        // service đã handle trả về [] nên form vẫn render được.
       } finally {
         if (mounted) setIsLoadingRefs(false);
       }
@@ -171,7 +210,8 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
             label="Người yêu cầu"
             name="requester_id"
             value={form.requester_id}
-            onChange={handleChange}
+            // Thay đổi từ handleChange sang handleRequesterChange
+            onChange={handleRequesterChange} 
             error={errors.requester_id}
             required
           >
@@ -186,6 +226,7 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
             onChange={handleChange}
             error={errors.department_id}
             required
+            disabled={true}
           >
             <option value="">-- Chọn phòng ban --</option>
             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -218,11 +259,11 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
                 name="status"
                 value={form.status}
                 onChange={handleChange}
-                disabled={form.status === "APPROVED"}
+                disabled={["APPROVED", "COMPLETED", "CANCELLED"].includes(form.status)}
             >
                 <option value="DRAFT">Nháp</option>
-                <option value="APPROVED">Đã Duyệt</option>
-                <option value="REJECTED">Từ Chối</option>
+                <option value="APPROVED" disabled>Đã Duyệt</option> {/* Không cho chọn Approved thủ công */}
+                <option value="REJECTED" disabled>Từ Chối</option> {/* Không cho chọn Rejected thủ công */}
                 <option value="CANCELLED">Hủy</option>
             </FormSelect>
           )}
@@ -265,7 +306,7 @@ export default function PurchaseRequestForm({ mode = "create", initialData, onSu
 
                         return (
                             <tr key={index}>
-                                <td className="form-group"  style={{display: 'table-cell'}}>
+                                <td className="form-group" style={{display: 'table-cell'}}>
                                     <select style={{width: '100%'}}
                                         className={`${prodError ? "is-invalid" : ""}`}
                                         value={item.product_id}

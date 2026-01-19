@@ -25,16 +25,12 @@ export const baseInventoryFields = {
     .positive("Vui lòng chọn kho hàng hợp lệ"),
 
   // bin_id (Foreign Key)
-  bin_id: z.coerce
-    .number({ invalid_type_error: "Vị trí kho là bắt buộc" })
-    .int()
-    .positive("Vui lòng chọn vị trí kho (Bin)"),
+  bin_id: z.string({ required_error: "Vui lòng chọn vị trí kho" })
+    .min(1, "Vui lòng chọn vị trí kho"),
 
   // product_id (Foreign Key)
-  product_id: z.coerce
-    .number({ invalid_type_error: "Sản phẩm là bắt buộc" })
-    .int()
-    .positive("Vui lòng chọn sản phẩm"),
+  product_id: z.string({ required_error: "Vui lòng chọn sản phẩm" })
+    .min(1, "Vui lòng chọn sản phẩm"),
 
   // quantity_on_hand (Tổng số lượng thực tế trong kho)
   quantity_on_hand: z.coerce
@@ -48,6 +44,11 @@ export const baseInventoryFields = {
     .int("Số lượng cấp phát phải là số nguyên")
     .min(0, "Số lượng cấp phát không được âm")
     .default(0), // Mặc định là 0 nếu không gửi lên
+
+  notes: z.string()
+    .max(500, "Ghi chú không được quá 500 ký tự")
+    .optional()
+    .or(z.literal("")),
 };
 
 /* =========================
