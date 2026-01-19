@@ -79,7 +79,7 @@ export const positionService = {
       }
 
       if (enrich) {
-        const employees = await employeeService.getAll({ includeDeleted: true });
+        const employees = await employeeService.getAll({ includeDeleted: true, enrich: false });
         result = result.map((p) => enrichPositionData(p, employees));
       }
 

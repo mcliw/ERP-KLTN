@@ -59,7 +59,6 @@ const enrichTimeData = (record, allEmployees, allDepartments, allPositions) => {
 export const timeKeepingService = {
   async getAll({ date, employeeCode, includeDeleted = false, enrich = true } = {}) {
     try {
-      // Sử dụng axiosClient thay cho fetch, truyền params để filter
       const records = await axiosClient.get(API_URL, {
         params: { date, employeeCode }
       });
@@ -71,10 +70,11 @@ export const timeKeepingService = {
       }
 
       if (enrich) {
+        // [FIX]: Gọi department và position với enrich: false để tránh gọi lồng nhau vô tận
         const [employees, departments, positions] = await Promise.all([
           employeeService.getAll({ includeDeleted: true }),
-          departmentService.getAll({ includeDeleted: true, enrich: false }),
-          positionService.getAll({ includeDeleted: true }),
+          departmentService.getAll({ includeDeleted: true, enrich: false }), // Quan trọng: enrich: false
+          positionService.getAll({ includeDeleted: true, enrich: false }),   // Quan trọng: enrich: false
         ]);
 
         result = result.map((r) => enrichTimeData(r, employees, departments, positions));

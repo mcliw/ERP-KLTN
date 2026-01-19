@@ -84,10 +84,10 @@ export const departmentService = {
       }
 
       if (enrich) {
-        // Lấy thêm dữ liệu liên quan để tính toán employeeCount, v.v.
+        // [FIX]: Gọi positionService với enrich: false
         const [employees, positions] = await Promise.all([
           employeeService.getAll({ includeDeleted: true }),
-          positionService.getAll({ includeDeleted: true })
+          positionService.getAll({ includeDeleted: true, enrich: false }) 
         ]);
         
         result = result.map(d => enrichDepartmentData(d, employees, positions));

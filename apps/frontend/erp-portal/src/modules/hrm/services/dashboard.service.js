@@ -209,7 +209,7 @@ export const dashboardService = {
         d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         dates.push(dateStr);
-        requests.push(timeKeepingService.getAll({ date: dateStr }));
+        requests.push(timeKeepingService.getAll({ date: dateStr, enrich: false }));
       }
 
       const results = await Promise.all(requests);
