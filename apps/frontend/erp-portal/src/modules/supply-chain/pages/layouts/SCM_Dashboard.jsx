@@ -40,13 +40,13 @@ const POStatusChart = ({ data, totalSpend }) => {
       <div className="chart-container">
         <div className="d-flex justify-content-between mb-2">
           <strong>Tổng đơn: {totalPOs}</strong>
-          <small className="text-success fw-bold">
+          <small className="text-success fw-bold" style={{marginLeft: 90}}>
               Chi tiêu: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalSpend)}
           </small>
         </div>
         {data.map((item, index) => (
           <div className="chart-row" key={index}>
-            <div className="chart-label d-flex align-items-center">
+            <div className="chart-label d-flex align-items-center" style={{display: 'block'}}>
               <span style={{width: 10, height: 10, padding: 0}}> </span>
               {item.name} ({item.count})
             </div>
@@ -312,8 +312,8 @@ export default function SCMDashboard() {
         totalPages={totalPages}
         onPrev={() => setPage(p => Math.max(1, p - 1))}
         onNext={() => setPage(p => Math.min(totalPages, p + 1))}
-        onView={(item) => navigate(`/supply-chain/san-pham/${item.id}`)}
-        onEdit={(item) => navigate(`/supply-chain/san-pham/${item.id}/chinh-sua`)}
+        onView={(item) => navigate(`/supply-chain/san-pham-tai-san/${item.id}`)}
+        onEdit={(item) => navigate(`/supply-chain/san-pham-tai-san/${item.id}/chinh-sua`)}
         onDelete={(item) => handleDeleteProduct(item.id)}
       />
     </div>
