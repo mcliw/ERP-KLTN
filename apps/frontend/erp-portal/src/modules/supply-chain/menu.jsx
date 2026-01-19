@@ -12,8 +12,8 @@ import {
 
 export const supplychainMenu = [
   {
-    label: "SCM Dashboard",
-    path: "/supply-chain/dashboard",
+    label: "Trang chủ SCM",
+    path: "/supply-chain/trang-chu-chuoi-cung-ung",
     icon: <FaTachometerAlt />,
     roles: [HRM_PERMISSIONS.HRM_REPORT_VIEW],
   },

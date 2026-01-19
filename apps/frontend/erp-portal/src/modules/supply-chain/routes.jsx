@@ -4,6 +4,8 @@ import { Route } from "react-router-dom";
 import RequireAuth from "../../auth/RequireAuth";
 import { HRM_PERMISSIONS } from "../../shared/permissions/hrm.permissions";
 
+import SCMDashboard from "./pages/layouts/SCM_Dashboard";
+
 // --- Product Categories ---
 import ProductCategory from "./pages/layouts/ProductCategory";
 import ProductCategoryDetail from "./pages/layouts/ProductCategoryDetail";
@@ -69,6 +71,14 @@ import PurchaseOrderRestore from "./pages/layouts/PurchaseOrderRestore";
 
 const supplychainRoutes = (
   <>
+    <Route
+      path="/supply-chain/trang-chu-chuoi-cung-ung"
+      element={
+        <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_EMPLOYEE_VIEW}>
+          <SCMDashboard />
+        </RequireAuth>
+      }
+    />
     {/* =========================================
         Routes for Product Categories 
        ========================================= */}

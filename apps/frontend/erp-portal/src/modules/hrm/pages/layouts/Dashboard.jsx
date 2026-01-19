@@ -11,8 +11,8 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
 // Components
-import StatCard from "../../components/layouts/StatCard";
-import QuickAction from "../../components/layouts/QuickAction";
+import StatCard from "../../../../shared/components/StatCard";
+import QuickAction from "../../../../shared/components/QuickAction";
 import EmployeeTable from "../../components/layouts/EmployeeTable";
 import EmployeeFilter from "../../components/layouts/EmployeeFilter";
 

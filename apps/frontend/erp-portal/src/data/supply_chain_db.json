@@ -211,11 +211,11 @@
       "warehouse_id": 1,
       "bin_id": "56a2",
       "product_id": "prod_101",
-      "quantity_on_hand": 90,
+      "quantity_on_hand": 0,
       "quantity_allocated": 0,
       "notes": "test",
-      "quantity_available": 90,
-      "updatedAt": "2026-01-19T17:53:34.749Z",
+      "quantity_available": 0,
+      "updatedAt": "2026-01-19T18:06:15.018Z",
       "deletedAt": ""
     }
   ],
@@ -269,6 +269,17 @@
       "reference_code": "ST-2023-10-001",
       "transaction_date": "2023-10-02T17:00:00Z",
       "performed_by": 999
+    },
+    {
+      "id": "1768845975025",
+      "type": "ADJUSTMENT",
+      "warehouse_id": 1,
+      "product_id": "prod_101",
+      "bin_id": "56a2",
+      "quantity_change": -90,
+      "reference_code": "MANUAL-ADJ",
+      "transaction_date": "2026-01-19T18:06:15.025Z",
+      "performed_by": 1
     }
   ],
   "purchase_requests": [

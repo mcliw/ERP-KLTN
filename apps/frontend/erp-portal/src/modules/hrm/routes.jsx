@@ -44,7 +44,7 @@ import SalaryRestore from "./pages/layouts/SalaryRestore";
 const hrmRoutes = (
   <>
     <Route
-      path="/hrm/dashboard"
+      path="/hrm/trang-chu-nhan-su"
       element={
         <RequireAuth allowRoles={HRM_PERMISSIONS.HRM_REPORT_VIEW}>
           <HRMDashboard />

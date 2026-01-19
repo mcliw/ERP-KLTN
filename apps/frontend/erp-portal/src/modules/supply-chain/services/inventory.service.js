@@ -47,6 +47,26 @@ const calculateAvailable = (onHand, allocated) => {
   return available < 0 ? 0 : available;
 };
 
+const createTransactionLog = async (logData) => {
+  try {
+    const logEntry = {
+      ...logData,
+      id: String(Date.now()), // Tự sinh ID giả lập
+      transaction_date: new Date().toISOString(),
+      performed_by: 1, // Giả định ID user đang login là 1 (Cần lấy từ AuthContext thực tế)
+    };
+
+    await fetch(TRANSACTION_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(logEntry),
+    });
+  } catch (error) {
+    console.error("Lỗi ghi log giao dịch:", error);
+    // Lưu ý: Trong thực tế, nếu ghi log lỗi thì nên rollback transaction
+  }
+};
+
 /* =========================
  * Business Validators
  * ========================= */
@@ -194,7 +214,21 @@ export const inventoryService = {
       body: JSON.stringify(newStock),
     });
 
-    return handleResponse(response);
+    const createdStock = await handleResponse(response);
+
+    // Chỉ ghi log nếu số lượng > 0
+    if (payload.quantity_on_hand > 0) {
+        await createTransactionLog({
+            type: TRANSACTION_TYPES.INBOUND,
+            warehouse_id: createdStock.warehouse_id,
+            product_id: createdStock.product_id,
+            bin_id: createdStock.bin_id,
+            quantity_change: Number(payload.quantity_on_hand),
+            reference_code: `INIT-${createdStock.id}`, // Mã tham chiếu tự sinh
+        });
+    }
+
+    return createdStock;
   },
 
   async update(id, data) {
@@ -215,6 +249,9 @@ export const inventoryService = {
       await validators.checkBusinessRules(mergedData, id);
     } else {
         validators.validateQuantities(mergedData);
+        if (mergedData.bin_id) {
+             await validators.checkBinCapacity(mergedData.bin_id, mergedData.quantity_available);
+        }
     }
 
     const updatedStock = {
@@ -229,7 +266,27 @@ export const inventoryService = {
       body: JSON.stringify(updatedStock),
     });
 
-    return handleResponse(response);
+    const result = await handleResponse(response);
+
+    // So sánh số lượng cũ và mới (On Hand)
+    const oldQty = Number(current.quantity_on_hand) || 0;
+    const newQty = Number(mergedData.quantity_on_hand) || 0;
+    const diff = newQty - oldQty;
+
+    // Nếu có sự thay đổi số lượng thực tế
+    if (diff !== 0) {
+        await createTransactionLog({
+            type: TRANSACTION_TYPES.ADJUSTMENT, // Hoặc tách ra AUDIT, COUNT
+            warehouse_id: current.warehouse_id,
+            product_id: current.product_id,
+            bin_id: current.bin_id,
+            quantity_change: diff, // Số âm nếu giảm, dương nếu tăng
+            // Nếu form có gửi notes thì dùng, không thì tự sinh mã
+            reference_code: data.notes ? "MANUAL-ADJ" : `ADJ-${id}-${Date.now()}`,
+        });
+    }
+
+    return result;
   },
 
   // 1. Soft Delete (Xóa mềm)
@@ -300,6 +357,8 @@ export const inventoryService = {
 
         const response = await fetch(`${TRANSACTION_API_URL}?${params.toString()}`);
         const data = await handleResponse(response);
+        
+        // Sắp xếp mới nhất lên đầu
         return (Array.isArray(data) ? data : []).sort((a, b) => {
             return new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime();
         });
