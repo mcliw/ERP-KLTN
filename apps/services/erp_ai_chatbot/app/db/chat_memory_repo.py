@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.modules.chat_memory_models import ChatConversation, ChatMessage
+from apps.services.erp_ai_chatbot.app.modules.rag_policy.chat_memory_models import ChatConversation, ChatMessage
 
 def get_or_create_conversation(
     session: Session,

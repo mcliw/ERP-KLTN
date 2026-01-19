@@ -58,7 +58,7 @@ def validate_plan(plan: Plan, auth: Dict[str, Any], user_perms: Set[str]):
         # 2) Nếu scope SELF/DEPT mà tool/args đang nhắm người khác => ưu tiên SELF_ONLY_MSG
         if scope in ("SELF", "DEPT"):
             # HRM: tool xem người khác
-            if step.tool in {"tim_nhan_vien", "thong_tin_nhan_vien", "thong_tin_nhan_vien_id"}:
+            if step.tool in {"tim_nhan_vien", "thong_tin_nhan_vien"}:
                 raise InvalidPlan(SELF_ONLY_MSG)
 
             # Nếu LLM nhét employee_code để xem người khác

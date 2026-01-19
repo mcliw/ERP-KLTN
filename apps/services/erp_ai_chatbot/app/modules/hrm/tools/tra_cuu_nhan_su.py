@@ -23,20 +23,25 @@ class ThongTinNhanVienByCodeArgs(BaseModel):
 
 def _card(emp: Employee, dept: Department | None, pos: Position | None):
     return {
-        "employee_id": emp.id,
-        "user_id": getattr(emp, "user_id", None),
+        # DB mới: employee_id (PK), account_id map identity
+        "employee_id": getattr(emp, "employee_id", None) or getattr(emp, "id", None),
+        "account_id": getattr(emp, "account_id", None) or getattr(emp, "user_id", None),
         "employee_code": getattr(emp, "employee_code", None),
         "full_name": getattr(emp, "full_name", None),
+        # DB mới: status_empl là enum trạng thái nhân sự; status (varchar) có thể dùng như trạng thái hệ thống
+        "status_empl": getattr(emp, "status_empl", None),
         "status": getattr(emp, "status", None),
         "department_id": getattr(emp, "department_id", None),
         "department_code": getattr(dept, "code", None) if dept else None,
         "department_name": getattr(dept, "name", None) if dept else None,
         "position_id": getattr(emp, "position_id", None),
-        "position_title": getattr(pos, "title", None) if pos else None,
+        # DB mới: positions.name
+        "position_name": getattr(pos, "name", None) if pos else getattr(pos, "title", None) if pos else None,
         "phone": getattr(emp, "phone", None),
-        "email_company": getattr(emp, "email_company", None),
+        # DB mới: employees.email
+        "email": getattr(emp, "email", None) or getattr(emp, "email_company", None),
         "join_date": str(getattr(emp, "join_date", None)) if getattr(emp, "join_date", None) else None,
-        "resign_date": str(getattr(emp, "resign_date", None)) if getattr(emp, "resign_date", None) else None,
+        # DB mới không có resign_date
     }
 
 
@@ -48,13 +53,15 @@ def tim_nhan_vien(session: Session, tu_khoa: str):
     # nếu đúng 1 người => trả thẳng card
     if len(rows) == 1:
         e = rows[0]
-        dept = session.query(Department).filter(Department.id == e.department_id).first() if e.department_id else None
-        pos = session.query(Position).filter(Position.id == e.position_id).first() if e.position_id else None
+        dept_id_col = getattr(Department, "department_id", None) or getattr(Department, "id", None)
+        pos_id_col = getattr(Position, "position_id", None) or getattr(Position, "id", None)
+        dept = session.query(Department).filter(dept_id_col == e.department_id).first() if e.department_id else None
+        pos = session.query(Position).filter(pos_id_col == e.position_id).first() if e.position_id else None
         return ok(_card(e, dept, pos), "Tìm thấy nhân viên.")
 
     # nhiều kết quả => trả candidates
     data = [{
-        "employee_id": e.id,
+        "employee_id": getattr(e, "employee_id", None) or getattr(e, "id", None),
         "employee_code": getattr(e, "employee_code", None),
         "full_name": getattr(e, "full_name", None),
         "department_id": getattr(e, "department_id", None),
@@ -69,16 +76,20 @@ def thong_tin_nhan_vien(session: Session, employee_code: str):
     e = find_employee_exact_code(session, employee_code)
     if not e:
         return can_lam_ro("Không tìm thấy nhân viên theo mã.", [])
-    dept = session.query(Department).filter(Department.id == e.department_id).first() if e.department_id else None
-    pos = session.query(Position).filter(Position.id == e.position_id).first() if e.position_id else None
+    dept_id_col = getattr(Department, "department_id", None) or getattr(Department, "id", None)
+    pos_id_col = getattr(Position, "position_id", None) or getattr(Position, "id", None)
+    dept = session.query(Department).filter(dept_id_col == e.department_id).first() if e.department_id else None
+    pos = session.query(Position).filter(pos_id_col == e.position_id).first() if e.position_id else None
     return ok(_card(e, dept, pos), "Thông tin nhân viên.")
 
 def thong_tin_nhan_vien_theo_user(session: Session, user_id: UUID):
     e = find_employee_by_user_id(session, user_id)
     if not e:
         return can_lam_ro("Không tìm thấy nhân viên theo user_id (chưa map user_id -> employee).", [])
-    dept = session.query(Department).filter(Department.id == e.department_id).first() if e.department_id else None
-    pos = session.query(Position).filter(Position.id == e.position_id).first() if e.position_id else None
+    dept_id_col = getattr(Department, "department_id", None) or getattr(Department, "id", None)
+    pos_id_col = getattr(Position, "position_id", None) or getattr(Position, "id", None)
+    dept = session.query(Department).filter(dept_id_col == e.department_id).first() if e.department_id else None
+    pos = session.query(Position).filter(pos_id_col == e.position_id).first() if e.position_id else None
     return ok(_card(e, dept, pos), "Thông tin nhân viên theo user_id.")
 
 

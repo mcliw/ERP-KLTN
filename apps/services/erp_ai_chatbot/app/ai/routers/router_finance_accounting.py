@@ -61,12 +61,12 @@ def plan_route_finance_accounting(module: str, message: str, auth: dict) -> Plan
 
     # 9) fallback: Gemini router theo schema + tool enum
     return gemini_fallback(module, msg, auth, extra_hints=[
-        "Danh mục: tai_khoan(tu_khoa, loai, chi_hien_hoat_dong), ky_hien_tai(ngay), ds_ky(status).",
-        "Đối tác: doi_tac(partner_type, external_id, tu_khoa).",
-        "Hóa đơn: ar_hd/ar_ct(invoice_id | sales_order_ref), ap_hd/ap_ct(invoice_id | purchase_order_ref).",
+        "Danh mục: coa_danh_muc(limit), coa_tim(tu_khoa), coa_chi_tiet(account_code), ky_hien_tai(as_of), ky_danh_sach(status).",
+        "Đối tác: bp_tim(partner_type, external_id, tu_khoa), bp_chi_tiet(partner_type, external_id).",
+        "Hóa đơn: ar_danh_sach(external_id, payment_status, from_date, to_date), ar_trang_thai/ar_chi_tiet(invoice_id|ref). ap_danh_sach(...), ap_trang_thai/ap_chi_tiet(invoice_id|ref).",
         "Công nợ: ar_no(external_id?), ap_no(external_id?).",
-        "Thu–Chi: giao_dich(loai, phuong_thuc, tu_ngay, den_ngay), dong_tien(tu_ngay, den_ngay).",
-        "Sổ sách: so_nhat_ky(tu_ngay, den_ngay, status, source_module), but_toan(entry_id|reference_no), so_du(account_code, tu_ngay, den_ngay).",
-        "Tri thức: tra_cuu_kho_tri_thuc(tu_khoa). Rule: giai_thich_rule(event_code).",
+        "Thu–Chi: cash_lich_su(from_date, to_date, transaction_type, payment_method, limit), cash_chi_tiet(transaction_id|reference_doc_id), cash_tong_hop_thang(month, year).",
+        "Sổ sách: je_danh_sach(from_date, to_date, status, source_module, limit), je_chi_tiet(entry_id|reference_no), so_du_tk(account_code, from_date, to_date), so_cai_tk(account_code, from_date, to_date, limit).",
+        "Tri thức: tra_cuu_kho_tri_thuc(tu_khoa). Rule: rule_giai_thich(event_code) hoặc rule_chi_tiet(event_code).",
         "Nếu câu hỏi có 2 ý (multi-part) thì lập plan 2–3 step, step2 có thể dùng {{s1.data...}}.",
     ])

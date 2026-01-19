@@ -8,7 +8,7 @@ from sqlalchemy import func
 
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
 from app.modules.finance_accounting.models import ARInvoice, APInvoice, BusinessPartner
-from app.modules.finance_accounting.tools.helpers import to_str, fmt_money, safe_limit, today, iso
+from .helpers import to_str, fmt_money, safe_limit, today, iso
 
 
 class ARCongNoArgs(BaseModel):

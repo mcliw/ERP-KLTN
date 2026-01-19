@@ -1,146 +1,101 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import re
-import unicodedata
+from app.ai.tooling import can_lam_ro
 
-def require_any(args, fields: list[str], message: str | None = None) -> None:
-    """
-    Bắt buộc args phải có ít nhất 1 field trong `fields` khác rỗng.
-    Dùng cho các tool search: cần (code) hoặc (name) hoặc (query)...
-    """
-    for f in fields:
-        v = getattr(args, f, None)
+
+def norm_text(x: Any) -> Optional[str]:
+    if x is None:
+        return None
+    s = str(x).strip()
+    return s if s else None
+
+
+def norm_code(x: Any) -> Optional[str]:
+    s = norm_text(x)
+    if not s:
+        return None
+    u = s.upper()
+    # Map một số alias thường gặp để khớp ENUM trong schema
+    alias = {
+        'PURCHASE': 'PURCHASING',
+        'PURCHASES': 'PURCHASING',
+        'PO': 'PURCHASING',
+        'CASH': 'TREASURY',
+        'BANK': 'TREASURY',
+    }
+    return alias.get(u, u)
+
+
+def iso_date(d: Optional[date]) -> Optional[str]:
+    return d.isoformat() if d else None
+
+
+def to_str(x: Any) -> Optional[str]:
+    if x is None:
+        return None
+    if isinstance(x, Decimal):
+        return format(x, 'f')
+    return str(x)
+
+
+def fmt_money(x: Any) -> str:
+    if x is None:
+        return '0'
+    try:
+        v = float(x)
+    except Exception:
+        return str(x)
+    return f"{v:,.0f}"
+
+
+def safe_limit(limit: int, default: int = 20, max_limit: int = 200) -> int:
+    try:
+        n = int(limit)
+    except Exception:
+        return default
+    return max(1, min(n, max_limit))
+
+
+def candidates_by_prefix(session: Session, model: Type[Any], field: str, prefix: str, limit: int = 10) -> list[str]:
+    pref = (prefix or '').strip()
+    if not pref:
+        return []
+    col = getattr(model, field)
+    rows = (
+        session.query(col)
+        .filter(func.upper(col).like(func.upper(pref) + '%'))
+        .order_by(col.asc())
+        .limit(safe_limit(limit, default=10, max_limit=50))
+        .all()
+    )
+    out = []
+    for (v,) in rows:
+        if v is not None:
+            out.append(str(v))
+    return out
+
+
+def require_any(**kwargs):
+    for v in kwargs.values():
         if v is None:
             continue
-        if isinstance(v, str) and v.strip() == "":
+        if isinstance(v, str) and not v.strip():
             continue
-        # số/boolean/list/dict... chỉ cần not None
-        return
-    raise ValueError(message or f"Thiếu tham số: cần ít nhất một trong {', '.join(fields)}.")
+        return None
+    keys = ', '.join(kwargs.keys())
+    return can_lam_ro(f'Bạn cần cung cấp ít nhất một tham số trong: {keys}.', [])
 
-def norm_text(s: str | None) -> str:
-    """Chuẩn hoá text để search: strip, collapse spaces, lowercase."""
-    if s is None:
-        return ""
-    s = str(s).strip()
-    s = unicodedata.normalize("NFC", s)
-    s = re.sub(r"\s+", " ", s)
-    return s
-
-def norm(s: Optional[str]) -> str:
-    return (s or "").strip()
-
-
-def norm_code(s: Optional[str]) -> str:
-    return norm(s).upper()
 
 def today() -> date:
     return date.today()
 
-def iso_date(d: Any) -> str | None:
-    """Chuyển date/datetime/string sang ISO 'YYYY-MM-DD'. Trả None nếu không parse được."""
-    if d is None:
-        return None
-    if isinstance(d, (date, datetime)):
-        return d.date().isoformat() if isinstance(d, datetime) else d.isoformat()
-    s = str(d).strip()
-    if not s:
-        return None
-    # Accept 'YYYY-MM-DD' hoặc 'DD/MM/YYYY'
-    try:
-        if "-" in s and len(s) >= 10:
-            return s[:10]
-        if "/" in s:
-            dd, mm, yy = s.split("/")[:3]
-            return date(int(yy), int(mm), int(dd)).isoformat()
-    except Exception:
-        return None
-    return None
 
-def iso(d: Any) -> str | None:
-    """Chuyển date/datetime/string sang ISO 'YYYY-MM-DD'. Trả None nếu không parse được."""
-    if d is None:
-        return None
-    if isinstance(d, (date, datetime)):
-        return d.date().isoformat() if isinstance(d, datetime) else d.isoformat()
-    s = str(d).strip()
-    if not s:
-        return None
-    # Accept 'YYYY-MM-DD' hoặc 'DD/MM/YYYY'
-    try:
-        if "-" in s and len(s) >= 10:
-            return s[:10]
-        if "/" in s:
-            dd, mm, yy = s.split("/")[:3]
-            return date(int(yy), int(mm), int(dd)).isoformat()
-    except Exception:
-        return None
-    return None
-
-
-def safe_limit(x: Any, default: int = 10, max_limit: int = 50) -> int:
-    """Giới hạn limit để tránh trả data quá dài."""
-    try:
-        n = int(x)
-    except Exception:
-        n = default
-    if n <= 0:
-        n = default
-    if n > max_limit:
-        n = max_limit
-    return n
-
-def to_str(x: Any) -> str:
-    return "" if x is None else str(x)
-
-def fmt_money(x: Any) -> str:
-    """Format số tiền kiểu 1,234,567 (string)."""
-    try:
-        v = float(x)
-    except Exception:
-        return to_str(x)
-    if v.is_integer():
-        return f"{int(v):,}"
-    return f"{v:,.2f}"
-
-
-def safe_days(days: int, default: int = 7, max_days: int = 365) -> int:
-    try:
-        v = int(days)
-    except Exception:
-        return default
-    if v <= 0:
-        return default
-    return min(v, max_days)
-
-
-def since_days(days: int) -> datetime:
-    return datetime.utcnow() - timedelta(days=days)
-
-
-def candidates_by_prefix(
-    session: Session,
-    model_cls,
-    field_name: str,
-    prefix: str,
-    limit: int = 5,
-) -> list[str]:
-    p = norm_code(prefix)
-    if not p:
-        return []
-    col = getattr(model_cls, field_name)
-    rows = (
-        session.query(col)
-        .filter(func.upper(col).like(p + "%"))
-        .order_by(col.asc())
-        .limit(limit)
-        .all()
-    )
-    return [r[0] for r in rows]
+def iso(d: Optional[date]) -> Optional[str]:
+    return iso_date(d)

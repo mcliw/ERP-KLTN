@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.db.identity_database import IdentitySessionLocal
-from app.db.hrm_database import HrmSessionLocal 
+from app.db.hrm_database import HrmSessionLocal
+
 
 class AuthContext(BaseModel):
     user_id: UUID | None = None
@@ -26,7 +27,6 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
 
     from app.core.role.rbac import get_role_and_permissions
 
-
     with IdentitySessionLocal() as s:
         role_name, perms = get_role_and_permissions(s, user_id)
 
@@ -35,19 +35,20 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
     with HrmSessionLocal() as hs:
         row = hs.execute(
             text("""
-                SELECT id AS employee_id, department_id AS dept_id
-                FROM employee
-                WHERE user_id = :uid
+                SELECT employee_id AS employee_id, department_id AS dept_id
+                FROM employees
+                WHERE account_id = :uid
                 LIMIT 1
             """),
-            {"uid": user_id}
+            {"uid": user_id},
         ).fetchone()
+
         if row:
             employee_id, dept_id = row[0], row[1]
 
     return AuthContext(
         user_id=user_id,
-        role=role_name,  
+        role=role_name,
         permissions=set(perms or []),
         is_authenticated=(role_name is not None),
         employee_id=employee_id,

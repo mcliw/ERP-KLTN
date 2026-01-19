@@ -50,7 +50,9 @@ class TimPoSapDenHanGiaoNhatArgs(BaseModel):
 def tim_po_sap_den_han_giao_nhat(session):
     po = (
         session.query(PurchaseOrder)
-        .filter(PurchaseOrder.status.in_(["APPROVED", "PARTIAL_RECEIVED"]))
+        # Theo schema: po_status_enum = DRAFT, SENT, PARTIAL_RECEIVED, RECEIVED, CANCELLED, COMPLETED
+        # "đang xử lý" thường là SENT / PARTIAL_RECEIVED
+        .filter(PurchaseOrder.status.in_(["SENT", "PARTIAL_RECEIVED"]))
         .order_by(PurchaseOrder.expected_delivery_date.asc(), PurchaseOrder.order_date.asc())
         .first()
     )
@@ -130,7 +132,9 @@ def chi_tiet_pr(session: Session, pr_code: str):
 def pr_chua_xu_ly(session: Session, limit: int):
     pr_list = (
         session.query(PurchaseRequest)
-        .filter(PurchaseRequest.status.in_(["SUBMITTED", "APPROVED"]))
+        # Theo schema: pr_status_enum = DRAFT, PENDING, APPROVED, REJECTED, CONVERTED_PO
+        # "đang mở" thường là PENDING / APPROVED (chưa CONVERTED_PO)
+        .filter(PurchaseRequest.status.in_(["PENDING", "APPROVED"]))
         .order_by(PurchaseRequest.request_date.desc())
         .limit(limit)
         .all()
@@ -235,7 +239,9 @@ def chi_tiet_po(session: Session, po_code: str):
 def po_chua_hoan_tat(session: Session, limit: int):
     po_list = (
         session.query(PurchaseOrder)
-        .filter(PurchaseOrder.status.in_(["APPROVED", "PARTIAL_RECEIVED"]))
+        # Theo schema: po_status_enum = DRAFT, SENT, PARTIAL_RECEIVED, RECEIVED, CANCELLED, COMPLETED
+        # "chưa hoàn tất" thường là SENT / PARTIAL_RECEIVED
+        .filter(PurchaseOrder.status.in_(["SENT", "PARTIAL_RECEIVED"]))
         .order_by(PurchaseOrder.order_date.desc())
         .limit(limit)
         .all()
@@ -289,7 +295,13 @@ def tien_do_nhap_po(session: Session, po_code: str):
 
 
 MUA_HANG_TOOLS = [
-    ToolSpec("tim_po_sap_den_han_giao_nhat", "Tìm PO có ngày dự kiến giao hàng (ETD) sớm nhất trong các PO đang xử lý (APPROVED/PARTIAL_RECEIVED).",TimPoSapDenHanGiaoNhatArgs, tim_po_sap_den_han_giao_nhat, "supply_chain"),
+    ToolSpec(
+        "tim_po_sap_den_han_giao_nhat",
+        "Tìm PO có ngày dự kiến giao hàng (ETD) sớm nhất trong các PO đang xử lý (SENT/PARTIAL_RECEIVED).",
+        TimPoSapDenHanGiaoNhatArgs,
+        tim_po_sap_den_han_giao_nhat,
+        "supply_chain",
+    ),
     ToolSpec("tra_cuu_trang_thai_pr", "Tra cứu trạng thái yêu cầu mua (PR).", TraCuuTrangThaiPRArgs, tra_cuu_trang_thai_pr, "supply_chain"),
     ToolSpec("chi_tiet_pr", "Tra cứu chi tiết PR và dòng hàng.", ChiTietPRArgs, chi_tiet_pr, "supply_chain"),
     ToolSpec("pr_chua_xu_ly", "Danh sách PR đang mở.", PRChuaXuLyArgs, pr_chua_xu_ly, "supply_chain"),
