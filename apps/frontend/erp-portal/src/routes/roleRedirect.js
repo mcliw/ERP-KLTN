@@ -5,7 +5,7 @@ export function redirectByRole(navigate, role) {
     case ROLES.ADMIN:
     case ROLES.HR_MANAGER:
     case ROLES.EMPLOYEE:
-      navigate("/hrm/dashboard", { replace: true });
+      navigate("/hrm/trang-chu-nhan-su", { replace: true });
       break;
 
     case ROLES.ADMIN:
