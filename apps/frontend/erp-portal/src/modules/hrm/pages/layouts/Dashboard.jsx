@@ -11,8 +11,8 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
 // Components
-import StatCard from "../../components/layouts/StatCard";
-import QuickAction from "../../components/layouts/QuickAction";
+import StatCard from "../../../../shared/components/StatCard";
+import QuickAction from "../../../../shared/components/QuickAction";
 import EmployeeTable from "../../components/layouts/EmployeeTable";
 import EmployeeFilter from "../../components/layouts/EmployeeFilter";
 
@@ -277,7 +277,7 @@ export default function HRMDashboard() {
 
   return (
     <div className="dashboard-wrap">
-      <div className="d-flex justify-content-between align-items-center mb-4" style={{display: 'grid', alignItems: 'center', gridTemplateColumns: 'auto auto'}}>
+      <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="mb-1">Dashboard Nhân sự</h1>
         </div>
