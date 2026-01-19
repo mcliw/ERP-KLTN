@@ -34,4 +34,7 @@ public class Position extends BaseEntity {
 
     @Column(columnDefinition = "boolean default true")
     private Boolean status;
+
+    @Column(columnDefinition = "int default 1")
+    private Integer capacity;
 }

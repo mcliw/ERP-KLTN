@@ -8,8 +8,8 @@ website
 npm install zustand clsx tailwind-merge lucide-react axios
 npm install lucide-react
 npm install
-npm install zustand (quản lý trạng thái toàn cục (Global State) và lưu vào localStorage)
-npm install sonner (Hiển thị thông báo thay alert)
+npm install zustand 
+npm install sonner 
 
 
 services:

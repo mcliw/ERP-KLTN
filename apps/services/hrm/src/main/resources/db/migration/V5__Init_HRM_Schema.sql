@@ -1,3 +1,7 @@
+-- =========================================================
+-- V5__Init_HRM_Schema.sql - FULL CLEANED VERSION
+-- =========================================================
+
 -- Kích hoạt extension UUID để tạo ID ngẫu nhiên cho account linkage (nếu chưa có)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -38,7 +42,6 @@ END $$;
 -- ---------------------------------------------------------
 
 -- Bảng Phòng ban (Departments)
--- 1.1.1.4: Quản lý phòng ban
 CREATE TABLE IF NOT EXISTS departments (
     department_id SERIAL PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL, -- Mã phòng ban
@@ -51,7 +54,6 @@ CREATE TABLE IF NOT EXISTS departments (
 );
 
 -- Bảng Chức vụ (Positions)
--- 1.1.1.5: Quản lý chức vụ
 CREATE TABLE IF NOT EXISTS positions (
     position_id SERIAL PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL, -- Mã chức vụ
@@ -70,7 +72,6 @@ CREATE TABLE IF NOT EXISTS positions (
 -- ---------------------------------------------------------
 
 -- Bảng Nhân viên (Employees)
--- 1.1.1.2 & 1.1.1.3: Thông tin cá nhân & Hồ sơ
 CREATE TABLE IF NOT EXISTS employees (
     employee_id SERIAL PRIMARY KEY,
     
@@ -99,7 +100,6 @@ CREATE TABLE IF NOT EXISTS employees (
     bank_account_number VARCHAR(50),
     
     -- Dữ liệu sinh trắc học (FaceNet)
-    -- Lưu vector đặc trưng khuôn mặt (thường là mảng float 128 hoặc 512 chiều)
     face_embedding FLOAT[], 
     avatar_url TEXT,                    -- Link ảnh đại diện
     
@@ -117,7 +117,6 @@ DO $$ BEGIN
 END $$;
 
 -- Bảng Tài liệu nhân viên (Documents)
--- 1.1.1.4: Hợp đồng, CV, Bằng cấp
 CREATE TABLE IF NOT EXISTS employee_documents (
     document_id SERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
@@ -131,7 +130,6 @@ CREATE TABLE IF NOT EXISTS employee_documents (
 -- ---------------------------------------------------------
 
 -- Bảng Log Chấm công thô (Raw Logs từ Camera/FaceID)
--- 1.1.1.5: Chấm công khuôn mặt
 CREATE TABLE IF NOT EXISTS attendance_logs (
     log_id BIGSERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -143,7 +141,6 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
 );
 
 -- Bảng Tổng hợp công ngày (Timesheets)
--- 1.1.1.6: Xử lý Bảng công (đã xử lý logic vào muộn/về sớm)
 CREATE TABLE IF NOT EXISTS timesheets (
     timesheet_id BIGSERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -170,7 +167,6 @@ CREATE TABLE IF NOT EXISTS timesheets (
 -- ---------------------------------------------------------
 
 -- Bảng Quỹ phép (Leave Balance)
--- 1.1.2: Chatbot sẽ query bảng này để trả lời "Còn bao nhiêu phép"
 CREATE TABLE IF NOT EXISTS leave_balances (
     balance_id SERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -183,7 +179,6 @@ CREATE TABLE IF NOT EXISTS leave_balances (
 );
 
 -- Bảng Đơn xin nghỉ phép (Leave Requests)
--- 1.1.2: Quản lý nghỉ phép
 CREATE TABLE IF NOT EXISTS leave_requests (
     request_id SERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -206,7 +201,6 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 -- ---------------------------------------------------------
 
 -- Bảng Thông tin lương theo hợp đồng (Salary Contracts/Rules)
--- 1.1.3: Quản lý thông tin lương
 CREATE TABLE IF NOT EXISTS salary_contracts (
     contract_id SERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -222,7 +216,6 @@ CREATE TABLE IF NOT EXISTS salary_contracts (
 );
 
 -- Bảng Phiếu lương hàng tháng (Payslips)
--- 1.1.3: Báo cáo & Chatbot trả lời lương tháng
 CREATE TABLE IF NOT EXISTS payslips (
     payslip_id BIGSERIAL PRIMARY KEY,
     employee_id INT NOT NULL REFERENCES employees(employee_id),
@@ -260,8 +253,11 @@ CREATE INDEX IF NOT EXISTS idx_attendance_logs_date ON attendance_logs(check_tim
 CREATE INDEX IF NOT EXISTS idx_timesheets_date ON timesheets(work_date);
 CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id);
 
--- 1. TẠO DỮ LIỆU PHÒNG BAN (DEPARTMENTS)
 -- ---------------------------------------------------------
+-- 8. DATA SEEDING (DỮ LIỆU MẪU)
+-- ---------------------------------------------------------
+
+-- 1. TẠO DỮ LIỆU PHÒNG BAN (DEPARTMENTS)
 INSERT INTO departments (department_id, code, name, description, status) VALUES 
 (1, 'DEP_HR', 'Phòng Nhân Sự', 'Quản lý nhân sự, tuyển dụng và đào tạo', true),
 (2, 'DEP_IT', 'Phòng Kỹ Thuật', 'Phát triển sản phẩm, bảo trì hệ thống và hạ tầng mạng', true),
@@ -275,7 +271,6 @@ SELECT setval('departments_department_id_seq', (SELECT MAX(department_id) FROM d
 
 
 -- 2. TẠO DỮ LIỆU CHỨC VỤ (POSITIONS)
--- ---------------------------------------------------------
 INSERT INTO positions (position_id, code, name, department_id, description, quota, capacity, status) VALUES 
 -- HR
 (1, 'POS_HR_MGR', 'Trưởng phòng Nhân Sự', 1, 'Quản lý toàn bộ hoạt động HR', 1, 1, true),
@@ -301,7 +296,6 @@ SELECT setval('positions_position_id_seq', (SELECT MAX(position_id) FROM positio
 
 
 -- 3. TẠO DỮ LIỆU NHÂN VIÊN (EMPLOYEES)
--- ---------------------------------------------------------
 INSERT INTO employees (
     employee_id, employee_code, account_id, email, full_name, 
     gender, birthday, phone, identity_card, 
@@ -386,7 +380,6 @@ SELECT setval('employees_employee_id_seq', (SELECT MAX(employee_id) FROM employe
 
 
 -- 4. CẬP NHẬT TRƯỞNG PHÒNG CHO CÁC PHÒNG BAN
--- ---------------------------------------------------------
 UPDATE departments SET manager_id = 1 WHERE department_id = 1; -- HR
 UPDATE departments SET manager_id = 2 WHERE department_id = 2; -- IT
 UPDATE departments SET manager_id = 3 WHERE department_id = 3; -- Sales
@@ -395,7 +388,6 @@ UPDATE departments SET manager_id = 5 WHERE department_id = 5; -- Supply Chain
 
 
 -- 5. TẠO HỢP ĐỒNG LƯƠNG (SALARY CONTRACTS)
--- ---------------------------------------------------------
 INSERT INTO salary_contracts (employee_id, base_salary, allowance, insurance_salary, effective_date, is_active) VALUES
 (1, 25000000, 2000000, 10000000, '2022-01-01', true), -- HR Mgr
 (2, 35000000, 3000000, 12000000, '2022-03-15', true), -- IT Mgr
@@ -411,7 +403,6 @@ ON CONFLICT DO NOTHING;
 
 
 -- 6. TẠO QUỸ PHÉP (LEAVE BALANCES)
--- ---------------------------------------------------------
 -- Giả sử năm hiện tại là 2026 (hoặc năm bạn test)
 INSERT INTO leave_balances (employee_id, year, total_entitlement, used) VALUES
 (1, 2026, 14, 2),
@@ -428,7 +419,6 @@ ON CONFLICT (employee_id, year) DO NOTHING;
 
 
 -- 7. TẠO DỮ LIỆU CHẤM CÔNG (TIMESHEETS) TRONG THÁNG
--- ---------------------------------------------------------
 -- Tạo mẫu dữ liệu 3 ngày gần nhất cho các nhân viên
 INSERT INTO timesheets (employee_id, work_date, check_in_time, check_out_time, working_hours, paid_work_day, status, note) VALUES
 -- Ngày hôm qua
@@ -449,7 +439,6 @@ ON CONFLICT (employee_id, work_date) DO NOTHING;
 
 
 -- 8. TẠO ĐƠN NGHỈ PHÉP (LEAVE REQUESTS)
--- ---------------------------------------------------------
 INSERT INTO leave_requests (employee_id, start_date, end_date, leave_type, reason, status, approver_id) VALUES
 (2, CURRENT_DATE + INTERVAL '5 days', CURRENT_DATE + INTERVAL '6 days', 'PAID', 'Đi du lịch cùng gia đình', 'PENDING', 1),
 (6, CURRENT_DATE - INTERVAL '10 days', CURRENT_DATE - INTERVAL '10 days', 'SICK', 'Bị cảm cúm', 'APPROVED', 1),

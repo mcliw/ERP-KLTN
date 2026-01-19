@@ -11,7 +11,7 @@ import mediapipe as mp
 # --- CẤU HÌNH ---
 API_URL = "http://localhost:8000/api"
 CHECKIN_INTERVAL = 2.0 
-
+VIDEO_SOURCE = "http://host.docker.internal:5000/video_feed"
 # Cấu hình trang
 st.set_page_config(page_title="Hệ Thống Chấm Công AI", layout="wide", page_icon="📷")
 
@@ -88,7 +88,7 @@ if menu == "📷 Chấm Công (Video)":
         cap = None
         
         if run:
-            cap = cv2.VideoCapture(0)
+            cap = cv2.VideoCapture(VIDEO_SOURCE)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             last_send_time = time.time()
@@ -171,7 +171,7 @@ elif menu == "📝 Đăng Ký Mới":
             frame_box = st.image([])
             info_box = st.empty()
             
-            cap = cv2.VideoCapture(0)
+            cap = cv2.VideoCapture(VIDEO_SOURCE)
             collected_images = []
             total_captured = 0
             total_target = 48 # 12 * 4
