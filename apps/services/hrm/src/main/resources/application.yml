@@ -1,31 +1,32 @@
 spring:
   application:
     name: hrm
- 
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
-
   jpa:
     hibernate:
-      ddl-auto: update # Use 'update' for development, change to 'validate' or 'none' for production
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-  graphql:
-  path: /graphql
-  graphiql:
-    enabled: true
-    path: /graphiql
-  flyway:
-    baseline-on-migrate: true
-    check-location: true
+
+# --- THÊM PHẦN NÀY ---
+jwt:
+  signerKey: ${JWT_SECRET}
+# ---------------------
 
 server:
   port: ${SERVER_PORT:8080}
   servlet:
-      context-path: /hrm
+    context-path: /hrm
+
+logging:
+  level:
+    root: INFO
+    # Thêm log để biết nếu token sai
+    org.springframework.security: DEBUG

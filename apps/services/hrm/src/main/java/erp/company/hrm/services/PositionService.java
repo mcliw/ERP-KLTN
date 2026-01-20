@@ -1,10 +1,26 @@
 package erp.company.hrm.services;
 
-import erp.company.hrm.dto.PositionDto;
+import erp.company.hrm.dto.PositionDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 public interface PositionService {
-    List<PositionDto> getPositions(String keyword, String status, String department);
+    // [Table & Filter] Tìm kiếm phân trang, lọc theo phòng ban
+    Page<PositionDTO> getPositions(String keyword, Integer departmentId, String status, Pageable pageable);
 
-    PositionDto createPosition(PositionDto dto);
+    // [EmployeeForm] Cascading Dropdown: Lấy chức vụ theo phòng ban
+    List<PositionDTO> getPositionsByDepartment(Integer departmentId);
+
+    // [Form] Xem chi tiết
+    PositionDTO getPositionById(Integer id);
+
+    // [Form] Tạo mới
+    PositionDTO createPosition(PositionDTO positionDTO);
+
+    // [Form] Cập nhật
+    PositionDTO updatePosition(Integer id, PositionDTO positionDTO);
+
+    // [Table Action] Xóa
+    void deletePosition(Integer id);
 }

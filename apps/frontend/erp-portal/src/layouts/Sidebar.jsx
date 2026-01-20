@@ -10,6 +10,8 @@ import {
 import { useAuthStore } from "../auth/auth.store";
 import { hrmMenu } from "../modules/hrm/menu";
 import { supplychainMenu } from "../modules/supply-chain/menu";
+import { financeMenu } from "../modules/fa/menu";
+import { salesMenu } from "../modules/sales/menu";
 import { ROLES } from "../shared/constants/roles";
 
 // [TIP] Đảm bảo bạn đã import file css chứa .custom-scrollbar ở main.jsx hoặc App.js
@@ -21,7 +23,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   if (!user) return null;
 
-  const combinedMenu = [...(hrmMenu || []), ...(supplychainMenu || [])];
+  const combinedMenu = [...(hrmMenu || []), ...(supplychainMenu || []), ...(financeMenu || []), ...(salesMenu || [])];
 
   const menus = combinedMenu.filter((item) => {
     if (!item.roles) return true;

@@ -22,23 +22,31 @@ public class AuthGraphQLController {
 
     private final AuthService authService;
 
+    // Helper method để lấy Host từ Request
+    private String getClientHost() {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        if (attributes instanceof ServletRequestAttributes) {
+            HttpServletRequest request = ((ServletRequestAttributes) attributes).getRequest();
+            String host = request.getHeader("X-Forwarded-Host");
+            if (host == null) {
+                host = request.getHeader("Host");
+            }
+            return host != null ? host : "";
+        }
+        return "";
+    }
+
     @MutationMapping
     public User register(@Argument RegisterRequest input) { 
-        return authService.register(input);
+        // [UPDATE] Truyền thêm host vào service register
+        String host = getClientHost();
+        return authService.register(input, host); 
     }
 
     @MutationMapping
     public AuthResponse login(@Argument LoginRequest input) {
-        String host = "";
-        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
-        if (attributes instanceof ServletRequestAttributes) {
-            HttpServletRequest request = ((ServletRequestAttributes) attributes).getRequest();
-            host = request.getHeader("X-Forwarded-Host");
-            if (host == null) {
-                host = request.getHeader("Host");
-            }
-        }
-        
+        // [UPDATE] Sử dụng helper method
+        String host = getClientHost();
         return authService.login(input, host);
     }
 
@@ -46,11 +54,11 @@ public class AuthGraphQLController {
     public String ping() {
         return "Identity Service is Online!";
     }
+    
     @QueryMapping
-        public User me() {
+    public User me() {
         User user = new User();
         user.setEmail("admin@example.com");
         return user;
     }
-
 }

@@ -37,4 +37,14 @@ public class Supplier extends BaseEntity {
 
     @Column(name = "finance_partner_id")
     private Integer financePartnerId;
+
+    // --- Cập nhật bổ sung ---
+    @Column(columnDefinition = "TEXT")
+    private String note;
+
+    @Column(name = "status")
+    private String status; // VD: "Đang hợp tác"
+
+    @Column(name = "contract_url")
+    private String contractUrl;
 }

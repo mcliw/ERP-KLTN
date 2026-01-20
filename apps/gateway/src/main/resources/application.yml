@@ -2,8 +2,12 @@ server:
   port: 8080
   forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
 
+# --- CẤU HÌNH JWT (Đã gộp lại) ---
 jwt:
+  # Key cũ (giữ lại để phòng hờ)
   secret: ${JWT_SECRET}
+  # Key mới (QUAN TRỌNG: Code Java SecurityConfig đang tìm key này)
+  signerKey: ${JWT_SECRET}
 
 spring:
   application:
@@ -12,12 +16,14 @@ spring:
   main:
     web-application-type: reactive
 
-  # --- Security Configuration (Resource Server) ---
+  # --- Security Configuration ---
   security:
     oauth2:
       resourceserver:
         jwt:
-          jws-algorithm: HS512 # Phải khớp với thuật toán ký bên Identity Service
+          # Vì ta đã cấu hình thủ công trong SecurityConfig.java nên phần này để mặc định
+          # hoặc có thể bỏ qua. Đảm bảo không có config gây conflict.
+          jwk-set-uri: null
 
   # --- Spring Cloud Gateway Configuration ---
   cloud:
@@ -29,8 +35,9 @@ spring:
             allowedOrigins:
               - "https://ldgcompany.local"
               - "https://store.local"
-              - "http://localhost:3000" # Frontend Dev
-              - "http://localhost:5173" # Vite Dev
+              - "https://checkin.local"
+              - "http://localhost:3000"
+              - "http://localhost:5173"
             allowedMethods: "*"
             allowedHeaders: "*"
             allowCredentials: true
@@ -42,6 +49,8 @@ logging:
     org.springframework.http.server.reactive: DEBUG
     org.springframework.web.reactive: DEBUG
     reactor.netty: DEBUG
+    # Bật log debug cho Security để theo dõi quá trình xác thực
+    org.springframework.security: DEBUG
 
 management:
   endpoints:

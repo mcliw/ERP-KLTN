@@ -1,28 +1,27 @@
 package erp.company.hrm.dto;
 
-import erp.company.hrm.entity.enums.TimesheetStatus;
 import lombok.*;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TimesheetDto {
-    private Long timesheetId;
-    private String employeeId;
-    private String employeeName;
-    private LocalDate workDate;
-    private LocalTime checkInTime;
-    private LocalTime checkOutTime;
-    private Double workingHours;
-    private Double paidWorkDay;
-    private TimesheetStatus status;
-    private String note;
+@Builder
+public class TimesheetDTO {
+    private Long id;                // timesheetId
+    private Integer employeeId;     // Form
+    private String employeeCode;    // Table
+    private String employeeName;    // Table
+    private String departmentName;  // Table
+    private String positionName;    // Table
 
-    // BaseEntity fields
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private LocalDate date;         // Form: Ngày chấm công
+    private LocalTime checkInTime;  // Form: Giờ vào
+    private LocalTime checkOutTime; // Form: Giờ ra
+    
+    private String status;          // Form: Enum (Đúng giờ, Đi muộn...)
+    private String note;            // Form: Ghi chú
+    
+    private Double workCount;       // Table: Số công (paidWorkDay)
 }
