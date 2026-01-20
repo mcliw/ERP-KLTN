@@ -6,5 +6,5 @@ public enum PoStatus {
     PARTIAL_RECEIVED,
     RECEIVED,
     CANCELLED,
-    COMPLETED
+    COMPLETED, APPROVED
 }

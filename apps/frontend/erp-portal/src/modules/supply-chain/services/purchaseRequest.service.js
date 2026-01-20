@@ -1,16 +1,18 @@
 // apps/frontend/erp-portal/src/modules/supply-chain/services/purchaseRequest.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
 // 1. Supply Chain Service (Chứa PR, Items, Products) - Port 3002
-const SC_API_URL = "http://localhost:3002"; 
+const SC_API_URL = "/supply-chain"; 
 const API_URL = `${SC_API_URL}/purchase_requests`;
 const ITEM_API_URL = `${SC_API_URL}/pr_items`;
 const PRODUCT_API_URL = `${SC_API_URL}/products`;
 
 // 2. HRM Service (Chứa Employees, Departments) - Port 3001
-const HRM_API_URL = "http://localhost:3001"; 
+const HRM_API_URL = "/hrm"; 
 
 const STATUS = {
   DRAFT: "DRAFT",
@@ -35,24 +37,14 @@ const ERROR_MSGS = {
  * ========================= */
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
 /* =========================
  * Business Validators
  * ========================= */
 const validators = {
   async checkBusinessRules(data, currentId = null) {
     if (data.pr_code) {
-      const allUrl = `${API_URL}?pr_code=${data.pr_code}`;
-      const response = await fetch(allUrl);
-      const result = await handleResponse(response);
+      // Dùng axios để check code
+      const result = await axiosClient.get(`${API_URL}?pr_code=${data.pr_code}`);
       const exists = result && result.length > 0 && result[0].id !== currentId;
       if (exists) throw new Error(ERROR_MSGS.EXISTS);
     }
@@ -74,8 +66,9 @@ export const purchaseRequestService = {
     try {
       let url = API_URL;
       if (includeItems) url += `?_embed=pr_items`; 
-      const response = await fetch(url);
-      const data = await handleResponse(response);
+      
+      const data = await axiosClient.get(url);
+      
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.createdAt || 0).getTime();
         const tb = new Date(b?.createdAt || 0).getTime();
@@ -90,11 +83,11 @@ export const purchaseRequestService = {
 
   async getById(id) {
     try {
-      const prResponse = await fetch(`${API_URL}/${id}`);
-      const prData = await handleResponse(prResponse);
+      const prData = await axiosClient.get(`${API_URL}/${id}`);
       if (!prData) return null;
-      const itemsResponse = await fetch(`${ITEM_API_URL}?pr_id=${id}`);
-      const itemsData = await handleResponse(itemsResponse);
+      
+      // Lấy items bằng axios
+      const itemsData = await axiosClient.get(`${ITEM_API_URL}?pr_id=${id}`);
       return { ...prData, items: itemsData || [] };
     } catch (error) {
       console.error("getById failed:", error);
@@ -115,21 +108,13 @@ export const purchaseRequestService = {
       updatedAt: null,
       deletedAt: null,
     };
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newPR),
-    });
-    const createdPR = await handleResponse(response);
+
+    const createdPR = await axiosClient.post(API_URL, newPR);
     
     // Lưu Items
     if (data.items && Array.isArray(data.items) && createdPR.id) {
       const itemPromises = data.items.map(item => {
-        return fetch(ITEM_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...item, pr_id: createdPR.id })
-        });
+        return axiosClient.post(ITEM_API_URL, { ...item, pr_id: createdPR.id });
       });
       await Promise.all(itemPromises);
     }
@@ -155,12 +140,7 @@ export const purchaseRequestService = {
       updatedAt: new Date().toISOString(),
     };
     
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedPR),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, updatedPR);
   },
 
   // --- NEW: CHỨC NĂNG DUYỆT / TỪ CHỐI ---
@@ -169,21 +149,14 @@ export const purchaseRequestService = {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // Có thể thêm logic kiểm tra: Nếu đã Cancelled thì không cho Approve...
-    
     const approvedPR = {
       ...current,
-      items: undefined, // json-server thường ko cần gửi lại items khi update parent
+      items: undefined,
       status: STATUS.APPROVED,
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT", // Hoặc PATCH
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(approvedPR),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, approvedPR);
   },
 
   async reject(id, reason) {
@@ -198,12 +171,7 @@ export const purchaseRequestService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(rejectedPR),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, rejectedPR);
   },
 
   // ----------------------------------------
@@ -212,48 +180,42 @@ export const purchaseRequestService = {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
     validators.checkDeletable(current.status);
+    
     const now = new Date().toISOString();
     const softDeleteData = { ...current, items: undefined, deletedAt: now, updatedAt: now };
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-    return handleResponse(response);
+    
+    return await axiosClient.put(`${API_URL}/${id}`, softDeleteData);
   },
 
   async restore(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+    
     const restoreData = { ...current, items: undefined, deletedAt: null, status: STATUS.DRAFT, updatedAt: new Date().toISOString() };
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-    return handleResponse(response);
+    
+    return await axiosClient.put(`${API_URL}/${id}`, restoreData);
   },
 
   async destroy(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
+    
+    // Xóa items con
     if (current.items && current.items.length > 0) {
         const deleteItemPromises = current.items.map(item => 
-            fetch(`${ITEM_API_URL}/${item.id}`, { method: "DELETE" })
+            axiosClient.delete(`${ITEM_API_URL}/${item.id}`)
         );
         await Promise.all(deleteItemPromises);
     }
-    const response = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-    return handleResponse(response);
+    
+    return await axiosClient.delete(`${API_URL}/${id}`);
   },
 
   // --- 2. REFERENCE DATA FUNCTIONS ---
 
   async getEmployeesRef() {
     try {
-      const response = await fetch(`${HRM_API_URL}/employees`);
-      if (!response.ok) return [];
-      return await response.json();
+      return await axiosClient.get(`${HRM_API_URL}/employees`);
     } catch (error) {
       console.warn("Không tải được danh sách Employees từ HRM.", error);
       return [];
@@ -262,9 +224,7 @@ export const purchaseRequestService = {
 
   async getDepartmentsRef() {
     try {
-      const response = await fetch(`${HRM_API_URL}/departments`);
-      if (!response.ok) return [];
-      return await response.json();
+      return await axiosClient.get(`${HRM_API_URL}/departments`);
     } catch (error) {
       console.warn("Không tải được danh sách Departments từ HRM.", error);
       return [];
@@ -273,9 +233,7 @@ export const purchaseRequestService = {
 
   async getProductsRef() {
     try {
-      const response = await fetch(PRODUCT_API_URL);
-      if (!response.ok) return [];
-      return await response.json();
+      return await axiosClient.get(PRODUCT_API_URL);
     } catch (error) {
       console.warn("Không tải được danh sách Products.", error);
       return [];

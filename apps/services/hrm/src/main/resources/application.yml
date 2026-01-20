@@ -14,11 +14,6 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-  graphql:
-    path: /graphql
-    graphiql:
-      enabled: true
-      path: /graphiql
 
 # --- THÊM PHẦN NÀY ---
 jwt:

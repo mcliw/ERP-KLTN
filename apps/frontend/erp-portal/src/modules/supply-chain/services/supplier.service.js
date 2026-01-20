@@ -1,9 +1,11 @@
 // apps/frontend/erp-portal/src/modules/supply-chain/services/supplier.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3002/suppliers";
+const API_URL = "/supply-chain/suppliers";
 
 const STATUS = {
   ACTIVE: "Đang hợp tác",
@@ -26,19 +28,8 @@ const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 const normalizeTaxCode = (taxCode) => String(taxCode || "").trim();
 
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
-const isActiveAndNotDeleted = (s) => s?.status === STATUS.ACTIVE && !isSoftDeleted(s?.deletedAt);
-
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
 
 const sanitizeSupplierData = (data) => {
-  // Loại bỏ các field file raw nếu có (giữ lại url)
   const { contractFile, licenseFile, ...rest } = data;
   return rest;
 };
@@ -56,18 +47,16 @@ const validators = {
       throw new Error(ERROR_MSGS.CONTRACT_REQUIRED);
     }
 
-    // 1) Unique Tax Code check (Kiểm tra trùng mã số thuế)
+    // 1) Unique Tax Code check
     if (taxCode) {
-      // Fetch all suppliers to check duplicate tax code (Giả lập logic check phía client hoặc gọi API search)
-      // Trong thực tế nên dùng API filter: ?taxCode=...
-      const res = await fetch(`${API_URL}?taxCode=${encodeURIComponent(taxCode)}`);
-      let suppliersWithTax = await res.json();
-
-      suppliersWithTax = suppliersWithTax
+      // Dùng axios lấy danh sách theo taxCode
+      const suppliersWithTax = await axiosClient.get(`${API_URL}?taxCode=${encodeURIComponent(taxCode)}`);
+      
+      const filteredSuppliers = suppliersWithTax
         .filter((s) => !isSoftDeleted(s?.deletedAt))
         .filter((s) => (ignoreId ? s.id !== ignoreId : true));
 
-      if (suppliersWithTax.length > 0) {
+      if (filteredSuppliers.length > 0) {
         throw new Error(ERROR_MSGS.TAX_CODE_EXISTS);
       }
     }
@@ -80,8 +69,7 @@ const validators = {
 export const supplierService = {
   async getAll({ includeDeleted = false } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL);
 
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
@@ -98,8 +86,7 @@ export const supplierService = {
 
   async getById(id) {
     try {
-      const response = await fetch(`${API_URL}/${id}`);
-      return await handleResponse(response);
+      return await axiosClient.get(`${API_URL}/${id}`);
     } catch (error) {
       console.error("getById failed:", error);
       return null;
@@ -109,8 +96,7 @@ export const supplierService = {
   async getByCode(code) {
     try {
       const targetCode = normalizeCode(code);
-      const response = await fetch(`${API_URL}?code=${targetCode}`);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(`${API_URL}?code=${targetCode}`);
       return Array.isArray(data) && data.length > 0 ? data[0] : null;
     } catch {
       return null;
@@ -128,7 +114,6 @@ export const supplierService = {
     const exists = await this.checkCodeExists(code);
     if (exists) throw new Error(ERROR_MSGS.EXISTS);
 
-    // Enforce contract for ACTIVE (create default ACTIVE)
     const createStatus = data.status || STATUS.ACTIVE;
     if (createStatus === STATUS.ACTIVE && !data?.contractUrl) {
       throw new Error(ERROR_MSGS.CONTRACT_REQUIRED);
@@ -145,21 +130,14 @@ export const supplierService = {
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
-      stoppedAt: null, // Tương đương resignedAt bên employee
+      stoppedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newSupplier),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newSupplier);
   },
 
   async update(code, data) {
     const targetCode = normalizeCode(code);
-
     const current = await this.getByCode(targetCode);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
@@ -167,12 +145,10 @@ export const supplierService = {
     const nextContractUrl = data.contractUrl ?? current.contractUrl;
     const nextTaxCode = data.taxCode ?? current.taxCode;
 
-    // Enforce contract for ACTIVE
     if (nextStatus === STATUS.ACTIVE && !nextContractUrl) {
       throw new Error(ERROR_MSGS.CONTRACT_REQUIRED);
     }
 
-    // Check business rules khi thay đổi thông tin quan trọng (status, taxCode)
     if (nextStatus === STATUS.ACTIVE || nextTaxCode !== current.taxCode) {
       await validators.checkBusinessRules(
         { ...data, status: nextStatus, contractUrl: nextContractUrl, taxCode: nextTaxCode },
@@ -198,13 +174,7 @@ export const supplierService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedSupplier),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedSupplier);
   },
 
   async remove(code) {
@@ -221,12 +191,7 @@ export const supplierService = {
       updatedAt: now,
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
   async restore(code) {
@@ -234,12 +199,10 @@ export const supplierService = {
     const current = await this.getByCode(targetCode);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // Restore về ACTIVE => bắt buộc hợp đồng
     if (!current.contractUrl) {
       throw new Error(ERROR_MSGS.CONTRACT_REQUIRED);
     }
 
-    // Check tax code uniqueness khi restore
     await validators.checkBusinessRules(
       {
         taxCode: current.taxCode,
@@ -257,21 +220,13 @@ export const supplierService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
   },
 
   async destroy(code) {
     const current = await this.getByCode(code);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${current.id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

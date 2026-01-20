@@ -7,6 +7,9 @@ import PageContainer from "../../../../shared/components/PageContainer";
 import { inventoryService } from "../../services/inventory.service";
 import { useEditResource } from "../../../../shared/hooks/useEditResource";
 import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
+import { warehouseService } from "../../services/warehouse.service";
+import { binService } from "../../services/bin.service";
+import { productService } from "../../services/product.service";
 
 export default function InventoryEdit() {
   // Lấy ID từ URL (VD: /supply-chain/ton-kho/5001/dieu-chinh)
@@ -18,15 +21,15 @@ export default function InventoryEdit() {
   // Cần tải danh sách để hiển thị tên trong Select box (dù đang ở chế độ readonly)
   // và để lấy tên sản phẩm hiển thị lên Breadcrumb/Title
   const fetchRefData = useCallback(async () => {
-    const BASE_URL = "http://localhost:3002";
+  // --- MỚI ---
     const [warehouses, bins, products] = await Promise.all([
-      fetch(`${BASE_URL}/warehouses`).then((res) => res.json()),
-      fetch(`${BASE_URL}/bin_locations`).then((res) => res.json()),
-      fetch(`${BASE_URL}/products`).then((res) => res.json()).catch(() => []),
+      warehouseService.getAll(),
+      binService.getAll(),
+      productService.getAll()
     ]);
     return { warehouses, bins, products };
   }, []);
-
+  
   const { data: refData, loading: loadingRef } = useAsyncData(fetchRefData);
 
   const warehouseOptions = useMemo(() => refData?.warehouses || [], [refData]);

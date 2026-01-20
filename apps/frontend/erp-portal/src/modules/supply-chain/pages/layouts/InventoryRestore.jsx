@@ -7,6 +7,9 @@ import InventoryTable from "../../components/layouts/InventoryTable";
 import { inventoryService } from "../../services/inventory.service";
 import { useRestoreResource } from "../../../../shared/hooks/useRestoreResource";
 import "../../../../shared/styles/document.css";
+import { warehouseService } from "../../services/warehouse.service";
+import { binService } from "../../services/bin.service";
+import { productService } from "../../services/product.service";
 
 export default function InventoryRestore() {
   const navigate = useNavigate();
@@ -22,12 +25,12 @@ export default function InventoryRestore() {
   useEffect(() => {
     const fetchRefs = async () => {
       try {
-        const BASE_URL = "http://localhost:3002";
-        // Lấy song song các danh mục để lookup tên
+        // --- MỚI ---
+        // Lấy cả data đã xóa (includeDeleted: true) để hiển thị tên chính xác cho các item lịch sử
         const [warehouses, bins, products] = await Promise.all([
-          fetch(`${BASE_URL}/warehouses`).then(res => res.json()),
-          fetch(`${BASE_URL}/bin_locations`).then(res => res.json()),
-          fetch(`${BASE_URL}/products`).then(res => res.json()).catch(() => []),
+          warehouseService.getAll({ includeDeleted: true }),
+          binService.getAll({ includeDeleted: true }),
+          productService.getAll({ includeDeleted: true }),
         ]);
         setRefData({ warehouses, bins, products });
       } catch (error) {
