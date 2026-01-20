@@ -1,7 +1,6 @@
 package erp.company.hrm.repository;
 
 import erp.company.hrm.entity.LeaveRequest;
-import erp.company.hrm.entity.enums.LeaveStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;

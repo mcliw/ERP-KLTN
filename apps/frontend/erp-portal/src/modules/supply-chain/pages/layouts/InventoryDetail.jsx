@@ -5,6 +5,9 @@ import { useCallback } from "react";
 import { inventoryService, TRANSACTION_TYPES } from "../../services/inventory.service";
 import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
 import { formatDate } from "../../../../shared/utils/format";
+import { warehouseService } from "../../services/warehouse.service";
+import { binService } from "../../services/bin.service";
+import { productService } from "../../services/product.service";
 import {
   DetailHeader,
   DetailTop,
@@ -34,12 +37,13 @@ export default function InventoryDetail() {
     const stock = await inventoryService.getById(id);
     if (!stock) return null;
 
-    const BASE_URL = "http://localhost:3002";
+    // --- MỚI ---
     const [product, warehouse, bin, transactions] = await Promise.all([
-      fetch(`${BASE_URL}/products/${stock.product_id}`).then(res => res.json()).catch(() => ({ name: `SP #${stock.product_id}`, sku: "N/A" })),
-      fetch(`${BASE_URL}/warehouses/${stock.warehouse_id}`).then(res => res.json()).catch(() => ({ name: `Kho #${stock.warehouse_id}` })),
-      fetch(`${BASE_URL}/bin_locations/${stock.bin_id}`).then(res => res.json()).catch(() => ({ code: `Bin #${stock.bin_id}` })),
-      
+      // Dùng service.getById, nếu lỗi/null thì fallback về object rỗng để tránh crash UI
+      productService.getById(stock.product_id).then(res => res || { name: `SP #${stock.product_id}`, sku: "N/A" }),
+      warehouseService.getById(stock.warehouse_id).then(res => res || { name: `Kho #${stock.warehouse_id}` }),
+      binService.getById(stock.bin_id).then(res => res || { code: `Bin #${stock.bin_id}` }),
+
       inventoryService.getTransactionHistory({
           warehouseId: stock.warehouse_id,
           productId: stock.product_id,

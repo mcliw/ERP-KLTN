@@ -49,7 +49,10 @@ input RegisterRequest {
     id: ID 
     email: String!
     password: String!
-    roleName: String
+    roleName: String 
+    fullName: String
+    phone: String
+    address: String
 }
 
 input LoginRequest {

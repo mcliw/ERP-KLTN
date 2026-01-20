@@ -8,6 +8,9 @@ import { FaPlus } from "react-icons/fa";
 import InventoryTable from "../../components/layouts/InventoryTable";
 import InventoryFilter from "../../components/layouts/InventoryFilter";
 import PageHeader from "../../../../shared/components/PageHeader";
+import { warehouseService } from "../../services/warehouse.service";
+import { binService } from "../../services/bin.service";
+import { productService } from "../../services/product.service";
 
 // Services
 import { inventoryService } from "../../services/inventory.service";
@@ -34,14 +37,14 @@ export default function Inventory() {
   // 1. Hàm tải dữ liệu tổng hợp (Stock + Reference Data)
   // Vì Inventory chỉ lưu ID, ta cần fetch thêm warehouses, products, bins để hiển thị tên
   const fetchInventoryData = useCallback(async () => {
-    const BASE_URL = "http://localhost:3002";
+    const BASE_URL = "/api/supply-chain";
     
     // Promise.all giữ nguyên
     const [stocks, warehouses, bins, products] = await Promise.all([
-      inventoryService.getAll(), // Đảm bảo service này không trả về Promise rejected mà không catch
-      fetch(`${BASE_URL}/warehouses`).then(res => res.json()),
-      fetch(`${BASE_URL}/bin_locations`).then(res => res.json()),
-      fetch(`${BASE_URL}/products`).then(res => res.json()).catch(() => []), 
+      inventoryService.getAll(),
+      warehouseService.getAll(),
+      binService.getAll(),
+      productService.getAll()
     ]);
 
     return { stocks, warehouses, bins, products };

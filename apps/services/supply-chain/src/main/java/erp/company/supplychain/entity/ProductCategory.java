@@ -23,4 +23,11 @@ public class ProductCategory {
 
     @OneToMany(mappedBy = "parent")
     private List<ProductCategory> subCategories;
+
+    // --- Cập nhật bổ sung ---
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "status")
+    private String status; // VD: "Hoạt động"
 }

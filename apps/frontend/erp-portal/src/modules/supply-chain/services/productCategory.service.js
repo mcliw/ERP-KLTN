@@ -1,10 +1,6 @@
-// apps/frontend/erp-portal/src/modules/supply-chain/services/productCategory.service.js
+import { axiosClient } from "../../../services/axiosClient";
 
-/* =========================
- * Config & Constants
- * ========================= */
-// Giả định supply chain chạy port 3002 hoặc chung port
-const API_URL = "http://localhost:3002/product_categories"; 
+const API_URL = "/supply-chain/product_categories";
 
 const STATUS = {
   ACTIVE: "Hoạt động",
@@ -20,53 +16,31 @@ const ERROR_MSGS = {
   UPDATE_FAILED: "Không thể cập nhật dữ liệu",
 };
 
-/* =========================
- * Helpers
- * ========================= */
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
-/* =========================
- * Business Validators
- * ========================= */
 const validators = {
   async checkBusinessRules(data, currentId = null) {
     const parentId = data?.parentId;
 
-    // 1) Circular Dependency Check (Basic): Parent cannot be self
     if (parentId && currentId && parentId === currentId) {
       throw new Error(ERROR_MSGS.CIRCULAR_DEPENDENCY);
     }
 
-    // 2) Parent Existence Check
-    // Nếu có chọn parentId, phải đảm bảo parentId đó tồn tại trong DB
     if (parentId) {
-      const response = await fetch(`${API_URL}/${parentId}`);
-      if (!response.ok) {
+      try {
+        await axiosClient.get(`${API_URL}/${parentId}`);
+      } catch (error) {
         throw new Error(ERROR_MSGS.PARENT_NOT_FOUND);
       }
     }
   },
 };
 
-/* =========================
- * Main Service
- * ========================= */
 export const productCategoryService = {
   async getAll({ includeDeleted = false } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL);
 
-      // Sắp xếp theo mới nhất
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
         const tb = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
@@ -84,48 +58,36 @@ export const productCategoryService = {
 
   async getById(id) {
     try {
-      const response = await fetch(`${API_URL}/${id}`);
-      return await handleResponse(response);
+      return await axiosClient.get(`${API_URL}/${id}`);
     } catch (error) {
       console.error("getById failed:", error);
       return null;
     }
   },
 
-  // Hàm kiểm tra ID tồn tại (tương tự checkCodeExists)
   async checkIdExists(id) {
     const item = await this.getById(id);
     return !!item;
   },
 
   async create(data) {
-    // Generate ID nếu cần, hoặc giả định FE/BE đã xử lý. 
-    // Ở đây giả định data đã có id hoặc BE tự sinh. 
-    // Nếu data có id, check trùng:
     if (data.id) {
         const exists = await this.checkIdExists(data.id);
         if (exists) throw new Error(ERROR_MSGS.EXISTS);
     }
 
-    // Validate rules
     await validators.checkBusinessRules(data);
 
     const newCategory = {
       ...data,
-      parentId: data.parentId || null, // Đảm bảo null nếu rỗng
+      parentId: data.parentId || null,
       status: data.status || STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newCategory),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newCategory);
   },
 
   async update(id, data) {
@@ -135,7 +97,6 @@ export const productCategoryService = {
     const nextParentId = data.parentId !== undefined ? data.parentId : current.parentId;
     const nextStatus = data.status || current.status;
 
-    // Check Business Rules khi thay đổi Parent
     if (nextParentId !== current.parentId) {
         await validators.checkBusinessRules({ ...data, parentId: nextParentId }, id);
     }
@@ -148,13 +109,7 @@ export const productCategoryService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedCategory),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, updatedCategory);
   },
 
   async remove(id) {
@@ -169,19 +124,13 @@ export const productCategoryService = {
       updatedAt: now,
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, softDeleteData);
   },
 
   async restore(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // Khi restore, kiểm tra lại xem Parent có còn tồn tại/active không
     if (current.parentId) {
         await validators.checkBusinessRules({ parentId: current.parentId }, id);
     }
@@ -193,21 +142,13 @@ export const productCategoryService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, restoreData);
   },
 
   async destroy(id) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${id}`);
   },
 };

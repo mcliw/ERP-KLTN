@@ -6,6 +6,9 @@ import { inventoryService } from "../../services/inventory.service";
 import { useCreateResource } from "../../../../shared/hooks/useCreateResource";
 import { useAsyncData } from "../../../../shared/hooks/useAsyncData"; // Hook tải dữ liệu
 import PageContainer from "../../../../shared/components/PageContainer";
+import { warehouseService } from "../../services/warehouse.service";
+import { binService } from "../../services/bin.service";
+import { productService } from "../../services/product.service";
 
 export default function InventoryCreate() {
   /* =========================================
@@ -13,11 +16,12 @@ export default function InventoryCreate() {
    * ========================================= */
   // Cần tải danh sách Kho, Vị trí và Sản phẩm để hiển thị trong Select box
   const fetchRefData = useCallback(async () => {
-    const BASE_URL = "http://localhost:3002";
+  // --- MỚI ---
+  // Gọi service thay vì fetch thủ công
     const [warehouses, bins, products] = await Promise.all([
-      fetch(`${BASE_URL}/warehouses`).then((res) => res.json()),
-      fetch(`${BASE_URL}/bin_locations`).then((res) => res.json()),
-      fetch(`${BASE_URL}/products`).then((res) => res.json()).catch(() => []),
+      warehouseService.getAll(),
+      binService.getAll(),
+      productService.getAll()
     ]);
     return { warehouses, bins, products };
   }, []);

@@ -23,4 +23,11 @@ public class BinLocation {
 
     @Column(name = "max_capacity")
     private BigDecimal maxCapacity;
+
+    // --- Cập nhật bổ sung ---
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "is_active")
+    private Boolean isActive;
 }

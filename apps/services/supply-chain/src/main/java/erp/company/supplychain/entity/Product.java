@@ -42,4 +42,11 @@ public class Product extends BaseEntity {
 
     @Column(name = "image_url")
     private String imageUrl;
+
+    // --- Cập nhật bổ sung ---
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "status")
+    private String status; // VD: "Hoạt động", "Ngừng hoạt động"
 }

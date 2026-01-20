@@ -40,4 +40,8 @@ public class CurrentStock {
     @Column(name = "updated_at")
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    // --- Cập nhật bổ sung ---
+    @Column(columnDefinition = "TEXT")
+    private String notes;
 }
