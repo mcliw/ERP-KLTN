@@ -3,7 +3,7 @@ services:
   nginx:
     build:
       context: ./infra/nginx
-    image: arsneonci/erp-nginx:latest
+    image: xngip/erp-nginx:latest
     container_name: erp-nginx
     ports:
       - "80:80"
@@ -22,7 +22,7 @@ services:
   erp-portal:
     build:
       context: ./apps/frontend/erp-portal
-    image: arsneonci/erp-portal:latest
+    image: xngip/erp-portal:latest
     container_name: erp-portal
     expose:
       - "80" # Chạy Nginx nội bộ container
@@ -33,7 +33,7 @@ services:
   ecommerce-store:
     build:
       context: ./apps/frontend/ecommerce-store
-    image: arsneonci/ecommerce-store:latest
+    image: xngip/ecommerce-store:latest
     container_name: ecommerce-store
     expose:
       - "3000" # Chạy Node server
@@ -48,7 +48,7 @@ services:
       context: ./apps/gateway
     env_file:
       - .env
-    image: arsneonci/gateway-service:latest
+    image: xngip/gateway-service:latest
     container_name: gateway-service
     expose:
       - "8080"
@@ -78,7 +78,7 @@ services:
       context: ./apps/identity
     env_file:
     - .env
-    image: arsneonci/identity-service:latest
+    image: xngip/identity-service:latest
     container_name: identity-service
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
@@ -111,7 +111,7 @@ services:
       context: ./apps/services/hrm
     env_file:
     - .env
-    image: arsneonci/hrm-service:latest
+    image: xngip/hrm-service:latest
     container_name: hrm-service
     environment:
       - JWT_SECRET=${JWT_SECRET}
@@ -141,7 +141,7 @@ services:
       context: ./apps/services/supply-chain
     env_file:
     - .env
-    image: arsneonci/supply-chain-service:latest
+    image: xngip/supply-chain-service:latest
     container_name: supply-chain-service
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-supply:5432/supply_db
@@ -167,7 +167,7 @@ services:
   sales-service:
     build: 
       context: ./apps/services/sales
-    image: arsneonci/sales-service:latest
+    image: xngip/sales-service:latest
     container_name: sales-service
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-sales:5432/sales_db
@@ -194,7 +194,7 @@ services:
   accounting-service:
     build: 
       context: ./apps/services/accounting
-    image: arsneonci/accounting-service:latest
+    image: xngip/accounting-service:latest
     container_name: accounting-service
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-accounting:5432/accounting_db
@@ -217,28 +217,28 @@ services:
     networks:
       - erp-network
   # 6. AI Assistant Service (Python FastAPI)
-#  ai-service:
-#    build: 
-#      context: ./apps/services/erp_ai_chatbot
-#    image: arsneonci/ai-service:latest
-#    container_name: ai-service
-#    environment:
-#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
-#    depends_on:
-#      - db-ai
-#    networks:
-#      - erp-network
-#  db-ai:
-#    image: postgres:15-alpine
-#    container_name: db-ai
-#    environment:
-#      - POSTGRES_DB=ai_db
-#      - POSTGRES_USER=postgres
-#      - POSTGRES_PASSWORD=DEADlift12Hard
-#    volumes:
-#      - ai-data:/var/lib/postgresql/data
-#    networks:
-#      - erp-network
+  ai-service:
+    build: 
+      context: ./apps/services/erp_ai_chatbot
+    image: xngip/ai-service:latest
+    container_name: ai-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
+    depends_on:
+      - db-ai
+    networks:
+      - erp-network
+  db-ai:
+    image: postgres:15-alpine
+    container_name: db-ai
+    environment:
+      - POSTGRES_DB=ai_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
 
   # 6. Face Recognition Service (Python FastAPI)
   face-service:
@@ -246,7 +246,7 @@ services:
       - "host.docker.internal:host-gateway"
     build: 
       context: ./apps/services/face-recognition-attendance-system
-    image: arsneonci/face-service:latest
+    image: xngip/face-service:latest
     container_name: face-service
     environment:
       - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-hrm:5432/hrm_db

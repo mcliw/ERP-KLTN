@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { FaCommentDots, FaTimes, FaPaperPlane, FaRobot } from "react-icons/fa";
 import "../styles/chat.css"
 import { useLocation } from "react-router-dom";
+// 1. Import axiosClient
+import { axiosClient } from "../../services/axiosClient"; 
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -33,7 +35,7 @@ export default function ChatWidget() {
     e.preventDefault();
     if (!inputValue.trim()) return;
 
-    // 1. Thêm tin nhắn của User
+    // --- Hiển thị tin nhắn User ---
     const userMsg = {
       id: Date.now(),
       text: inputValue,
@@ -44,17 +46,45 @@ export default function ChatWidget() {
     setInputValue("");
     setIsTyping(true);
 
-    // 2. Giả lập Bot trả lời (Thay thế đoạn này bằng gọi API thực tế)
-    setTimeout(() => {
+    try {
+      // --- GỌI API ---
+      // Lưu ý: user_id ở đây truyền lên để backend nhận, 
+      // nhưng backend (bước 1) đã hardcode đè lên rồi nên tham số này chỉ để đúng format model.
+      const payload = {
+        message: userMsg.text,
+        module: "auto", // Để AI tự detect module
+        user_id: "8c67022a-1fa1-46ab-835b-30d4aaba08ee", 
+        debug: true,
+        compose: true
+      };
+
+      // Gọi endpoint /api/v1/chat (baseURL đã cấu hình trong axiosClient)
+      const response = await axiosClient.post("/v1/chat", payload);
+
+      // --- Xử lý phản hồi từ AI ---
+      const aiAnswer = response.answer || "Xin lỗi, tôi không nhận được phản hồi.";
+      
       const botMsg = {
         id: Date.now() + 1,
-        text: "Cảm ơn câu hỏi của bạn. Tính năng AI đang được kết nối...",
+        text: aiAnswer, // Lấy text trả lời từ AI
         sender: "bot",
         timestamp: new Date(),
       };
+      
       setMessages((prev) => [...prev, botMsg]);
+
+    } catch (error) {
+      console.error("Chat Error:", error);
+      const errorMsg = {
+        id: Date.now() + 1,
+        text: "Có lỗi xảy ra khi kết nối tới AI server.",
+        sender: "bot",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   // Lấy đường dẫn hiện tại

@@ -13,7 +13,10 @@ export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* --- SỬA DÒNG NÀY --- */}
+        {/* Thay vì về login, hãy chuyển hướng thẳng vào dashboard của HRM */}
+        <Route path="/" element={<Navigate to="hrm/trang-chu-nhan-su" replace />} />
+        {/* <Route path="/" element={<Navigate to="/login" replace />} /> */}
 
         {/* AUTH */}
         <Route path="/login" element={<Login />} />

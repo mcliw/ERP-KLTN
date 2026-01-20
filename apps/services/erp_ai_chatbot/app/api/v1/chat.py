@@ -175,9 +175,29 @@ def _extract_context_from_result(result: dict) -> dict:
         "selected_module": (result or {}).get("selected_module"),
     }
 
-
 @router.post("/chat")
 def chat(req: ChatRequest):
+    # --- ĐOẠN CŨ (Comment lại) ---
+    # auth_ctx = build_auth_context(user_id=req.user_id)
+    # if not auth_ctx.is_authenticated or not auth_ctx.role or not req.user_id:
+    #     raise PermissionDenied("Vui lòng đăng nhập để sử dụng chat.")
+
+    # --- ĐOẠN MỚI (Thêm vào để Test) ---
+    # Sử dụng UUID lấy từ file axiosClient.js của bạn để đảm bảo DB có dữ liệu
+    TEST_USER_ID = "00020001-0000-0000-0000-000000020001" 
+    
+    # Giả lập auth_context
+    class MockAuth:
+        role = "ADMIN"
+        user_id = TEST_USER_ID
+        employee_id = "18" 
+        employee_code = "A20001"
+        dept_id = None
+        
+    auth_ctx = MockAuth()
+    req.user_id = UUID(TEST_USER_ID) # Gán đè user_id vào request
+    # -----------------------------------
+
     # 1) build auth từ identity (role/perms thật)
     auth_ctx = build_auth_context(user_id=req.user_id)
 
@@ -271,7 +291,7 @@ def chat(req: ChatRequest):
 
 #     user_id = auth_ctx.user_id
 
-#     db = ChatSessionLocal()
+#     db = ChatSessionLocal()   
 #     try:
 #         conversation_id = None
 

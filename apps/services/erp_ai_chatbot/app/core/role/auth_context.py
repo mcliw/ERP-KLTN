@@ -18,7 +18,7 @@ class AuthContext(BaseModel):
     permissions: Set[str] = Field(default_factory=set)
 
     employee_id: int | None = None
-    employee_code: str | None = None   # ✅ thêm
+    employee_code: str | None = None  
     dept_id: int | None = None
 
 
@@ -55,6 +55,6 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
         permissions=set(perms or []),
         is_authenticated=(role_name is not None),
         employee_id=employee_id,
-        employee_code=employee_code,   # ✅ set
+        employee_code=employee_code,
         dept_id=dept_id,
     )
