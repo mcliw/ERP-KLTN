@@ -1,306 +1,349 @@
+from __future__ import annotations
+
+import enum
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey,
-    Date, DateTime, Time, Float, Numeric, Boolean, Enum, JSON
+    BigInteger,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Time,
+    UniqueConstraint,
+    Index,
+    Enum as SAEnum,
+    text,
+    Computed,
 )
-from sqlalchemy.orm import relationship
-from datetime import datetime
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.sql import func
 
 from app.db.hrm_database import HrmBase
+Base = HrmBase
 
 # =========================
-# DEPARTMENT
+# ENUMS (đúng như SQL)
 # =========================
-class Department(HrmBase):
-    __tablename__ = "department"
+class EmployeeStatusEnum(str, enum.Enum):
+    PROBATION = "PROBATION"
+    OFFICIAL = "OFFICIAL"
+    RESIGNED = "RESIGNED"
+    TERMINATED = "TERMINATED"
 
-    id = Column(Integer, primary_key=True)
-    code = Column(String(50), unique=True)
-    name = Column(String(100))
-    description = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+
+class TimesheetStatusEnum(str, enum.Enum):
+    ON_TIME = "ON_TIME"
+    LATE = "LATE"
+    LEAVE_EARLY = "LEAVE_EARLY"
+    ABSENT = "ABSENT"
+    LEAVE_PAID = "LEAVE_PAID"
+    LEAVE_UNPAID = "LEAVE_UNPAID"
+
+
+class LeaveStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class LeaveTypeEnum(str, enum.Enum):
+    PAID = "PAID"
+    UNPAID = "UNPAID"
+    SICK = "SICK"
+    MATERNITY = "MATERNITY"
 
 
 # =========================
-# POSITION
+# TABLES
 # =========================
-class Position(HrmBase):
-    __tablename__ = "position"
+class Department(Base):
+    __tablename__ = "departments"
 
-    id = Column(Integer, primary_key=True)
-    title = Column(String(100))
-    base_salary_range_min = Column(Numeric(15, 2))
-    base_salary_range_max = Column(Numeric(15, 2))
-    description = Column(String)
+    department_id = Column(Integer, primary_key=True)
+    code = Column(String(50), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+
+    manager_id = Column(Integer, ForeignKey("employees.employee_id"))
+    status = Column(Boolean, server_default=text("TRUE"), nullable=False)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    positions = relationship("Position", back_populates="department")
+    employees = relationship(
+        "Employee",
+        back_populates="department",
+        foreign_keys="Employee.department_id",  # ✅ hoặc [Employee.department_id]
+    )
+
+    manager = relationship(
+        "Employee",
+        foreign_keys=[manager_id],      # ✅ chỉ rõ dùng departments.manager_id
+        uselist=False,
+    )
 
 
-# =========================
-# EMPLOYEE
-# =========================
-class Employee(HrmBase):
-    __tablename__ = "employee"
+class Position(Base):
+    __tablename__ = "positions"
 
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
+    position_id = Column(Integer, primary_key=True)
+    code = Column(String(50), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
 
-    employee_code = Column(String(20), unique=True)
-    full_name = Column(String(100))
+    department_id = Column(Integer, ForeignKey("departments.department_id"))
+    quota = Column(Integer, server_default=text("1"), nullable=False)
+    description = Column(Text)
+    status = Column(Boolean, server_default=text("TRUE"), nullable=False)
 
-    department_id = Column(Integer, ForeignKey("department.id"))
-    position_id = Column(Integer, ForeignKey("position.id"))
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    dob = Column(Date)
-    gender = Column(Enum("MALE", "FEMALE", "OTHER", name="gender_enum"))
+    department = relationship("Department", back_populates="positions")
+    employees = relationship("Employee", back_populates="position")
+
+
+class Employee(Base):
+    __tablename__ = "employees"
+
+    employee_id = Column(Integer, primary_key=True)
+
+    employee_code = Column(String(50), unique=True, nullable=False)
+
+    # account_id UUID DEFAULT uuid_generate_v4()
+    account_id = Column(UUID(as_uuid=True), server_default=text("uuid_generate_v4()"), nullable=False)
+
+    # status VARCHAR(20) DEFAULT 'YET'
+    status = Column(String(20), server_default=text("'YET'"), nullable=False)
+
+    full_name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
 
     phone = Column(String(20))
-    email_company = Column(String(100))
-    address = Column(String)
-
+    birthday = Column(Date)
+    gender = Column(String(10))
     identity_card = Column(String(20))
-    bank_account_number = Column(String(50))
+    hometown = Column(String(255))
+    address = Column(Text)
+
+    department_id = Column(Integer, ForeignKey("departments.department_id"))
+    position_id = Column(Integer, ForeignKey("positions.position_id"))
+
+    join_date = Column(Date, nullable=False)
+
+    status_empl = Column(
+        SAEnum(EmployeeStatusEnum, name="employee_status_enum"),
+        server_default=text("'PROBATION'::employee_status_enum"),
+        nullable=False,
+    )
+
     bank_name = Column(String(100))
+    bank_account_number = Column(String(50))
 
-    status = Column(Enum("ACTIVE", "INACTIVE", name="employee_status_enum"))
+    face_embedding = Column(ARRAY(Float))  # FLOAT[]
+    avatar_url = Column(Text)
 
-    join_date = Column(Date)
-    resign_date = Column(Date)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    department = relationship("Department", back_populates="employees")
+    position = relationship("Position", back_populates="employees")
 
-    department = relationship("Department")
-    position = relationship("Position")
+    documents = relationship("EmployeeDocument", back_populates="employee", cascade="all, delete-orphan")
+    attendance_logs = relationship("AttendanceLog", back_populates="employee", cascade="all, delete-orphan")
+    timesheets = relationship("Timesheet", back_populates="employee", cascade="all, delete-orphan")
+
+    leave_balances = relationship("LeaveBalance", back_populates="employee", cascade="all, delete-orphan")
+    leave_requests = relationship("LeaveRequest", foreign_keys="LeaveRequest.employee_id", back_populates="employee", cascade="all, delete-orphan")
+    leave_requests_to_approve = relationship("LeaveRequest", foreign_keys="LeaveRequest.approver_id", back_populates="approver")
+
+    salary_contracts = relationship("SalaryContract", back_populates="employee", cascade="all, delete-orphan")
+    payslips = relationship("Payslip", back_populates="employee", cascade="all, delete-orphan")
+
+    managed_departments = relationship("Department", foreign_keys=[Department.manager_id], back_populates="manager")
+
+    department = relationship(
+        "Department",
+        back_populates="employees",
+        foreign_keys=[department_id],   
+    )
 
 
-# =========================
-# WORK SHIFT
-# =========================
-class WorkShift(HrmBase):
-    __tablename__ = "work_shift"
-
-    id = Column(Integer, primary_key=True)
-    shift_name = Column(String(50))
-    start_time = Column(Time)
-    end_time = Column(Time)
-    break_start_time = Column(Time)
-    break_end_time = Column(Time)
+# Index đúng như SQL
+Index("idx_employees_email", Employee.email)
+Index("idx_employees_dept", Employee.department_id)
 
 
-# =========================
-# TIMESHEET DAILY
-# =========================
-class TimesheetDaily(HrmBase):
-    __tablename__ = "timesheet_daily"
+class EmployeeDocument(Base):
+    __tablename__ = "employee_documents"
 
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
-    date = Column(Date)
+    document_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id", ondelete="CASCADE"), nullable=False)
 
-    work_shift_id = Column(Integer, ForeignKey("work_shift.id"))
+    document_type = Column(String(50))
+    file_path = Column(Text, nullable=False)
+    upload_date = Column(DateTime, server_default=func.now(), nullable=False)
 
+    employee = relationship("Employee", back_populates="documents")
+
+
+class AttendanceLog(Base):
+    __tablename__ = "attendance_logs"
+
+    log_id = Column(BigInteger, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
+
+    check_time = Column(DateTime, nullable=False)
+    image_url = Column(Text)
+    confidence_score = Column(Float)
+    device_id = Column(String(50))
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    employee = relationship("Employee", back_populates="attendance_logs")
+
+
+Index("idx_attendance_logs_date", AttendanceLog.check_time)
+
+
+class Timesheet(Base):
+    __tablename__ = "timesheets"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "work_date", name="uq_timesheets_employee_work_date"),
+    )
+
+    timesheet_id = Column(BigInteger, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
+
+    work_date = Column(Date, nullable=False)
     check_in_time = Column(Time)
     check_out_time = Column(Time)
 
-    late_minutes = Column(Integer)
-    early_leave_minutes = Column(Integer)
-    ot_hours = Column(Float)
+    working_hours = Column(Float, server_default=text("0"), nullable=False)
+    paid_work_day = Column(Float, server_default=text("0"), nullable=False)
 
-    status = Column(Enum("PRESENT", "ABSENT", "LEAVE", name="timesheet_status_enum"))
-    working_day_count = Column(Float)
+    status = Column(
+        SAEnum(TimesheetStatusEnum, name="timesheet_status_enum"),
+        server_default=text("'ABSENT'::timesheet_status_enum"),
+        nullable=False,
+    )
 
-    note = Column(String)
+    note = Column(Text)
 
-    employee = relationship("Employee")
-    work_shift = relationship("WorkShift")
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-
-# =========================
-# ATTENDANCE LOG
-# =========================
-class AttendanceLog(HrmBase):
-    __tablename__ = "attendance_log"
-
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
-
-    check_time = Column(DateTime)
-    image_snapshot = Column(String(255))
-    confidence_score = Column(Float)
-
-    device_id = Column(String(50))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    employee = relationship("Employee", back_populates="timesheets")
 
 
-# =========================
-# LEAVE REQUEST
-# =========================
-class LeaveRequest(HrmBase):
-    __tablename__ = "leave_request"
-
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
-
-    leave_type = Column(Enum("ANNUAL", "SICK", "UNPAID", name="leave_type_enum"))
-    from_date = Column(DateTime)
-    to_date = Column(DateTime)
-
-    total_days = Column(Float)
-    reason = Column(String)
-
-    status = Column(Enum("PENDING", "APPROVED", "REJECTED", name="leave_status_enum"))
-    approver_id = Column(Integer)
-    approved_at = Column(DateTime)
+Index("idx_timesheets_date", Timesheet.work_date)
 
 
-# =========================
-# OT REQUEST
-# =========================
-class OTRequest(HrmBase):
-    __tablename__ = "ot_request"
+class LeaveBalance(Base):
+    __tablename__ = "leave_balances"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "year", name="uq_leave_balances_employee_year"),
+    )
 
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
+    balance_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
 
-    ot_date = Column(Date)
-    from_time = Column(Time)
-    to_time = Column(Time)
+    year = Column(Integer, nullable=False)
 
-    total_hours = Column(Float)
-    ot_type = Column(Enum("WEEKDAY", "WEEKEND", "HOLIDAY", name="ot_type_enum"))
+    total_entitlement = Column(Float, server_default=text("12"), nullable=False)
+    used = Column(Float, server_default=text("0"), nullable=False)
 
-    reason = Column(String)
-    status = Column(Enum("PENDING", "APPROVED", "REJECTED", name="ot_status_enum"))
-    approver_id = Column(Integer)
+    # remaining FLOAT GENERATED ALWAYS AS (total_entitlement - used) STORED
+    remaining = Column(Float, Computed("total_entitlement - used", persisted=True))
 
-
-# =========================
-# LABOR CONTRACT
-# =========================
-class LaborContract(HrmBase):
-    __tablename__ = "labor_contract"
-
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
-
-    contract_number = Column(String(50))
-    contract_type = Column(Enum("FIXED", "UNLIMITED", name="contract_type_enum"))
-
-    start_date = Column(Date)
-    end_date = Column(Date)
-
-    basic_salary = Column(Numeric(15, 2))
-    allowance_responsibility = Column(Numeric(15, 2))
-    allowance_transport = Column(Numeric(15, 2))
-    allowance_lunch = Column(Numeric(15, 2))
-
-    file_path = Column(String(255))
-    status = Column(Enum("ACTIVE", "EXPIRED", name="contract_status_enum"))
-
-    created_at = Column(DateTime, default=datetime.utcnow)
+    employee = relationship("Employee", back_populates="leave_balances")
 
 
-# =========================
-# SALARY RULE
-# =========================
-class SalaryRule(HrmBase):
-    __tablename__ = "salary_rule"
+class LeaveRequest(Base):
+    __tablename__ = "leave_requests"
 
-    id = Column(Integer, primary_key=True)
-    code = Column(String(50))
-    name = Column(String(100))
+    request_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
 
-    type = Column(Enum("ALLOWANCE", "DEDUCTION", name="salary_rule_type_enum"))
-    formula = Column(String)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
 
-    is_active = Column(Boolean, default=True)
+    leave_type = Column(
+        SAEnum(LeaveTypeEnum, name="leave_type_enum"),
+        server_default=text("'PAID'::leave_type_enum"),
+        nullable=False,
+    )
 
+    reason = Column(Text)
 
-# =========================
-# PAYROLL PERIOD
-# =========================
-class PayrollPeriod(HrmBase):
-    __tablename__ = "payroll_period"
+    status = Column(
+        SAEnum(LeaveStatusEnum, name="leave_status_enum"),
+        server_default=text("'PENDING'::leave_status_enum"),
+        nullable=False,
+    )
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100))
+    approver_id = Column(Integer, ForeignKey("employees.employee_id"))
+    rejection_reason = Column(Text)
 
-    month = Column(Integer)
-    year = Column(Integer)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    start_date = Column(Date)
-    end_date = Column(Date)
-
-    standard_working_days = Column(Integer)
-    status = Column(Enum("OPEN", "CLOSED", name="payroll_status_enum"))
-
-    created_at = Column(DateTime, default=datetime.utcnow)
+    employee = relationship("Employee", foreign_keys=[employee_id], back_populates="leave_requests")
+    approver = relationship("Employee", foreign_keys=[approver_id], back_populates="leave_requests_to_approve")
 
 
-# =========================
-# PAYSLIP
-# =========================
-class Payslip(HrmBase):
-    __tablename__ = "payslip"
+Index("idx_leave_requests_employee", LeaveRequest.employee_id)
 
-    id = Column(Integer, primary_key=True)
-    payroll_period_id = Column(Integer, ForeignKey("payroll_period.id"))
-    employee_id = Column(Integer, ForeignKey("employee.id"))
 
-    total_working_days = Column(Float)
-    total_ot_hours = Column(Float)
+class SalaryContract(Base):
+    __tablename__ = "salary_contracts"
+
+    contract_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
+
+    base_salary = Column(Numeric(15, 2), nullable=False)
+    allowance = Column(Numeric(15, 2), server_default=text("0"), nullable=False)
+    insurance_salary = Column(Numeric(15, 2))
+
+    effective_date = Column(Date, nullable=False)
+    is_active = Column(Boolean, server_default=text("TRUE"), nullable=False)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    employee = relationship("Employee", back_populates="salary_contracts")
+
+
+class Payslip(Base):
+    __tablename__ = "payslips"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "month", "year", name="uq_payslips_employee_month_year"),
+    )
+
+    payslip_id = Column(BigInteger, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
+
+    month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+
+    standard_work_days = Column(Float)
+    actual_work_days = Column(Float)
+    leave_paid_days = Column(Float)
 
     gross_salary = Column(Numeric(15, 2))
-    total_deduction = Column(Numeric(15, 2))
+
+    tax_deduction = Column(Numeric(15, 2), server_default=text("0"), nullable=False)
+    insurance_deduction = Column(Numeric(15, 2), server_default=text("0"), nullable=False)
+    advance_payment = Column(Numeric(15, 2), server_default=text("0"), nullable=False)
+
     net_salary = Column(Numeric(15, 2))
+    status = Column(Boolean, server_default=text("FALSE"), nullable=False)
 
-    status = Column(Enum("DRAFT", "FINAL", name="payslip_status_enum"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-
-# =========================
-# PAYSLIP DETAIL
-# =========================
-class PayslipDetail(HrmBase):
-    __tablename__ = "payslip_detail"
-
-    id = Column(Integer, primary_key=True)
-    payslip_id = Column(Integer, ForeignKey("payslip.id"))
-    salary_rule_id = Column(Integer, ForeignKey("salary_rule.id"))
-
-    amount = Column(Numeric(15, 2))
-    note = Column(String)
-
-
-# =========================
-# EMPLOYEE FACE DATA
-# =========================
-class EmployeeFaceData(HrmBase):
-    __tablename__ = "employee_face_data"
-
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employee.id"))
-
-    face_vector = Column(JSON)
-    image_path = Column(String(255))
-
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-# =========================
-# PAYMENT REQUEST HRM
-# =========================
-class PaymentRequestHRM(HrmBase):
-    __tablename__ = "payment_request_hrm"
-
-    id = Column(Integer, primary_key=True)
-    payroll_period_id = Column(Integer, ForeignKey("payroll_period.id"))
-
-    request_code = Column(String(50))
-    total_amount = Column(Numeric(15, 2))
-    total_employees = Column(Integer)
-
-    status = Column(Enum("PENDING", "SENT", "PAID", name="payment_hrm_status_enum"))
-    finance_transaction_id = Column(Integer)
-
-    created_by = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    employee = relationship("Employee", back_populates="payslips")

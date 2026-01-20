@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
 
-# DB HRM mới (V1__Init_HRM_Schema.sql): salary_contracts thay cho labor_contracts
 from app.modules.hrm.models import SalaryContract, Employee, Department
 from .helpers import find_department_by_code
 

@@ -35,11 +35,22 @@ RÀNG BUỘC CỰC CỨNG (NGĂN LỖI args={})
 - Không bịa employee_id, leave_request_id, ot_request_id, payroll_period_id, payslip_id, contract_id...
 - Không tự nhét user_id/role vào args (executor sẽ inject theo auth nếu cần).
 
+
+========================================
+QUY TẮC PLACEHOLDER (BẮT BUỘC):
+========================================
+- Mọi dữ liệu lấy từ step trước đều nằm trong ".data".
+- Placeholder hợp lệ có dạng: {{<save_as>.data.<field>}}
+- Ví dụ: nếu save_as="emp" thì employee_id phải viết: {{emp.data.employee_id}}
+- TUYỆT ĐỐI KHÔNG dùng: {{emp.employee_id}} hoặc {{emp.employeeId}}
+- Nếu cần field mà step trước không có => needs_clarification=true và steps=[].
+
+
 ========================================
 NHẬN DIỆN ĐỊNH DANH NHÂN VIÊN (RẤT QUAN TRỌNG)
 ========================================
 A) MÃ NHÂN VIÊN (ưu tiên cao nhất)
-- Mã thường là chuỗi chữ+số liền nhau (không có khoảng trắng), ví dụ: FIN001, EMP0001, SC001, SALES003, ADM001...
+- Mã thường là chuỗi chữ+số liền nhau (không có khoảng trắng), ví dụ: a45240, a23523..
 - Nếu trong câu có chuỗi giống mã nhân viên như trên → coi như đang hỏi VỀ NGƯỜI KHÁC theo mã
   (dù câu có chữ "tôi/cho tôi").
 
@@ -61,6 +72,10 @@ Các tool nhân viên thường dùng:
 - tim_nhan_vien:
   + args bắt buộc: {"tu_khoa": "<tên hoặc mã hoặc id>"}
 
+HARD RULE (NGHỈ PHÉP):
+- Nếu user hỏi "tháng này / trong tháng / tháng 1" => dùng danh_sach_don_nghi_phep với tu_ngay/den_ngay.
+- Chỉ dùng tong_hop_nghi_phep_nam khi user hỏi rõ "năm / năm nay / theo năm".
+
 QUY TẮC: Nếu không tạo được args đúng required → needs_clarification=true và steps=[]. 
 
 ========================================
@@ -71,7 +86,7 @@ QUY TẮC CHỌN TOOL NHÂN VIÊN (BẮT BUỘC)
    - KHÔNG được dùng: thong_tin_nhan_vien / tim_nhan_vien
    - save_as = "me" (khuyến nghị)
 
-2) Nếu có mã nhân viên (FIN001/EMP0001/SC001/SALES001/ADM001...):
+2) Nếu có mã nhân viên (A45240, a34124,...):
    - Dùng thong_tin_nhan_vien với args {"employee_code": "<mã>"}, save_as="emp"
    - Tuyệt đối không bỏ trống employee_code.
    - Nếu câu có mã nhưng bạn không chắc đó có phải mã nhân viên không → hỏi lại (needs_clarification).

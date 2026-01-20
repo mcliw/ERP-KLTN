@@ -18,6 +18,7 @@ from app.ai.executor.executor_finance_accounting import execute_chat_finance_acc
 from app.ai.executor.executor_rag_policy import execute_chat_rag_policy
 from app.ai.auto_cross_planner import build_cross_plan_llm
 from app.ai.executor.executor_cross_plan import run_cross_plan
+from app.core.role.auth_context import build_auth_context
 
 
 VALID_MODULES = {"hrm", "supply_chain", "sale_crm", "finance_accounting", "rag_policy"}
@@ -76,11 +77,12 @@ def execute_chat_unified(
     user_id: UUID | None,
     role: str | None,
     message: str,
-    compose_enabled: bool = True,
-    debug: bool = False,
+    compose_enabled: bool = False,
+    debug: bool = True,
 ) -> Dict[str, Any]:
     module = (module or "auto").strip()
     msg = (message or "").strip()
+    auth_ctx = build_auth_context(user_id)
 
     det: Optional[Dict[str, Any]] = None
     selected_module: Optional[str] = None
@@ -113,12 +115,49 @@ def execute_chat_unified(
             res = run_cross_plan(
                 plan,
                 user_id=user_id,
-                role=role,
+                role=auth_ctx.role,
+                auth=auth_ctx,
                 debug=debug,
             )
 
+            final_answer = res.get("answer") or ""
+
+            # ✅ AUTO COMPOSE: ném tool results vào LLM để viết câu trả lời cuối
+            if compose_enabled:
+                step_infos = res.get("steps") or []
+                try:
+                    if is_llm_available():
+                        final_answer = compose_answer_with_llm(
+                            module="auto_multi",
+                            question=msg,
+                            step_infos=step_infos,
+                        )
+                    else:
+                        # không có LLM -> fallback gọn
+                        from app.ai.answer_composer import compose_fallback_from_steps
+                        final_answer = compose_fallback_from_steps(msg, step_infos)
+
+                    # ✅ validate: không cho bịa số/ngày/mã ngoài payload
+                    payload_text = json.dumps(
+                        {"question": msg, "tool_results": step_infos},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        default=str,
+                    )
+
+                    # bạn đã đổi tên compose_safe_enough -> is_safe_enough ở answer_composer.py
+                    from app.ai.answer_composer import is_safe_enough, compose_fallback_from_steps
+
+                    if not is_safe_enough(final_answer, payload_text=payload_text):
+                        final_answer = compose_fallback_from_steps(msg, step_infos)
+
+                except Exception:
+                    # fallback cuối
+                    from app.ai.answer_composer import compose_fallback_from_steps
+                    final_answer = compose_fallback_from_steps(msg, step_infos)
+
             out = {
-                "answer": res.get("answer"),
+                "answer": final_answer,
                 "selected_module": "auto_multi",
                 "confidence": 1.0,
                 "plan": plan.model_dump(),
@@ -129,6 +168,7 @@ def execute_chat_unified(
                 out["store"] = res.get("store")
 
             return out
+
 
         # 4) Fallback: không build được plan thì quay về detect module đơn
         det = detect_module_llm(message=msg, role=role)

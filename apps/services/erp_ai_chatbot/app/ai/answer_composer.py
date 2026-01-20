@@ -43,7 +43,7 @@ def _extract_dates_norm(text: str) -> set[str]:
 def _extract_codes(text: str) -> set[str]:
     return set(_CODE_RE.findall(text or ""))
 
-def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: int = 1200) -> bool:
+def is_safe_enough(answer: str, payload_text: str | None = None, max_len: int = 1200) -> bool:
     if not answer:
         return False
     if len(answer) > max_len:
@@ -51,11 +51,9 @@ def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: i
     if any(x in answer for x in ("{{", "}}", "{s", "...")):
         return False
 
-    # Nếu không truyền payload_text => chỉ check marker
     if not payload_text:
         return True
 
-    # Không cho sinh số/ngày/mã mới ngoài payload
     if not _extract_numbers_norm(answer).issubset(_extract_numbers_norm(payload_text)):
         return False
     if not _extract_dates_norm(answer).issubset(_extract_dates_norm(payload_text)):
@@ -65,6 +63,44 @@ def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: i
 
     return True
 
+compose_safe_enough = is_safe_enough
+
+
+def compose_fallback_from_steps(question: str, step_infos: List[Dict[str, Any]]) -> str:
+    """
+    Fallback cực gọn, KHÔNG bịa số:
+    - nếu có step ok: true + có 'thong_diep' -> dùng thong_diep
+    - nếu có error -> dùng error.message
+    - không dump JSON
+    """
+    msgs: List[str] = []
+    for si in step_infos or []:
+        res = (si.get("result") or {})
+        if not isinstance(res, dict):
+            continue
+
+        if res.get("ok") is False:
+            err = res.get("error") or {}
+            m = err.get("message")
+            if m:
+                msgs.append(str(m).strip())
+            continue
+
+        td = res.get("thong_diep")
+        if td:
+            msgs.append(str(td).strip())
+
+    # nếu vẫn trống -> trả 1 câu an toàn
+    if not msgs:
+        return "Mình đã xử lý yêu cầu nhưng hiện chưa đủ dữ liệu để trả lời rõ ràng. Bạn thử hỏi cụ thể hơn giúp mình."
+
+    # gộp tối đa 2 ý để tránh lan man
+    uniq = []
+    for m in msgs:
+        if m and m not in uniq:
+            uniq.append(m)
+    return " ".join(uniq[:2]).strip()
+
 def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[str, Any]]) -> str:
     # ✅ gửi full data/result (không preview)
     payload = {
@@ -73,12 +109,14 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
         "tool_results": [
             {
                 "step_id": si.get("id"),
+                "module": si.get("module"),
                 "tool": si.get("tool"),
                 "args": si.get("args"),
                 "result": si.get("result"),
             }
             for si in step_infos
-        ],
+],
+
     }
 
     sys = (

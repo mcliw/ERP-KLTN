@@ -18,6 +18,7 @@ class AuthContext(BaseModel):
     permissions: Set[str] = Field(default_factory=set)
 
     employee_id: int | None = None
+    employee_code: str | None = None   # ✅ thêm
     dept_id: int | None = None
 
 
@@ -31,11 +32,13 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
         role_name, perms = get_role_and_permissions(s, user_id)
 
     employee_id = None
+    employee_code = None
     dept_id = None
+
     with HrmSessionLocal() as hs:
         row = hs.execute(
             text("""
-                SELECT employee_id AS employee_id, department_id AS dept_id
+                SELECT employee_id, employee_code, department_id
                 FROM employees
                 WHERE account_id = :uid
                 LIMIT 1
@@ -44,7 +47,7 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
         ).fetchone()
 
         if row:
-            employee_id, dept_id = row[0], row[1]
+            employee_id, employee_code, dept_id = row[0], row[1], row[2]
 
     return AuthContext(
         user_id=user_id,
@@ -52,5 +55,6 @@ def build_auth_context(user_id: UUID | None) -> AuthContext:
         permissions=set(perms or []),
         is_authenticated=(role_name is not None),
         employee_id=employee_id,
+        employee_code=employee_code,   # ✅ set
         dept_id=dept_id,
     )

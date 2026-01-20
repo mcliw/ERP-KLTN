@@ -41,7 +41,7 @@ RAG_POLICY_TOOLS = [
         ten_tool="tra_cuu_chinh_sach",
         mo_ta="Tra cứu chính sách nội bộ từ kho tài liệu (RAG).",
         args_model=TraCuuChinhSachArgs,
-        handler=lambda **kwargs: tra_cuu_chinh_sach_handler(**kwargs),
+        handler=lambda query, **_: tra_cuu_chinh_sach_handler(query=query),
         module="rag_policy",
         read_only=True,
     ),

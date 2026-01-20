@@ -122,7 +122,6 @@ def _parse_date(s: str):
     except Exception:
         return None
 
-
 def _days_between(start, end) -> int:
     if not start or not end:
         return 0
@@ -134,14 +133,29 @@ def _days_between(start, end) -> int:
 
 def danh_sach_don_nghi_phep(
     session: Session,
-    employee_id: int,
+    employee_id: int | str,
     status: str | None = None,
     leave_type: str | None = None,
     tu_ngay: str | None = None,
     den_ngay: str | None = None,
     limit: int = 20,
 ):
-    q = session.query(LeaveRequest).filter(LeaveRequest.employee_id == int(employee_id))
+    if employee_id is None or str(employee_id).strip() == "":
+        return can_lam_ro("Thiếu employee_id để tra cứu đơn nghỉ phép.", [])
+
+    try:
+        emp_id = int(employee_id)
+    except Exception:
+        return can_lam_ro("employee_id không hợp lệ (phải là số).", [])
+
+    # clamp limit để an toàn
+    try:
+        lim = int(limit)
+    except Exception:
+        lim = 20
+    lim = max(1, min(lim, 100))
+
+    q = session.query(LeaveRequest).filter(LeaveRequest.employee_id == emp_id)
 
     if status:
         status_norm = _normalize_leave_status(status)
@@ -165,7 +179,7 @@ def danh_sach_don_nghi_phep(
     if d_to:
         q = q.filter(LeaveRequest.end_date <= d_to)
 
-    rows = q.order_by(LeaveRequest.start_date.desc()).limit(int(limit)).all()
+    rows = q.order_by(LeaveRequest.start_date.desc()).limit(lim).all()
 
     data = []
     for r in rows:
@@ -186,7 +200,6 @@ def danh_sach_don_nghi_phep(
         })
 
     return ok(data, "Danh sách đơn nghỉ phép.")
-
 
 def chi_tiet_don_nghi_phep(session: Session, leave_request_id: int):
     id_col = getattr(LeaveRequest, "request_id", None) or getattr(LeaveRequest, "id", None)

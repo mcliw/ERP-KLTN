@@ -9,48 +9,35 @@ from sqlalchemy import desc
 
 from apps.services.erp_ai_chatbot.app.modules.rag_policy.chat_memory_models import ChatConversation, ChatMessage
 
-def get_or_create_conversation(
-    session: Session,
-    *,
-    conversation_id: Optional[UUID],
-    user_id: UUID,
-) -> ChatConversation:
-    # 1) nếu client gửi conversation_id thì dùng đúng cái đó
-    if conversation_id:
-        conv = (
-            session.query(ChatConversation)
-            .filter(ChatConversation.conversation_id == conversation_id)
-            .first()
-        )
-        if conv:
-            return conv
-
-    # 2) nếu không gửi -> REUSE conversation mới nhất của user
-    last = (
-        session.query(ChatConversation)
+def get_or_create_conversation(db: Session, user_id: UUID) -> ChatConversation:
+    conv = (
+        db.query(ChatConversation)
         .filter(ChatConversation.user_id == user_id)
-        .order_by(desc(ChatConversation.created_at))
-        .first()
+        .one_or_none()
     )
-    if last:
-        return last
+    if conv:
+        return conv
 
-    # 3) nếu chưa có -> tạo mới
     conv = ChatConversation(user_id=user_id)
-    session.add(conv)
-    session.flush()
+    db.add(conv)
+    db.flush()  # lấy conversation_id
     return conv
 
-def fetch_recent_messages(db, conversation_id, limit: int = 20):
-    rows = (
+
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+def fetch_recent_messages(db, conversation_id, window_minutes=5):
+    now = datetime.now(ZoneInfo("Asia/Bangkok"))
+    since = now - timedelta(minutes=window_minutes)
+
+    return (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id == conversation_id)
-        .order_by(desc(ChatMessage.created_at))   # ✅ mới nhất trước
-        .limit(limit)
+        .filter(ChatMessage.created_at >= since)
+        .order_by(ChatMessage.created_at.asc())
         .all()
     )
-    return list(reversed(rows))  # ✅ đổi lại thành cũ -> mới để LLM đọc đúng
-
 
 
 def fetch_last_context(session: Session, conversation_id: UUID) -> Optional[Dict[str, Any]]:
