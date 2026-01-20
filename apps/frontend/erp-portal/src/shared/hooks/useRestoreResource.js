@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { isSoftDeleted } from "../utils/softDelete";
 import { useToast } from "../components/ToastProvider";
 
-export function useRestoreResource(service, idField, resourceName) {
+export function useRestoreResource(service, idField, resourceName, customFilter = null) {
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -15,15 +15,20 @@ export function useRestoreResource(service, idField, resourceName) {
   const pageSize = 10;
 
   const getDisplayName = useCallback((item) => {
-    return item?.employeeName || item?.name || item?.fullName || item?.[idField] || "";
+    return item?.account_name || item?.employeeName || item?.name || item?.fullName || item?.[idField] || "";
   }, [idField]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const allItems = await service.getAll({ includeDeleted: true });
+      const allItems = await service.getAll({ includeDeleted: true, includeInactive: true });
       const deletedItems = (Array.isArray(allItems) ? allItems : []).filter((item) =>
-        isSoftDeleted(item.deletedAt)
+        {
+          if (customFilter) {
+              return customFilter(item);
+          }
+          return isSoftDeleted(item.deletedAt);
+        }
       );
       setData(deletedItems);
       setPage(1);
@@ -33,7 +38,7 @@ export function useRestoreResource(service, idField, resourceName) {
     } finally {
       setLoading(false);
     }
-  }, [service, toast, resourceName]);
+  }, [service, toast, resourceName, customFilter]);
 
   useEffect(() => {
     loadData();

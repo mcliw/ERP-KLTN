@@ -1,13 +1,16 @@
 import { HRM_PERMISSIONS } from "../../shared/permissions/hrm.permissions";
 import {
   FaTachometerAlt,
-  FaBox,          // Thay icon AddressCard bằng Box (Hộp hàng)
-  FaTruck,        // Thay Clock bằng Truck (Xe tải - Nhà cung cấp)
-  FaWarehouse,    // Thay MoneyBill bằng Warehouse (Kho)
-  FaDolly,        // Nhập kho
-  FaShippingFast, // Xuất kho
-  FaClipboardCheck, // Kiểm kê
-  FaSitemap       // Danh mục
+  FaBox,          
+  FaTruck,       
+  FaWarehouse,   
+  FaSearchLocation,
+  FaArchive,
+  FaDolly,       
+  FaFileAlt,
+  FaShippingFast, 
+  FaClipboardCheck, 
+  FaSitemap  
 } from "react-icons/fa";
 
 export const supplychainMenu = [
@@ -44,13 +47,13 @@ export const supplychainMenu = [
   {
     label: "Vị trí",
     path: "/supply-chain/vi-tri-kho",
-    icon: <FaWarehouse />,
+    icon: <FaSearchLocation />,
     roles: [HRM_PERMISSIONS.HRM_SALARY_INFO_VIEW],
   },
   {
     label: "Tồn kho",
     path: "/supply-chain/ton-kho",
-    icon: <FaWarehouse />,
+    icon: <FaArchive />,
     roles: [HRM_PERMISSIONS.HRM_SALARY_INFO_VIEW],
   },
   {
@@ -68,7 +71,7 @@ export const supplychainMenu = [
   {
     label: "Đơn mua hàng",
     path: "/supply-chain/don-mua-hang",
-    icon: <FaClipboardCheck />,
+    icon: <FaFileAlt />,
     roles: [HRM_PERMISSIONS.HRM_ACCOUNT_VIEW],
   },
 ];

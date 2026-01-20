@@ -39,6 +39,7 @@
       "type": "Hàng hóa kinh doanh",
       "brand": "Dell",
       "unit": "Cái",
+      "price": 45000000,
       "minStock": 10,
       "warranty": 24,
       "description": "Laptop cao cấp viền mỏng, Core i7",
@@ -55,6 +56,7 @@
       "type": "Hàng hóa kinh doanh",
       "brand": "Apple",
       "unit": "Cái",
+      "price": 45000000,
       "minStock": 5,
       "warranty": 12,
       "description": "MacBook Pro chip M3 14 inch",
@@ -72,6 +74,7 @@
       "type": "Tài sản công ty",
       "brand": "Hòa Phát",
       "unit": "Cái",
+      "price": 45000000,
       "minStock": 0,
       "warranty": 36,
       "description": "Bàn gỗ tự nhiên cho giám đốc",
@@ -114,24 +117,6 @@
       "deletedAt": null,
       "stoppedAt": null,
       "updatedAt": "2026-01-18T18:00:34.172Z"
-    },
-    {
-      "id": "3",
-      "code": "SUP-HP-003",
-      "name": "Công ty Cổ phần Nội thất Hòa Phát",
-      "taxCode": "0900189234",
-      "rating": 4.5,
-      "contactEmail": "cskh@hoaphat.com.vn",
-      "contactPhone": "02435558888",
-      "address": "KCN Phố Nối A, Văn Lâm, Hưng Yên",
-      "financePartnerId": 9005,
-      "createdAt": "2023-03-05T09:15:00Z",
-      "contractUrl": "",
-      "status": "Đang hợp tác",
-      "note": "Nhà cung cấp nội thất văn phòng chính.",
-      "deletedAt": null,
-      "stoppedAt": null,
-      "updatedAt": "2026-01-18T18:00:26.735Z"
     }
   ],
   "warehouses": [
@@ -317,6 +302,18 @@
       "updatedAt": "2026-01-19T12:13:46.838Z",
       "deletedAt": "2026-01-19T12:13:46.838Z",
       "rejection_reason": "Tes"
+    },
+    {
+      "id": "abb5",
+      "pr_code": "PR-2023-10023",
+      "requester_id": "a639",
+      "department_id": "345d",
+      "request_date": "2026-01-20",
+      "reason": "Mua sắm thiết bị làm việc cho nhân viên mới Team IT",
+      "status": "DRAFT",
+      "createdAt": "2026-01-20T02:17:21.550Z",
+      "updatedAt": null,
+      "deletedAt": null
     }
   ],
   "pr_items": [
@@ -347,6 +344,13 @@
       "quantity_requested": 1,
       "expected_date": "",
       "pr_id": "99de"
+    },
+    {
+      "id": "02f8",
+      "product_id": "prod_101",
+      "quantity_requested": 1,
+      "expected_date": "2026-01-20",
+      "pr_id": "abb5"
     }
   ],
   "quotations": [

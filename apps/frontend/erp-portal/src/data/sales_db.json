@@ -1,0 +1,305 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "username": "admin",
+      "full_name": "Quản trị viên"
+    },
+    {
+      "id": "2",
+      "username": "sales_staff",
+      "full_name": "Nhân viên Sale 1"
+    }
+  ],
+  "customers": [
+    {
+      "id": "C001",
+      "code": "KH001",
+      "full_name": "Công ty TNHH ABC",
+      "phone": "0901234567",
+      "email": "contact@abc.com",
+      "address": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+      "status": "ACTIVE",
+      "created_at": "2023-01-10T08:00:00Z"
+    },
+    {
+      "id": "C002",
+      "code": "KH002",
+      "full_name": "Chị Trần Thị Lan",
+      "phone": "0909888777",
+      "email": "lan.tran@gmail.com",
+      "address": "456 Cầu Giấy, Hà Nội",
+      "status": "ACTIVE",
+      "created_at": "2023-02-15T09:30:00Z"
+    },
+    {
+      "id": "de7e",
+      "code": "MAR",
+      "full_name": "Anh Phạm Văn Minh",
+      "phone": "0909123456",
+      "email": "duong.binhbui2602@gmail.com",
+      "address": "KCN Phố Nối A, Văn Lâm, Hưng Yên",
+      "status": "ACTIVE",
+      "created_at": "2026-01-20T04:04:21.525Z",
+      "updated_at": "2026-01-20T04:13:57.966Z",
+      "deleted_at": null
+    }
+  ],
+  "vouchers": [
+    {
+      "id": "2b32",
+      "discount_type": "PERCENTAGE",
+      "discount_value": 10,
+      "is_active": true,
+      "created_at": "2026-01-20T04:59:45.860Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "10be",
+      "discount_type": "PERCENTAGE",
+      "discount_value": 10,
+      "is_active": true,
+      "created_at": "2026-01-20T05:09:36.312Z",
+      "updated_at": "2026-01-20T05:09:45.050Z",
+      "deleted_at": null
+    }
+  ],
+  "voucher_constraints": [
+    {
+      "id": "1",
+      "voucher_id": "1",
+      "min_order_amount": 200000,
+      "max_discount_amount": null
+    },
+    {
+      "id": "2",
+      "voucher_id": "2",
+      "min_order_amount": 500000,
+      "max_discount_amount": 100000
+    },
+    {
+      "id": "3",
+      "voucher_id": "3",
+      "min_order_amount": 100000,
+      "max_discount_amount": null
+    },
+    {
+      "id": "2c09",
+      "min_order_amount": null,
+      "max_discount_amount": null,
+      "voucher_id": "42b9"
+    },
+    {
+      "id": "d3a2",
+      "min_order_amount": null,
+      "max_discount_amount": null,
+      "voucherId": "2b32"
+    },
+    {
+      "id": "dc16",
+      "min_order_amount": null,
+      "max_discount_amount": null,
+      "voucherId": "10be"
+    }
+  ],
+  "voucher_details": [
+    {
+      "id": "10",
+      "code": "WELCOME50",
+      "voucher_id": "1",
+      "is_active": true
+    },
+    {
+      "id": "25",
+      "code": "SALE10PERCENT",
+      "voucher_id": "2",
+      "is_active": true
+    },
+    {
+      "id": "30",
+      "code": "EXPIRED20K",
+      "voucher_id": "3",
+      "is_active": false
+    },
+    {
+      "id": "2ce8",
+      "code": "MAR",
+      "is_active": true,
+      "voucher_id": "42b9"
+    },
+    {
+      "id": "4a7f",
+      "code": "MAR_TP",
+      "is_active": true,
+      "voucherId": "2b32"
+    },
+    {
+      "id": "b36a",
+      "code": "SUMMER2022",
+      "is_active": true,
+      "voucherId": "10be"
+    }
+  ],
+  "orders": [
+    {
+      "id": "1",
+      "customer_id": "C001",
+      "voucher_detail_id": null,
+      "payment_id": "5001",
+      "order_status": "COMPLETED",
+      "payment_method": "MOMO",
+      "shipping_address": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+      "created_at": "2023-10-25T08:30:00Z",
+      "updated_at": "2026-01-20T02:22:19.375Z",
+      "deleted_at": null
+    },
+    {
+      "id": "2",
+      "customer_id": "C002",
+      "voucher_detail_id": "25",
+      "payment_id": "5002",
+      "order_status": "CANCELLED",
+      "payment_method": "COD",
+      "shipping_address": "456 Cầu Giấy, Hà Nội",
+      "created_at": "2023-10-26T14:15:00Z",
+      "updated_at": "2026-01-20T02:32:11.731Z",
+      "cancel_reason": "Test"
+    },
+    {
+      "id": "3",
+      "customer_id": "C001",
+      "payment_id": "5003",
+      "order_status": "CANCELLED",
+      "payment_method": "CREDIT_CARD",
+      "shipping_address": "Kho B, KCN Tân Bình",
+      "created_at": "2023-10-27T09:00:00Z",
+      "updated_at": "2026-01-20T02:32:32.940Z",
+      "cancel_reason": "abc"
+    },
+    {
+      "id": "3722",
+      "customer_id": "C002",
+      "voucher_detail_id": null,
+      "payment_id": "null",
+      "order_status": "CANCELLED",
+      "payment_method": "COD",
+      "shipping_address": "456 Cầu Giấy, Hà Nội",
+      "created_at": "2026-01-20T02:55:39.310Z",
+      "updated_at": "2026-01-20T02:55:49.893Z",
+      "cancel_reason": "test"
+    },
+    {
+      "id": "c4c0",
+      "customer_id": "C001",
+      "voucher_detail_id": null,
+      "payment_id": "null",
+      "order_status": "CANCELLED",
+      "payment_method": "COD",
+      "shipping_address": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+      "created_at": "2026-01-20T03:01:39.291Z",
+      "updated_at": "2026-01-20T03:01:43.286Z",
+      "cancel_reason": "a"
+    },
+    {
+      "id": "c7cd",
+      "customer_id": "C001",
+      "voucher_detail_id": null,
+      "payment_id": "null",
+      "order_status": "CANCELLED",
+      "payment_method": "COD",
+      "shipping_address": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+      "created_at": "2026-01-20T03:05:50.878Z",
+      "updated_at": "2026-01-20T03:06:14.412Z",
+      "cancel_reason": "abc"
+    },
+    {
+      "id": "d39f",
+      "customer_id": "C002",
+      "voucher_detail_id": null,
+      "payment_id": "null",
+      "order_status": "SHIPPING",
+      "payment_method": "COD",
+      "shipping_address": "456 Cầu Giấy, Hà Nội",
+      "created_at": "2026-01-20T03:09:19.081Z",
+      "updated_at": "2026-01-20T03:09:25.104Z"
+    },
+    {
+      "id": "da3d",
+      "customer_id": "C001",
+      "voucher_detail_id": null,
+      "payment_id": "null",
+      "order_status": "CANCELLED",
+      "payment_method": "COD",
+      "shipping_address": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+      "created_at": "2026-01-20T03:09:59.972Z",
+      "updated_at": "2026-01-20T03:10:04.490Z",
+      "cancel_reason": "bbb"
+    }
+  ],
+  "order_details": [
+    {
+      "id": "1",
+      "order_id": "1",
+      "product_variant_id": "prod_101",
+      "quantity": 2,
+      "price": 150000
+    },
+    {
+      "id": "2",
+      "order_id": "1",
+      "product_variant_id": "208",
+      "quantity": 1,
+      "price": 300000
+    },
+    {
+      "id": "3",
+      "order_id": "2",
+      "product_variant_id": "210",
+      "quantity": 1,
+      "price": 500000
+    },
+    {
+      "id": "4",
+      "order_id": "3",
+      "product_variant_id": "205",
+      "quantity": 5,
+      "price": 150000
+    },
+    {
+      "id": "bf49",
+      "order_id": "3722",
+      "product_variant_id": "prod_102",
+      "quantity": 1,
+      "price": 45000000
+    },
+    {
+      "id": "3346",
+      "order_id": "c4c0",
+      "product_variant_id": "prod_102",
+      "quantity": 1,
+      "price": 45000000
+    },
+    {
+      "id": "90de",
+      "order_id": "c7cd",
+      "product_variant_id": "prod_101",
+      "quantity": 1,
+      "price": 45000000
+    },
+    {
+      "id": "46c8",
+      "order_id": "d39f",
+      "product_variant_id": "prod_201",
+      "quantity": 1,
+      "price": 45000000
+    },
+    {
+      "id": "1928",
+      "order_id": "da3d",
+      "product_variant_id": "prod_101",
+      "quantity": 1,
+      "price": 45000000
+    }
+  ]
+}
