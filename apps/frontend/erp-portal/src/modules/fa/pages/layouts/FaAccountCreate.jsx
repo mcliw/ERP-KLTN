@@ -25,7 +25,7 @@ export default function FaAccountCreate() {
             account_code: (formData.account_code || "").trim().toUpperCase(),
 
             // 3. Đảm bảo is_active là boolean (phòng trường hợp form gửi string "true")
-            is_active: String(formData.is_active) === "true" || formData.is_active === true
+            is_active: String(formData.is_active) === "true" || formData.is_active === true,
         };
       },
 

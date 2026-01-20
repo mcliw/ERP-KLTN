@@ -99,6 +99,18 @@
       "createdAt": "2026-01-16T12:14:46.779Z",
       "updatedAt": "2026-01-16T13:20:52.390Z",
       "deletedAt": null
+    },
+    {
+      "id": "7902",
+      "code": "MAR",
+      "name": "Trưởng nhóm",
+      "department": "MAR",
+      "capacity": 1,
+      "status": "Hoạt động",
+      "description": "",
+      "createdAt": "2026-01-20T05:03:44.076Z",
+      "updatedAt": null,
+      "deletedAt": null
     }
   ],
   "employees": [

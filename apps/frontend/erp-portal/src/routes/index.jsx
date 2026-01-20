@@ -6,6 +6,8 @@ import ForgotPassword from "../auth/layouts/ForgotPassword";
 import MainLayout from "../layouts/MainLayout";
 import hrmRoutes from "../modules/hrm/routes";
 import supplychainRoutes from "../modules/supply-chain/routes";
+import financeRoutes from "../modules/fa/routes";
+import salesRoutes from "../modules/sales/routes";
 
 export default function AppRoutes() {
   return (
@@ -21,6 +23,8 @@ export default function AppRoutes() {
         <Route element={<MainLayout />}>
           {hrmRoutes}
           {supplychainRoutes}
+          {financeRoutes}
+          {salesRoutes}
         </Route>
       </Routes>
     </BrowserRouter>

@@ -4,14 +4,14 @@ import { FilterWrapper, FilterSearch, FilterSelect } from "../../../../shared/co
 
 export default function FaAccountFilter({
   keyword = "",
-  accountType = "",       // [Mới] Lọc theo loại tài khoản (ASSET, LIABILITY...)
-  parentAccountId = "",   // Lọc theo tài khoản cha
-  status = "",            // Lọc theo trạng thái (true/false)
+  accountType = "",
+  parentAccountId = "",
+  status = "",
   
   // Options
-  typeOptions = [],       // Option loại tài khoản
-  parentOptions = [],     // Option tài khoản cha (dạng Tree hoặc List phẳng)
-  statusOptions = [       // Default options cho trạng thái is_active
+  typeOptions = [],
+  parentOptions = [],
+  statusOptions = [
     { value: "true", label: "Hoạt động" },
     { value: "false", label: "Ngừng hoạt động" }
   ],

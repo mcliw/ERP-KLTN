@@ -1,7 +1,7 @@
 // apps/frontend/erp-portal/src/modules/finance/pages/layouts/FaAccount.jsx
 
 import { useNavigate } from "react-router-dom";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { FaPlus } from "react-icons/fa";
 import FaAccountTable from "../../components/layouts/FaAccountTable";
 import FaAccountFilter from "../../components/layouts/FaAccountFilter";
@@ -28,9 +28,11 @@ export default function FaAccount() {
 
   // 1. Tải toàn bộ dữ liệu tài khoản
   // includeInactive: true để lấy cả dòng đã xóa mềm nhằm hiển thị đầy đủ cây thư mục nếu cần
-  const { data: accounts, loading, refresh } = useAsyncData(() => 
-    faAccountService.getAll({ includeInactive: true })
-  );
+  const fetchAccounts = useCallback(() => {
+    return faAccountService.getAll({ includeInactive: true });
+  }, []);
+
+  const { data: accounts, loading, refresh } = useAsyncData(fetchAccounts);
 
   // 2. State cho bộ lọc
   const [keyword, setKeyword] = useState("");
@@ -45,14 +47,14 @@ export default function FaAccount() {
 
     (accounts || []).forEach((acc) => {
       // 1. Map dùng cho Table để hiển thị thông tin cha (ID -> Code - Name)
-      // Dùng account_id làm key map
-      map[acc.account_id] = `${acc.account_code} - ${acc.account_name}`;
+      // Dùng id làm key map
+      map[acc.id] = `${acc.account_code} - ${acc.account_name}`;
 
       // 2. Options dùng cho Filter Select
       // Chỉ lấy những tài khoản active để hiển thị trong dropdown filter cha
       if (acc.is_active) {
         options.push({
-          value: acc.account_id, // Value là ID
+          value: acc.id, // Value là ID
           label: `${acc.account_code} - ${acc.account_name}` // Label hiển thị rõ ràng
         });
       }
@@ -61,7 +63,7 @@ export default function FaAccount() {
     // Sắp xếp options theo code
     options.sort((a, b) => a.label.localeCompare(b.label));
 
-    return { accountMap, parentOptions: options };
+    return { accountMap: map, parentOptions: options };
   }, [accounts]);
 
   // 4. Logic lọc dữ liệu (Client-side filtering)
@@ -97,7 +99,7 @@ export default function FaAccount() {
     if (!window.confirm(`Bạn có chắc muốn ngừng hoạt động tài khoản "${item.account_code} - ${item.account_name}"?`)) return;
 
     try {
-      await faAccountService.remove(item.account_id);
+      await faAccountService.remove(item.id);
       toast.error(`Đã ngừng hoạt động tài khoản "${item.account_code}"`);
       refresh(); // Tải lại dữ liệu
     } catch (err) {
@@ -154,9 +156,9 @@ export default function FaAccount() {
         onNext={goToNext}
         
         // Điều hướng & Action
-        onRowClick={(item) => navigate(`/finance/he-thong-tai-khoan/${item.account_id}`)}
-        onView={(item) => navigate(`/finance/he-thong-tai-khoan/${item.account_id}`)}
-        onEdit={(item) => navigate(`/finance/he-thong-tai-khoan/${item.account_id}/chinh-sua`)}
+        onRowClick={(item) => navigate(`/finance/he-thong-tai-khoan/${item.id}`)}
+        onView={(item) => navigate(`/finance/he-thong-tai-khoan/${item.id}`)}
+        onEdit={(item) => navigate(`/finance/he-thong-tai-khoan/${item.id}/chinh-sua`)}
         onDelete={handleDelete}
       />
     </div>

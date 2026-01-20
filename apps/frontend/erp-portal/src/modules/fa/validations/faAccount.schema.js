@@ -46,6 +46,10 @@ export const baseAccountFields = {
     required_error: "Trạng thái hoạt động là bắt buộc",
     invalid_type_error: "Trạng thái phải là true/false",
   }),
+
+  balance_side: z.enum(["DEBIT", "CREDIT", "BOTH"], {
+    errorMap: () => ({ message: "Tính chất tài khoản không hợp lệ" }),
+  }),
 };
 
 /* =========================

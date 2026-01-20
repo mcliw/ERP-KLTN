@@ -16,6 +16,13 @@ const TYPE_LABELS = {
   EXPENSE: "Chi phí",
 };
 
+// Cấu hình nhãn hiển thị
+const BALANCE_SIDE_LABELS = {
+  DEBIT: "Dư Nợ",
+  CREDIT: "Dư Có",
+  BOTH: "Lưỡng tính",
+};
+
 export default function FaAccountTable({
   data = [],
   accountMap = {}, // Map dùng để tra cứu parent_account_id -> account_code (hoặc name)
@@ -38,7 +45,7 @@ export default function FaAccountTable({
   const hasActions = onView || onEdit || onDelete || renderExtraActions;
 
   // Cập nhật số lượng cột: Mã, Tên, Loại, Cha, Ngày tạo, Trạng thái = 6 cột dữ liệu
-  const colCount = hasActions ? 7 : 6;
+  const colCount = hasActions ? 8 : 7;
 
   // Xác định dòng đã bị "xóa mềm" (inactive)
   const isRowInactive = (item) => item.is_active === false;
@@ -52,6 +59,7 @@ export default function FaAccountTable({
             <th>Tên tài khoản</th>
             <th>Loại tài khoản</th>
             <th>Tài khoản cha</th>
+            <th>Tính chất</th>
             <th>Ngày tạo</th>
             <th>Trạng thái</th>
             {hasActions && <th className="action-col">Thao tác</th>}
@@ -64,8 +72,8 @@ export default function FaAccountTable({
           ) : (
             data.map((item) => (
               <tr
-                // Lưu ý: JSON dùng account_id làm khóa chính
-                key={item.account_id}
+                // Lưu ý: JSON dùng id làm khóa chính
+                key={item.id}
                 className={[
                   onRowClick && "clickable",
                   isRowInactive(item) && "deleted" // Class "deleted" thường làm mờ dòng
@@ -78,14 +86,11 @@ export default function FaAccountTable({
                 <td>{item.account_name}</td>
                 
                 {/* Mapping loại tài khoản sang tiếng Việt */}
-                <td>
-                  <span className={`badge badge-${(item.account_type || "").toLowerCase()}`}>
-                    {TYPE_LABELS[item.account_type] || item.account_type}
-                  </span>
-                </td>
+                <td>{TYPE_LABELS[item.account_type] || item.account_type}</td>
 
                 {/* Resolve Parent ID */}
                 <td>{resolveParent(item.parent_account_id)}</td>
+                <td>{BALANCE_SIDE_LABELS[item.balance_side] || "—"}</td>
 
                 <td>{formatDate(item.created_at)}</td>
 

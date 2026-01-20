@@ -324,7 +324,7 @@ export default function HomePage() {
       {/* ================= FOOTER ================= */}
       <footer className="bg-slate-900 text-gray-400 py-12 mt-12 border-t border-slate-800">
          <div className="container mx-auto px-4 text-center text-xs">
-            © 2024 LDG Tech Ecommerce. All rights reserved.
+            © 2026 LDG Tech Ecommerce. All rights reserved.
          </div>
       </footer>
     </div>

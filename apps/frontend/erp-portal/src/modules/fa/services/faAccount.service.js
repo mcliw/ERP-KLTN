@@ -8,11 +8,10 @@ const API_URL = "http://localhost:3003/chart_of_accounts";
 const ERROR_MSGS = {
   FETCH_FAILED: "Lỗi kết nối đến máy chủ kế toán",
   NOT_FOUND: "Không tìm thấy tài khoản",
-  CODE_EXISTS: "Số hiệu tài khoản đã tồn tại trong hệ thống",
+  CODE_EXISTS: "Số hiệu tài khoản đã tồn tại",
   PARENT_NOT_FOUND: "Tài khoản cha không tồn tại",
   CIRCULAR_DEPENDENCY: "Tài khoản cha không thể là chính nó",
   TYPE_MISMATCH: "Tài khoản con phải cùng loại (Account Type) với tài khoản cha",
-  UPDATE_FAILED: "Không thể cập nhật dữ liệu tài khoản",
 };
 
 /* =========================
@@ -31,11 +30,6 @@ const handleResponse = async (response) => {
  * Business Validators
  * ========================= */
 const validators = {
-  /**
-   * Kiểm tra các quy tắc nghiệp vụ
-   * @param {Object} data - Dữ liệu đầy đủ của account đang xử lý (đã merge nếu là update)
-   * @param {Number|String} currentId - ID của account hiện tại (nếu đang update)
-   */
   async checkBusinessRules(data, currentId = null) {
     const parentId = data?.parent_account_id;
 
@@ -44,18 +38,14 @@ const validators = {
       throw new Error(ERROR_MSGS.CIRCULAR_DEPENDENCY);
     }
 
-    // 2. Parent Validation (Existence & Type Consistency)
+    // 2. Parent Validation
     if (parentId) {
+      // Gọi trực tiếp ID vì giờ đây ID là chuẩn
       const response = await fetch(`${API_URL}/${parentId}`);
-      
-      if (!response.ok) {
-        throw new Error(ERROR_MSGS.PARENT_NOT_FOUND);
-      }
+      if (!response.ok) throw new Error(ERROR_MSGS.PARENT_NOT_FOUND);
       
       const parentAccount = await response.json();
 
-      // [NEW RULE] Kiểm tra loại tài khoản cha và con phải giống nhau
-      // Ví dụ: Cha là ASSET thì con phải là ASSET
       if (data.account_type && parentAccount.account_type !== data.account_type) {
         throw new Error(
             `${ERROR_MSGS.TYPE_MISMATCH}. Cha: ${parentAccount.account_type}, Con: ${data.account_type}`
@@ -76,7 +66,6 @@ export const faAccountService = {
       const response = await fetch(API_URL);
       const data = await handleResponse(response);
 
-      // Sắp xếp theo Account Code tăng dần
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         return (a.account_code || "").localeCompare(b.account_code || "");
       });
@@ -90,9 +79,10 @@ export const faAccountService = {
     }
   },
 
-  // --- Get Detail ---
+  // --- Get Detail (Chuẩn REST) ---
   async getById(id) {
     try {
+      // Giờ đây có thể gọi thẳng URL này vì JSON DB đã có trường "id"
       const response = await fetch(`${API_URL}/${id}`);
       return await handleResponse(response);
     } catch (error) {
@@ -105,18 +95,13 @@ export const faAccountService = {
   async checkCodeExists(code, excludeId = null) {
     if (!code) return false;
     try {
-      // Tìm trong DB xem có thằng nào có code này không
       const response = await fetch(`${API_URL}?account_code=${code}`);
       const data = await handleResponse(response);
       
       if (Array.isArray(data) && data.length > 0) {
-        // Nếu tìm thấy, kiểm tra xem có phải chính nó đang update không
-        // Json-server trả về id (hoặc account_id tùy config), ta so sánh cả 2 cho chắc
-        const existingItem = data[0];
-        const existingId = existingItem.id || existingItem.account_id;
-
-        if (!excludeId) return true; // Tạo mới mà thấy => Trùng
-        return String(existingId) !== String(excludeId); // Update mà ID khác nhau => Trùng
+        // So sánh với trường id chuẩn
+        if (!excludeId) return true;
+        return String(data[0].id) !== String(excludeId);
       }
       return false;
     } catch (error) {
@@ -126,21 +111,18 @@ export const faAccountService = {
 
   // --- Create ---
   async create(data) {
-    // 1. [RULE] Check trùng mã tài khoản
     const exists = await this.checkCodeExists(data.account_code);
-    if (exists) {
-        throw new Error(ERROR_MSGS.CODE_EXISTS);
-    }
+    if (exists) throw new Error(ERROR_MSGS.CODE_EXISTS);
 
-    // 2. [RULE] Validate Parent & Type Consistency
     await validators.checkBusinessRules(data);
 
+    // Không cần tự sinh ID nữa nếu để JSON Server tự lo (nếu POST body không có id), 
+    // hoặc tự sinh chuỗi string nếu muốn kiểm soát.
     const newAccount = {
       ...data,
-      // Đảm bảo các trường quan trọng có giá trị chuẩn
+      balance_side: data.balance_side || "DEBIT",
       account_code: data.account_code,
       account_name: data.account_name,
-      account_type: data.account_type, // Bắt buộc phải có để validate với cha
       parent_account_id: data.parent_account_id || null,
       is_active: data.is_active !== undefined ? data.is_active : true,
       created_at: new Date().toISOString(),
@@ -160,79 +142,58 @@ export const faAccountService = {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // 1. [RULE] Check trùng mã nếu người dùng đổi mã
     if (data.account_code && data.account_code !== current.account_code) {
         const exists = await this.checkCodeExists(data.account_code, id);
         if (exists) throw new Error(ERROR_MSGS.CODE_EXISTS);
     }
 
-    // Merge data mới vào data cũ để có object đầy đủ thông tin (phục vụ validation)
     const nextData = { ...current, ...data };
     
-    // 2. [RULE] Validate Parent & Type Consistency với dữ liệu sau khi merge
-    // (Vì có thể người dùng chỉ update parent_id mà không gửi account_type, hoặc ngược lại)
+    // Validate lại nếu thay đổi cha hoặc loại TK
     if (nextData.parent_account_id !== current.parent_account_id || nextData.account_type !== current.account_type) {
         await validators.checkBusinessRules(nextData, id);
     }
 
-    const updatedAccount = {
-      ...nextData,
-      parent_account_id: nextData.parent_account_id || null,
-      // updated_at: new Date().toISOString() // Uncomment nếu DB có cột này
-    };
-
+    // Gọi thẳng PUT vào ID
     const response = await fetch(`${API_URL}/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedAccount),
+      body: JSON.stringify(nextData),
     });
 
     return handleResponse(response);
   },
 
-  // --- Soft Delete (Set Active = False) ---
+  // --- Soft Delete ---
   async remove(id) {
-    const current = await this.getById(id);
-    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
-
-    // Kế toán thường chỉ ẩn (inactive) chứ không xóa vật lý
-    const softDeleteData = {
-      ...current,
-      is_active: false,
-    };
-
+    // Gọi patch để chỉ update 1 trường is_active (nhanh gọn hơn PUT toàn bộ)
+    // JSON Server hỗ trợ PATCH
     const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
+      body: JSON.stringify({ is_active: false }),
     });
     return handleResponse(response);
   },
 
   // --- Restore ---
   async restore(id) {
+    // Cẩn thận: Cần check cha trước khi restore
     const current = await this.getById(id);
-    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
-
-    // Khi restore, cần đảm bảo cha (nếu có) vẫn hợp lệ
-    if (current.parent_account_id) {
+    if (current && current.parent_account_id) {
+        // Check xem cha có tồn tại không
         await validators.checkBusinessRules(current, id);
     }
 
-    const restoreData = {
-      ...current,
-      is_active: true,
-    };
-
     const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
+      body: JSON.stringify({ is_active: true }),
     });
     return handleResponse(response);
   },
 
-  // --- Hard Delete (Ít dùng) ---
+  // --- Hard Delete ---
   async destroy(id) {
     const response = await fetch(`${API_URL}/${id}`, {
       method: "DELETE",

@@ -105,7 +105,7 @@ export default function FaAccountForm({ mode = "create", initialData, onSubmit, 
   // [LOGIC KẾ TOÁN] Tự động set Type của con theo Type của cha
   useEffect(() => {
     if (form.parent_account_id) {
-      const parent = accounts.find(a => String(a.account_id) === String(form.parent_account_id));
+      const parent = accounts.find(a => String(a.id) === String(form.parent_account_id));
       if (parent && parent.account_type !== form.account_type) {
         setForm(prev => ({ ...prev, account_type: parent.account_type }));
         // Không toast để tránh spam, chỉ âm thầm update UI
@@ -126,7 +126,7 @@ export default function FaAccountForm({ mode = "create", initialData, onSubmit, 
     // Check trùng mã thủ công (User Experience tốt hơn là đợi API báo lỗi)
     // Lưu ý: Logic này có thể bỏ qua nếu muốn tin tưởng hoàn toàn vào API
     try {
-        const excludeId = mode === "edit" ? initialData?.account_id : null;
+        const excludeId = mode === "edit" ? initialData?.id : null;
         const isExists = await faAccountService.checkCodeExists(form.account_code, excludeId);
         if (isExists) {
             toast.error(`Số hiệu tài khoản "${form.account_code}" đã tồn tại.`);
@@ -154,7 +154,7 @@ export default function FaAccountForm({ mode = "create", initialData, onSubmit, 
     
     // Lọc bỏ chính nó (không thể chọn mình làm cha)
     const availableParents = mode === "edit" 
-        ? accounts.filter(a => String(a.account_id) !== String(initialData?.account_id))
+        ? accounts.filter(a => String(a.id) !== String(initialData?.id))
         : accounts;
 
     if (availableParents.length === 0) return <option value="">-- Không có tài khoản cha phù hợp --</option>;
@@ -166,7 +166,7 @@ export default function FaAccountForm({ mode = "create", initialData, onSubmit, 
       <>
         <option value="">-- Không có (Tài khoản cấp 1) --</option>
         {availableParents.map((a) => (
-          <option key={a.account_id} value={a.account_id}>
+          <option key={a.id} value={a.id}>
             {a.account_code} - {a.account_name}
           </option>
         ))}
@@ -213,6 +213,19 @@ export default function FaAccountForm({ mode = "create", initialData, onSubmit, 
           error={errors.parent_account_id}
         >
           {renderParentOptions()}
+        </FormSelect>
+
+        <FormSelect
+          label="Tính chất (Dư)"
+          name="balance_side"
+          value={form.balance_side}
+          onChange={handleChange}
+          error={errors.balance_side}
+          required
+        >
+          <option value="DEBIT">Dư Nợ</option>
+          <option value="CREDIT">Dư Có</option>
+          <option value="BOTH">Lưỡng tính</option>
         </FormSelect>
 
         {/* Loại tài khoản */}
