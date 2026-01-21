@@ -9,9 +9,8 @@ import io.github.cdimascio.dotenv.Dotenv;
 public class HrmApplication {
  
     public static void main(String[] args) {
-        // Nạp file .env vào System Properties
         Dotenv dotenv = Dotenv.configure()
-                .directory("./") // Đường dẫn đến thư mục chứa file .env
+                .directory("./")
                 .ignoreIfMissing()
                 .load();
 

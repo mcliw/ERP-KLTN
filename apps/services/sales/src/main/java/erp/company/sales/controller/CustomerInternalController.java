@@ -1,12 +1,12 @@
 package erp.company.sales.controller;
 
 import erp.company.sales.dto.CreateCustomerRequest;
-import erp.company.sales.services.CustomerServiceImpl;
+import erp.company.sales.service.impl.CustomerServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/customers")
+@RequestMapping("/customer")
 @RequiredArgsConstructor
 public class CustomerInternalController {
 

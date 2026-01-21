@@ -6,7 +6,7 @@ import { postingRuleSchema } from "../../validations/postingRules.schema";
 import { useFormManager, FormInput, FormSelect, FormActions } from "../../../../shared/components/FormCommon";
 // Import Services
 import { postingRulesService } from "../../services/postingRules.service";
-import { faAccountService } from "../../services/faAccount.service"; // Để lấy list tài khoản
+import { faAccountService } from "../../services/faAccount.service";
 import { useToast } from "../../../../shared/components/ToastProvider";
 
 /* ==============================

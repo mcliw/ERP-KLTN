@@ -1,18 +1,17 @@
 // apps/frontend/erp-portal/src/modules/sales/services/voucher.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
-// Giả định service chạy port 3004
-const BASE_URL = "http://localhost:3004";
-const API_URL = `${BASE_URL}/vouchers`;
-const API_URL_DETAILS = `${BASE_URL}/voucher_details`;
-const API_URL_CONSTRAINTS = `${BASE_URL}/voucher_constraints`;
+const API_URL = "/sales/vouchers";
+const API_URL_DETAILS = "/sales/voucher_details";
+const API_URL_CONSTRAINTS = "/sales/voucher_constraints";
 
-// Map trạng thái để thống nhất với UI (mặc dù DB lưu boolean)
 const STATUS = {
-  ACTIVE: "ACTIVE",   // Tương ứng is_active = true
-  INACTIVE: "INACTIVE" // Tương ứng is_active = false
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE"
 };
 
 const ERROR_MSGS = {
@@ -27,46 +26,26 @@ const ERROR_MSGS = {
  * Helpers
  * ========================= */
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
-
-// Helper chuyển đổi status từ Boolean (DB) sang String (UI) và ngược lại
 const mapStatusToBoolean = (status) => status === STATUS.ACTIVE;
 const mapBooleanToStatus = (bool) => (bool ? STATUS.ACTIVE : STATUS.INACTIVE);
-
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
 
 /* =========================
  * Business Validators
  * ========================= */
 const validators = {
-  /**
-   * Kiểm tra các quy tắc nghiệp vụ
-   * @param {Object} data - Dữ liệu voucher
-   * @param {string|null} currentId - ID hiện tại (nếu đang update)
-   */
   async checkBusinessRules(data, currentId = null) {
-    // 1) Check Duplicate Code (Mã Code trong voucher_details phải duy nhất)
-    // Lưu ý: data ở đây có thể là voucher cha, nhưng nếu form tạo cả code, ta cần check code đó.
+    // 1) Check Duplicate Code
     if (data.code) {
       try {
-        // Gọi API vào bảng voucher_details để check code
-        const response = await fetch(`${API_URL_DETAILS}?code=${data.code}`);
-        const result = await handleResponse(response);
+        // axiosClient trả về data trực tiếp
+        const result = await axiosClient.get(API_URL_DETAILS, {
+          params: { code: data.code }
+        });
 
-        // Nếu tìm thấy mảng > 0 phần tử
         if (Array.isArray(result) && result.length > 0) {
           const existingItem = result[0];
-          // Logic: Code là duy nhất toàn hệ thống, không phụ thuộc vào voucher cha
-          // Nếu đang update voucher_detail (logic mở rộng) hoặc tạo mới
+          // Nếu đang tạo mới hoặc update mà ID voucher cha khác nhau
           if (!currentId || existingItem.voucher_id !== currentId) { 
-             // Note: Logic check ID này tương đối, tuỳ thuộc vào việc UI gửi voucher_id hay detail_id
-             // Ở đây assume check chặt: Cứ trùng code là báo lỗi.
              throw new Error(ERROR_MSGS.CODE_EXISTS);
           }
         }
@@ -83,20 +62,20 @@ const validators = {
 export const voucherService = {
   async getAll({ includeDeleted = false } = {}) {
     try {
-      // Sử dụng _embed để join dữ liệu từ bảng constraints và details (tính năng của json-server)
-      const response = await fetch(`${API_URL}?_embed=voucher_constraints&_embed=voucher_details`);
-      const data = await handleResponse(response);
+      // Sử dụng params serializer của axios hoặc truyền object params
+      const data = await axiosClient.get(API_URL, {
+        params: {
+          _embed: ["voucher_constraints", "voucher_details"]
+        }
+      });
 
-      // Sắp xếp theo mới nhất (ưu tiên created_at nếu có, không thì id)
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.created_at || 0).getTime();
         const tb = new Date(b?.created_at || 0).getTime();
-        // Nếu không có created_at, sort theo ID giảm dần (giả lập mới nhất)
         if (ta === 0 && tb === 0) return Number(b.id) - Number(a.id);
         return tb - ta;
       });
 
-      // Map field is_active -> status cho UI dễ dùng
       const mappedData = sortedData.map(item => ({
         ...item,
         status: mapBooleanToStatus(item.is_active)
@@ -113,9 +92,12 @@ export const voucherService = {
 
   async getById(id) {
     try {
-      // Lấy chi tiết voucher kèm constraints và details
-      const response = await fetch(`${API_URL}/${id}?_embed=voucher_constraints&_embed=voucher_details`);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(`${API_URL}/${id}`, {
+        params: {
+          _embed: ["voucher_constraints", "voucher_details"]
+        }
+      });
+
       if (data) {
         return {
           ...data,
@@ -130,14 +112,16 @@ export const voucherService = {
   },
 
   async checkIdExists(id) {
-    // Chỉ cần check head request hoặc get đơn giản
-    const response = await fetch(`${API_URL}/${id}`);
-    return response.ok; 
+    try {
+      await axiosClient.get(`${API_URL}/${id}`);
+      return true;
+    } catch (error) {
+      return false; 
+    }
   },
 
   async create(data) {
-    // 1. Validate Business Rules (Check trùng Code)
-    // Lấy mã code từ payload gửi lên (do logic transform ở VoucherCreate)
+    // 1. Validate Business Rules
     const inputCode = data.voucher_details?.[0]?.code;
     if (inputCode) {
         await validators.checkBusinessRules({ code: inputCode });
@@ -152,58 +136,38 @@ export const voucherService = {
       deleted_at: null,
     };
 
-    const voucherResponse = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(voucherPayload),
-    });
-    const newVoucher = await handleResponse(voucherResponse);
+    // Tạo Voucher cha
+    const newVoucher = await axiosClient.post(API_URL, voucherPayload);
 
     if (!newVoucher || !newVoucher.id) {
       throw new Error("Không thể tạo Voucher");
     }
 
     try {
-      // 2. Tạo Detail (SỬA Ở ĐÂY: Đổi voucher_id thành voucherId)
+      // 2. Tạo Detail
       if (data.voucher_details && data.voucher_details.length > 0) {
         const detailPayload = {
           ...data.voucher_details[0],
-          
-          // QUAN TRỌNG: json-server yêu cầu format "tên_bảng_số_ít + Id" 
-          // để tính năng _embed hoạt động tự động.
-          voucherId: newVoucher.id, // <-- Đổi từ voucher_id thành voucherId
-          
-          // Nếu bạn muốn giữ cả 2 format để tương thích SQL sau này thì để cả 2:
-          // voucher_id: newVoucher.id, 
-          
+          voucherId: newVoucher.id, // json-server relation convention
           is_active: true
         };
-        
-        await fetch(API_URL_DETAILS, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(detailPayload),
-        });
+        await axiosClient.post(API_URL_DETAILS, detailPayload);
       }
 
-      // 3. Tạo Constraint (SỬA Ở ĐÂY: Đổi voucher_id thành voucherId)
+      // 3. Tạo Constraint
       if (data.voucher_constraints && data.voucher_constraints.length > 0) {
         const constraintPayload = {
           ...data.voucher_constraints[0],
-          voucherId: newVoucher.id, // <-- Đổi từ voucher_id thành voucherId
+          voucherId: newVoucher.id,
         };
-
-        await fetch(API_URL_CONSTRAINTS, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(constraintPayload),
-        });
+        await axiosClient.post(API_URL_CONSTRAINTS, constraintPayload);
       }
 
       return newVoucher;
 
     } catch (error) {
       console.error("Lỗi tạo dữ liệu con", error);
+      // Rollback nếu lỗi (tùy chọn)
       await this.destroy(newVoucher.id); 
       throw error;
     }
@@ -213,8 +177,6 @@ export const voucherService = {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // Validate logic nếu cần (ví dụ không cho sửa loại voucher nếu đã có đơn hàng sử dụng - logic phức tạp)
-
     const updatedVoucher = {
       ...current,
       ...data,
@@ -222,18 +184,11 @@ export const voucherService = {
       updated_at: new Date().toISOString(),
     };
 
-    // Loại bỏ các trường join (_embed) trước khi gửi PUT để tránh lỗi dư dữ liệu
     delete updatedVoucher.voucher_constraints;
     delete updatedVoucher.voucher_details;
-    delete updatedVoucher.status; // Xóa field ảo status
+    delete updatedVoucher.status;
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedVoucher),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, updatedVoucher);
   },
 
   async remove(id) {
@@ -242,7 +197,6 @@ export const voucherService = {
 
     const now = new Date().toISOString();
     
-    // Soft delete: set is_active = false và điền deleted_at
     const softDeleteData = {
       ...current,
       is_active: false,
@@ -250,17 +204,11 @@ export const voucherService = {
       updated_at: now,
     };
     
-    // Clean up join fields
     delete softDeleteData.voucher_constraints;
     delete softDeleteData.voucher_details;
     delete softDeleteData.status;
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(softDeleteData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, softDeleteData);
   },
 
   async restore(id) {
@@ -278,21 +226,16 @@ export const voucherService = {
     delete restoreData.voucher_details;
     delete restoreData.status;
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(restoreData),
-    });
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, restoreData);
   },
 
   async destroy(id) {
-    const current = await this.getById(id);
-    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
-
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    try {
+      // Check exists trước khi xóa
+      await this.getById(id);
+      return await axiosClient.delete(`${API_URL}/${id}`);
+    } catch (error) {
+      throw new Error(ERROR_MSGS.NOT_FOUND);
+    }
   },
 };

@@ -1,11 +1,12 @@
 // apps/frontend/erp-portal/src/modules/sales/services/order.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
-const BASE_URL = "http://localhost:3004";
-const API_URL_ORDERS = `${BASE_URL}/orders`;
-const API_URL_DETAILS = `${BASE_URL}/order_details`;
+const API_URL_ORDERS = "/sales/orders";
+const API_URL_DETAILS = "/sales/order_details";
 
 const STATUS = {
   PENDING: "PENDING",
@@ -30,42 +31,19 @@ const ERROR_MSGS = {
 };
 
 /* =========================
- * Helpers
- * ========================= */
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
-/* =========================
  * Main Service
  * ========================= */
 export const orderService = {
   
-  /**
-   * Lấy danh sách đơn hàng
-   * (Đã bỏ logic lọc deleted_at/trashed)
-   */
   async getAll(params = {}) {
     try {
-      const url = new URL(API_URL_ORDERS);
-      
-      if (params.status) {
-        url.searchParams.append("order_status", params.status);
-      }
-      
-      if (params.customer_id) {
-        url.searchParams.append("customer_id", params.customer_id);
-      }
+      // Xây dựng params cho axios
+      const queryParams = {};
+      if (params.status) queryParams.order_status = params.status;
+      if (params.customer_id) queryParams.customer_id = params.customer_id;
 
-      const response = await fetch(url.toString());
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL_ORDERS, { params: queryParams });
 
-      // Sắp xếp theo mới nhất (created_at)
       return (Array.isArray(data) ? data : []).sort((a, b) => {
         const ta = new Date(a?.created_at || 0).getTime();
         const tb = new Date(b?.created_at || 0).getTime();
@@ -78,18 +56,16 @@ export const orderService = {
     }
   },
 
-  /**
-   * Lấy chi tiết đơn hàng
-   */
   async getById(id) {
     try {
-      const orderResponse = await fetch(`${API_URL_ORDERS}/${id}`);
-      const orderData = await handleResponse(orderResponse);
+      const orderData = await axiosClient.get(`${API_URL_ORDERS}/${id}`);
 
       if (!orderData) return null;
 
-      const detailsResponse = await fetch(`${API_URL_DETAILS}?order_id=${id}`);
-      const detailsData = await handleResponse(detailsResponse);
+      // Lấy chi tiết đơn hàng
+      const detailsData = await axiosClient.get(API_URL_DETAILS, {
+        params: { order_id: id }
+      });
 
       return {
         ...orderData,
@@ -103,13 +79,14 @@ export const orderService = {
   },
 
   async checkIdExists(id) {
-    const response = await fetch(`${API_URL_ORDERS}/${id}`);
-    return response.ok; 
+    try {
+      await axiosClient.get(`${API_URL_ORDERS}/${id}`);
+      return true;
+    } catch (error) {
+      return false;
+    }
   },
 
-  /**
-   * Tạo đơn hàng mới
-   */
   async create(data) {
     if (data.id) {
         const exists = await this.checkIdExists(data.id);
@@ -128,15 +105,9 @@ export const orderService = {
       shipping_address: data.shipping_address,
       created_at: now,
       updated_at: now,
-      // Đã bỏ trường deleted_at
     };
 
-    const orderRes = await fetch(API_URL_ORDERS, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newOrder),
-    });
-    const createdOrder = await handleResponse(orderRes);
+    const createdOrder = await axiosClient.post(API_URL_ORDERS, newOrder);
 
     if (data.items && Array.isArray(data.items)) {
       const detailPromises = data.items.map(item => {
@@ -146,11 +117,7 @@ export const orderService = {
           quantity: Number(item.quantity),
           price: Number(item.price) 
         };
-        return fetch(API_URL_DETAILS, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(detailItem)
-        });
+        return axiosClient.post(API_URL_DETAILS, detailItem);
       });
       
       await Promise.all(detailPromises);
@@ -159,35 +126,23 @@ export const orderService = {
     return createdOrder;
   },
 
-  /**
-   * Cập nhật trạng thái đơn hàng (Duyệt/Giao)
-   * (Đã bỏ validators.checkBusinessRules để tránh lỗi logic khi update)
-   */
   async update(id, data) {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
     const updatedOrder = {
       ...current,
-      ...data, // Chỉ merge data mới (thường là status)
-      items: undefined, // Không update items ở đây
+      ...data,
+      items: undefined,
       updated_at: new Date().toISOString(),
     };
 
     delete updatedOrder.items; 
 
-    const response = await fetch(`${API_URL_ORDERS}/${id}`, {
-      method: "PATCH", 
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedOrder),
-    });
-
-    return handleResponse(response);
+    // Dùng PATCH để update một phần dữ liệu
+    return await axiosClient.patch(`${API_URL_ORDERS}/${id}`, updatedOrder);
   },
 
-  /**
-   * Hủy đơn hàng (Cancel)
-   */
   async cancel(id, reason = "") {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
@@ -205,12 +160,8 @@ export const orderService = {
     
     delete cancelData.items;
 
-    const response = await fetch(`${API_URL_ORDERS}/${id}`, {
-      method: "PUT", 
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cancelData),
-    });
-    return handleResponse(response);
+    // Dùng PUT để replace trạng thái hủy (theo code cũ)
+    return await axiosClient.put(`${API_URL_ORDERS}/${id}`, cancelData);
   },
 
   CONSTANTS: {

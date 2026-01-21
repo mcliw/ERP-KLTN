@@ -1,9 +1,11 @@
 // apps/frontend/erp-portal/src/modules/finance/services/faAccount.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3003/chart_of_accounts"; 
+const API_URL = "/accounting/chart_of_accounts"; 
 
 const ERROR_MSGS = {
   FETCH_FAILED: "Lỗi kết nối đến máy chủ kế toán",
@@ -12,18 +14,6 @@ const ERROR_MSGS = {
   PARENT_NOT_FOUND: "Tài khoản cha không tồn tại",
   CIRCULAR_DEPENDENCY: "Tài khoản cha không thể là chính nó",
   TYPE_MISMATCH: "Tài khoản con phải cùng loại (Account Type) với tài khoản cha",
-};
-
-/* =========================
- * Helpers
- * ========================= */
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
 };
 
 /* =========================
@@ -40,16 +30,17 @@ const validators = {
 
     // 2. Parent Validation
     if (parentId) {
-      // Gọi trực tiếp ID vì giờ đây ID là chuẩn
-      const response = await fetch(`${API_URL}/${parentId}`);
-      if (!response.ok) throw new Error(ERROR_MSGS.PARENT_NOT_FOUND);
-      
-      const parentAccount = await response.json();
-
-      if (data.account_type && parentAccount.account_type !== data.account_type) {
-        throw new Error(
-            `${ERROR_MSGS.TYPE_MISMATCH}. Cha: ${parentAccount.account_type}, Con: ${data.account_type}`
-        );
+      try {
+        const parentAccount = await axiosClient.get(`${API_URL}/${parentId}`);
+        
+        if (data.account_type && parentAccount.account_type !== data.account_type) {
+          throw new Error(
+              `${ERROR_MSGS.TYPE_MISMATCH}. Cha: ${parentAccount.account_type}, Con: ${data.account_type}`
+          );
+        }
+      } catch (error) {
+        // Axios throws error on 404
+        throw new Error(ERROR_MSGS.PARENT_NOT_FOUND);
       }
     }
   },
@@ -63,8 +54,7 @@ export const faAccountService = {
   // --- Get List ---
   async getAll({ includeInactive = false } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL);
 
       const sortedData = (Array.isArray(data) ? data : []).sort((a, b) => {
         return (a.account_code || "").localeCompare(b.account_code || "");
@@ -79,12 +69,10 @@ export const faAccountService = {
     }
   },
 
-  // --- Get Detail (Chuẩn REST) ---
+  // --- Get Detail ---
   async getById(id) {
     try {
-      // Giờ đây có thể gọi thẳng URL này vì JSON DB đã có trường "id"
-      const response = await fetch(`${API_URL}/${id}`);
-      return await handleResponse(response);
+      return await axiosClient.get(`${API_URL}/${id}`);
     } catch (error) {
       console.error("getById failed:", error);
       return null;
@@ -95,11 +83,10 @@ export const faAccountService = {
   async checkCodeExists(code, excludeId = null) {
     if (!code) return false;
     try {
-      const response = await fetch(`${API_URL}?account_code=${code}`);
-      const data = await handleResponse(response);
+      // Axios tự động parse query params nếu truyền object, hoặc dùng string như cũ
+      const data = await axiosClient.get(`${API_URL}?account_code=${code}`);
       
       if (Array.isArray(data) && data.length > 0) {
-        // So sánh với trường id chuẩn
         if (!excludeId) return true;
         return String(data[0].id) !== String(excludeId);
       }
@@ -116,8 +103,6 @@ export const faAccountService = {
 
     await validators.checkBusinessRules(data);
 
-    // Không cần tự sinh ID nữa nếu để JSON Server tự lo (nếu POST body không có id), 
-    // hoặc tự sinh chuỗi string nếu muốn kiểm soát.
     const newAccount = {
       ...data,
       balance_side: data.balance_side || "DEBIT",
@@ -128,13 +113,7 @@ export const faAccountService = {
       created_at: new Date().toISOString(),
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newAccount),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newAccount);
   },
 
   // --- Update ---
@@ -149,55 +128,30 @@ export const faAccountService = {
 
     const nextData = { ...current, ...data };
     
-    // Validate lại nếu thay đổi cha hoặc loại TK
     if (nextData.parent_account_id !== current.parent_account_id || nextData.account_type !== current.account_type) {
         await validators.checkBusinessRules(nextData, id);
     }
 
-    // Gọi thẳng PUT vào ID
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(nextData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, nextData);
   },
 
   // --- Soft Delete ---
   async remove(id) {
-    // Gọi patch để chỉ update 1 trường is_active (nhanh gọn hơn PUT toàn bộ)
-    // JSON Server hỗ trợ PATCH
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: false }),
-    });
-    return handleResponse(response);
+    return await axiosClient.patch(`${API_URL}/${id}`, { is_active: false });
   },
 
   // --- Restore ---
   async restore(id) {
-    // Cẩn thận: Cần check cha trước khi restore
     const current = await this.getById(id);
     if (current && current.parent_account_id) {
-        // Check xem cha có tồn tại không
         await validators.checkBusinessRules(current, id);
     }
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: true }),
-    });
-    return handleResponse(response);
+    return await axiosClient.patch(`${API_URL}/${id}`, { is_active: true });
   },
 
   // --- Hard Delete ---
   async destroy(id) {
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${id}`);
   },
 };

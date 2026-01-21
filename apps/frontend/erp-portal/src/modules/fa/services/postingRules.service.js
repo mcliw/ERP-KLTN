@@ -1,10 +1,12 @@
 // apps/frontend/erp-portal/src/modules/finance/services/postingRules.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
+
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3003/posting_rules";
-const ACCOUNT_API_URL = "http://localhost:3003/chart_of_accounts";
+const API_URL = "/accounting/posting_rules";
+const ACCOUNT_API_URL = "/accounting/chart_of_accounts";
 
 const ERROR_MSGS = {
   FETCH_FAILED: "Lỗi kết nối đến máy chủ kế toán",
@@ -17,18 +19,6 @@ const ERROR_MSGS = {
 };
 
 /* =========================
- * Helpers
- * ========================= */
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `Lỗi API: ${response.statusText}`);
-  }
-  return response.json();
-};
-
-/* =========================
  * Business Validators
  * ========================= */
 const validators = {
@@ -36,14 +26,16 @@ const validators = {
   async checkAccountValidity(accountId, typeLabel) {
     if (!accountId) return;
 
-    const response = await fetch(`${ACCOUNT_API_URL}/${accountId}`);
-    if (!response.ok) {
-      throw new Error(`${ERROR_MSGS.ACCOUNT_NOT_FOUND}: ${typeLabel} (ID: ${accountId})`);
-    }
-    
-    const account = await response.json();
-    if (account.is_active === false) {
-      throw new Error(`${ERROR_MSGS.ACCOUNT_INACTIVE}: ${account.account_code} - ${account.account_name}`);
+    try {
+      const account = await axiosClient.get(`${ACCOUNT_API_URL}/${accountId}`);
+      
+      if (account.is_active === false) {
+        throw new Error(`${ERROR_MSGS.ACCOUNT_INACTIVE}: ${account.account_code} - ${account.account_name}`);
+      }
+    } catch (error) {
+        // Phân biệt lỗi do logic is_active hay do 404
+        if (error.message.includes(ERROR_MSGS.ACCOUNT_INACTIVE)) throw error;
+        throw new Error(`${ERROR_MSGS.ACCOUNT_NOT_FOUND}: ${typeLabel} (ID: ${accountId})`);
     }
   },
 
@@ -60,7 +52,7 @@ const validators = {
       throw new Error(ERROR_MSGS.SAME_ACCOUNT);
     }
 
-    // 3. Validate Account Existence & Status (Gọi song song cho nhanh)
+    // 3. Validate Account Existence & Status
     await Promise.all([
       this.checkAccountValidity(debit_account_id, "Tài khoản Nợ"),
       this.checkAccountValidity(credit_account_id, "Tài khoản Có"),
@@ -74,20 +66,16 @@ const validators = {
 export const postingRulesService = {
 
   // --- Get List ---
-  // Cập nhật: Thêm tham số includeInactive để lọc dữ liệu
   async getAll({ includeInactive = false } = {}) {
     try {
-      const response = await fetch(API_URL);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(API_URL);
       
       let result = Array.isArray(data) ? data : [];
 
-      // Nếu không yêu cầu lấy cả inactive, chỉ trả về các dòng đang hoạt động (hoặc chưa có cờ is_active)
       if (!includeInactive) {
         result = result.filter(item => item.is_active !== false);
       }
 
-      // Sắp xếp theo event_code
       return result.sort((a, b) => {
         return (a.event_code || "").localeCompare(b.event_code || "");
       });
@@ -100,8 +88,7 @@ export const postingRulesService = {
   // --- Get Detail ---
   async getById(id) {
     try {
-      const response = await fetch(`${API_URL}/${id}`);
-      return await handleResponse(response);
+      return await axiosClient.get(`${API_URL}/${id}`);
     } catch (error) {
       console.error("getById failed:", error);
       return null;
@@ -112,12 +99,10 @@ export const postingRulesService = {
   async checkEventCodeExists(code, excludeId = null) {
     if (!code) return false;
     try {
-      const response = await fetch(`${API_URL}?event_code=${code}`);
-      const data = await handleResponse(response);
+      const data = await axiosClient.get(`${API_URL}?event_code=${code}`);
 
       if (Array.isArray(data) && data.length > 0) {
         if (!excludeId) return true;
-        // So sánh ID (xử lý cả trường hợp id hoặc rule_id)
         return String(data[0].rule_id || data[0].id) !== String(excludeId);
       }
       return false;
@@ -128,31 +113,21 @@ export const postingRulesService = {
 
   // --- Create ---
   async create(data) {
-    // 1. Check duplicate code
     const exists = await this.checkEventCodeExists(data.event_code);
     if (exists) throw new Error(ERROR_MSGS.EVENT_CODE_EXISTS);
 
-    // 2. Validate Accounts logic
     await validators.checkBusinessRules(data);
 
-    // 3. Construct Payload
     const newRule = {
       event_code: data.event_code,
       event_description: data.event_description,
       debit_account_id: data.debit_account_id,
       credit_account_id: data.credit_account_id,
       module_source: data.module_source || "GENERAL",
-      // Cập nhật: Mặc định active = true khi tạo mới
       is_active: true, 
     };
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newRule),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.post(API_URL, newRule);
   },
 
   // --- Update ---
@@ -160,7 +135,6 @@ export const postingRulesService = {
     const current = await this.getById(id);
     if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    // 1. Check duplicate code nếu thay đổi
     if (data.event_code && data.event_code !== current.event_code) {
       const exists = await this.checkEventCodeExists(data.event_code, id);
       if (exists) throw new Error(ERROR_MSGS.EVENT_CODE_EXISTS);
@@ -168,7 +142,6 @@ export const postingRulesService = {
 
     const nextData = { ...current, ...data };
 
-    // 2. Validate lại nếu thay đổi tài khoản
     if (
       nextData.debit_account_id !== current.debit_account_id ||
       nextData.credit_account_id !== current.credit_account_id
@@ -176,40 +149,21 @@ export const postingRulesService = {
       await validators.checkBusinessRules(nextData);
     }
 
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(nextData),
-    });
-
-    return handleResponse(response);
+    return await axiosClient.put(`${API_URL}/${id}`, nextData);
   },
 
-  // --- Soft Delete (Xóa mềm - Vào thùng rác) ---
+  // --- Soft Delete ---
   async remove(id) {
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: false }),
-    });
-    return handleResponse(response);
+    return await axiosClient.patch(`${API_URL}/${id}`, { is_active: false });
   },
 
-  // --- Restore (Khôi phục) ---
+  // --- Restore ---
   async restore(id) {
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: true }),
-    });
-    return handleResponse(response);
+    return await axiosClient.patch(`${API_URL}/${id}`, { is_active: true });
   },
 
-  // --- Hard Delete (Xóa vĩnh viễn) ---
+  // --- Hard Delete ---
   async destroy(id) {
-    const response = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    return handleResponse(response);
+    return await axiosClient.delete(`${API_URL}/${id}`);
   }
 };

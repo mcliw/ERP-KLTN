@@ -100,6 +100,15 @@ export const dashboardService = {
       return [];
     }
   },
+  async getActiveSuppliers() {
+    return await fetchAndFilter(ENDPOINTS.SUPPLIERS);
+  },
+
+  async getApprovedPOsBySupplier(supplierId) {
+    if (!supplierId) return [];
+    const url = `${ENDPOINTS.POS}?supplier_id=${supplierId}&status=${PO_STATUS.APPROVED}`;
+    return await fetchAndFilter(url);
+  },
 
   async getPOAnalytics() {
     try {

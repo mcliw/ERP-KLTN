@@ -1,13 +1,12 @@
 // apps/frontend/erp-portal/src/modules/finance/services/dashboard.service.js
 
+import { axiosClient } from "../../../services/axiosClient";
 import { faAccountService } from "./faAccount.service";
-import { receiptService } from "./receipt.service"; // Service Thu
-import { paymentSlipService } from "./paymentSlip.service"; // Service Chi
 
 /* =========================
  * Config & Constants
  * ========================= */
-const API_URL = "http://localhost:3003";
+const API_URL = "/accounting";
 const ENDPOINTS = {
   TRANSACTIONS: `${API_URL}/cash_transactions`,
 };
@@ -32,27 +31,20 @@ const getStartOfMonth = () => {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 };
 
-const getTodayString = () => {
-  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-};
-
 const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
 /* =========================
  * Internal Logic (Calculation)
  * ========================= */
 
-/**
- * Tính toán dòng tiền (Thu - Chi) & Số dư theo loại tài khoản
- */
 const calculateCashFlowAndBalances = (transactions) => {
   const startOfMonth = getStartOfMonth().getTime();
 
-  let totalIncomeMonth = 0;   // Tổng thu tháng này
-  let totalExpenseMonth = 0;  // Tổng chi tháng này
+  let totalIncomeMonth = 0;   
+  let totalExpenseMonth = 0;  
   
-  let currentCashBalance = 0; // Dư tiền mặt (cộng dồn từ trước đến nay)
-  let currentBankBalance = 0; // Dư ngân hàng (cộng dồn từ trước đến nay)
+  let currentCashBalance = 0; 
+  let currentBankBalance = 0; 
 
   transactions.forEach((t) => {
     if (isSoftDeleted(t.deleted_at)) return;
@@ -61,22 +53,16 @@ const calculateCashFlowAndBalances = (transactions) => {
     const tDate = new Date(t.created_at).getTime();
     const isThisMonth = tDate >= startOfMonth;
 
-    // 1. Tính toán Số dư hiện tại (Balance)
-    // Logic: 
-    // - Nếu là Thu (Receipt): Tăng tiền mặt/NH
-    // - Nếu là Chi (Payment): Giảm tiền mặt/NH
     if (t.transaction_type === TRANSACTION_TYPE.RECEIPT) {
       if (t.debit_account_code === ACCOUNT_CODES.CASH) currentCashBalance += amount;
       if (t.debit_account_code === ACCOUNT_CODES.BANK) currentBankBalance += amount;
       
-      // Tính doanh thu tháng
       if (isThisMonth) totalIncomeMonth += amount;
 
     } else if (t.transaction_type === TRANSACTION_TYPE.PAYMENT) {
       if (t.credit_account_code === ACCOUNT_CODES.CASH) currentCashBalance -= amount;
       if (t.credit_account_code === ACCOUNT_CODES.BANK) currentBankBalance -= amount;
 
-      // Tính chi phí tháng
       if (isThisMonth) totalExpenseMonth += amount;
     }
   });
@@ -85,7 +71,7 @@ const calculateCashFlowAndBalances = (transactions) => {
     monthStats: {
       income: totalIncomeMonth,
       expense: totalExpenseMonth,
-      netFlow: totalIncomeMonth - totalExpenseMonth // Dòng tiền ròng
+      netFlow: totalIncomeMonth - totalExpenseMonth 
     },
     balances: {
       cash: currentCashBalance,
@@ -95,16 +81,13 @@ const calculateCashFlowAndBalances = (transactions) => {
   };
 };
 
-/**
- * Tạo dữ liệu biểu đồ dòng tiền theo ngày (7 ngày hoặc 30 ngày)
- */
 const processChartData = (transactions) => {
   const chartMap = {};
 
   transactions.forEach((t) => {
     if (isSoftDeleted(t.deleted_at)) return;
 
-    const dateKey = t.created_at.split("T")[0]; // YYYY-MM-DD
+    const dateKey = t.created_at.split("T")[0]; 
 
     if (!chartMap[dateKey]) {
       chartMap[dateKey] = { date: dateKey, revenue: 0, expense: 0 };
@@ -117,7 +100,6 @@ const processChartData = (transactions) => {
     }
   });
 
-  // Chuyển object thành mảng và sort theo ngày
   return Object.values(chartMap).sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
@@ -131,16 +113,16 @@ export const dashboardService = {
    */
   async getSummary() {
     try {
-      // 1. Fetch dữ liệu song song
-      // Lưu ý: Ta fetch trực tiếp endpoint transactions để lấy raw data tính toán cho nhanh
-      const [transactionsRes, accounts] = await Promise.all([
-        fetch(ENDPOINTS.TRANSACTIONS).then(res => res.ok ? res.json() : []),
+      // 1. Fetch dữ liệu song song dùng axiosClient
+      const [transactionsData, accounts] = await Promise.all([
+        axiosClient.get(ENDPOINTS.TRANSACTIONS).catch(() => []),
         faAccountService.getAll({ includeInactive: false })
       ]);
 
-      const allTransactions = Array.isArray(transactionsRes) ? transactionsRes : [];
+      // Axios trả về data trực tiếp, không cần res.json()
+      const allTransactions = Array.isArray(transactionsData) ? transactionsData : [];
 
-      // 2. Tính toán các chỉ số tài chính (Balances & Monthly Stats)
+      // 2. Tính toán các chỉ số tài chính
       const { monthStats, balances } = calculateCashFlowAndBalances(allTransactions);
 
       // 3. Lấy dữ liệu biểu đồ
@@ -154,13 +136,13 @@ export const dashboardService = {
         .map(t => ({
           id: t.id,
           date: t.created_at,
-          type: t.transaction_type, // RECEIPT | PAYMENT
+          type: t.transaction_type, 
           description: t.description,
           amount: t.amount,
-          partnerName: t.transaction_type === TRANSACTION_TYPE.RECEIPT ? "Khách hàng" : "Nhà cung cấp" // Placeholder nếu không join
+          partnerName: t.transaction_type === TRANSACTION_TYPE.RECEIPT ? "Khách hàng" : "Nhà cung cấp"
         }));
 
-      // 5. Thống kê cơ cấu tài khoản (Ví dụ: Đếm số lượng TK cấp 1)
+      // 5. Thống kê cơ cấu tài khoản
       const accountStructure = {
         totalAccounts: accounts.length,
         cashAccounts: accounts.filter(a => a.account_code.startsWith("11")).length,
@@ -169,12 +151,12 @@ export const dashboardService = {
       };
 
       return {
-        monthStats,           // { income, expense, netFlow }
-        balances,             // { cash, bank, total }
-        accountStructure,     // Thống kê số lượng tài khoản trong hệ thống
-        recentTransactions,   // List 5 giao dịch
+        monthStats,           
+        balances,             
+        accountStructure,     
+        recentTransactions,   
         charts: {
-          cashFlowTrend: chartData // Dữ liệu biểu đồ cột/đường
+          cashFlowTrend: chartData 
         }
       };
 
@@ -185,21 +167,17 @@ export const dashboardService = {
   },
 
   /**
-   * Lấy chi tiết tỷ lệ chi phí theo đầu mục tài khoản (Account Breakdown)
-   * Dùng cho biểu đồ tròn (Pie Chart) - Top chi phí
+   * Lấy chi tiết tỷ lệ chi phí theo đầu mục tài khoản
    */
   async getExpenseBreakdown() {
     try {
-      const response = await fetch(`${ENDPOINTS.TRANSACTIONS}?transaction_type=${TRANSACTION_TYPE.PAYMENT}`);
-      const data = await response.json();
+      const data = await axiosClient.get(`${ENDPOINTS.TRANSACTIONS}?transaction_type=${TRANSACTION_TYPE.PAYMENT}`);
       
       const expenseMap = {};
 
-      data.forEach(t => {
+      (Array.isArray(data) ? data : []).forEach(t => {
         if (isSoftDeleted(t.deleted_at)) return;
         
-        // Group theo tài khoản đối ứng (TK Nợ - Debit Account - Ví dụ: 642, 641...)
-        // Trong Phiếu Chi: Nợ TK Chi phí / Có TK Tiền
         const expenseAccount = t.debit_account_code || "Khác";
         
         if (!expenseMap[expenseAccount]) {
@@ -208,11 +186,10 @@ export const dashboardService = {
         expenseMap[expenseAccount] += Number(t.amount);
       });
 
-      // Chuyển về dạng mảng và lấy Top 5 chi phí lớn nhất
       const result = Object.entries(expenseMap)
         .map(([code, value]) => ({ code, value }))
         .sort((a, b) => b.value - a.value)
-        .slice(0, 5); // Top 5
+        .slice(0, 5); 
 
       return result;
 
@@ -222,9 +199,6 @@ export const dashboardService = {
     }
   },
 
-  /**
-   * Export dữ liệu báo cáo nhanh
-   */
   async getExportData() {
     try {
       const summary = await this.getSummary();

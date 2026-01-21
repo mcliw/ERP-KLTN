@@ -132,6 +132,7 @@ services:
       - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - hrm-data:/var/lib/postgresql/data
+      - ./kltn/db/V1__Init_HRM_Schema.sql:/docker-entrypoint-initdb.d/init_hrm.sql
     networks:
       - erp-network
 
@@ -161,12 +162,15 @@ services:
       - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - supply-data:/var/lib/postgresql/data
+      - ./kltn/db/V1__Init_SupplyChain_Schema.sql:/docker-entrypoint-initdb.d/init_supply_chain.sql
     networks:
       - erp-network
 # 4. Sales CRM Service (Java)
   sales-service:
     build: 
       context: ./apps/services/sales
+    env_file:
+      - .env
     image: arsneonci/sales-service:latest
     container_name: sales-service
     environment:
@@ -187,6 +191,7 @@ services:
       - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - sales-data:/var/lib/postgresql/data
+      - ./kltn/db/V1__Init_Sales&CRM_Schema.sql:/docker-entrypoint-initdb.d/init_sales_crm.sql
     networks:
       - erp-network
 
@@ -194,6 +199,8 @@ services:
   accounting-service:
     build: 
       context: ./apps/services/accounting
+    env_file:
+      - .env
     image: arsneonci/accounting-service:latest
     container_name: accounting-service
     environment:
@@ -214,33 +221,35 @@ services:
       - POSTGRES_PASSWORD=DEADlift12Hard
     volumes:
       - accounting-data:/var/lib/postgresql/data
+      - ./kltn/db/V1__Init_Accounting_Schema.sql:/docker-entrypoint-initdb.d/init_accounting.sql
     networks:
       - erp-network
   # 6. AI Assistant Service (Python FastAPI)
-#  ai-service:
-#    build: 
-#      context: ./apps/services/erp_ai_chatbot
-#    image: arsneonci/ai-service:latest
-#    container_name: ai-service
-#    environment:
-#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
-#    depends_on:
-#      - db-ai
-#    networks:
-#      - erp-network
-#  db-ai:
-#    image: postgres:15-alpine
-#    container_name: db-ai
-#    environment:
-#      - POSTGRES_DB=ai_db
-#      - POSTGRES_USER=postgres
-#      - POSTGRES_PASSWORD=DEADlift12Hard
-#    volumes:
-#      - ai-data:/var/lib/postgresql/data
-#    networks:
-#      - erp-network
+  ai-service:
+    build: 
+      context: ./apps/services/erp_ai_chatbot
+    image: arsneonci/ai-service:latest
+    container_name: ai-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
+    depends_on:
+      - db-ai
+    networks:
+      - erp-network
+  db-ai:
+    image: postgres:15-alpine
+    container_name: db-ai
+    environment:
+      - POSTGRES_DB=ai_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+#      - ./kltn/db/V1__Init_AI_Schema.sql:/docker-entrypoint-initdb.d/init_ai.sql
+    networks:
+      - erp-network
 
-  # 6. Face Recognition Service (Python FastAPI)
+  # 7. Face Recognition Service (Python FastAPI)
   face-service:
     extra_hosts:
       - "host.docker.internal:host-gateway"

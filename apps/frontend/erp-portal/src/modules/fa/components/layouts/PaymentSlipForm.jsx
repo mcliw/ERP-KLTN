@@ -4,12 +4,12 @@ import { useMemo, useEffect, useState } from "react";
 import { paymentSlipCreateSchema, paymentSlipUpdateSchema } from "../../validations/paymentSlip.schema";
 import { useFormManager, FormInput, FormSelect, FormActions } from "../../../../shared/components/FormCommon";
 import { useToast } from "../../../../shared/components/ToastProvider";
-import { paymentSlipService } from "../../services/paymentSlip.service"
+import { paymentSlipService } from "../../services/paymentSlip.service";
+import { dashboardService } from "../../../supply-chain/services/dashboard.service";
 
 /* ==============================
  * Helpers & Configs
  * ============================== */
-const SC_API_URL = "http://localhost:3002"; // Supply Chain Service
 
 const cleanData = (data) => {
   if (!data) return {};
@@ -88,7 +88,7 @@ export default function PaymentSlipForm({
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-        const res = await fetch(`${SC_API_URL}/suppliers`);
+        const res = await fetch(`${dashboardService}/suppliers`);
         if (res.ok) {
             const data = await res.json();
             const options = data.map(s => ({
@@ -123,7 +123,7 @@ export default function PaymentSlipForm({
             // 1. Lấy PO Approved của Supplier từ SupplyChain DB
             // 2. Lấy danh sách ID các PO đã được trả tiền từ Payment Service (Financial DB)
             const [poRes, paidIds] = await Promise.all([
-                fetch(`${SC_API_URL}/purchase_orders?supplier_id=${form.supplier_id}&status=APPROVED`),
+                fetch(`${dashboardService}/purchase_orders?supplier_id=${form.supplier_id}&status=APPROVED`),
                 paymentSlipService.getPaidPurchaseOrderIds(form.id) // Truyền form.id để loại trừ chính phiếu này (khi edit)
             ]);
 

@@ -7,13 +7,13 @@ For further reference, please consider the following sections:
 * [Spring Boot Maven Plugin Reference Guide](https://docs.spring.io/spring-boot/4.0.1/maven-plugin)
 * [Create an OCI image](https://docs.spring.io/spring-boot/4.0.1/maven-plugin/build-image.html)
 * [Spring Web](https://docs.spring.io/spring-boot/4.0.1/reference/web/servlet.html)
+* [Spring for GraphQL](https://docs.spring.io/spring-boot/4.0.1/reference/web/spring-graphql.html)
+* [Spring Web Services](https://docs.spring.io/spring-boot/4.0.1/reference/io/webservices.html)
+* [Spring Security](https://docs.spring.io/spring-boot/4.0.1/reference/web/spring-security.html)
+* [OAuth2 Authorization Server](https://docs.spring.io/spring-boot/4.0.1/reference/web/spring-security.html#web.security.oauth2.authorization-server)
 * [Spring Data JPA](https://docs.spring.io/spring-boot/4.0.1/reference/data/sql.html#data.sql.jpa-and-spring-data)
 * [Validation](https://docs.spring.io/spring-boot/4.0.1/reference/io/validation.html)
-* [Spring Boot Actuator](https://docs.spring.io/spring-boot/4.0.1/reference/actuator/index.html)
-* [OpenFeign](https://docs.spring.io/spring-cloud-openfeign/reference/)
-* [Spring Batch](https://docs.spring.io/spring-boot/4.0.1/how-to/batch.html)
 * [Gateway](https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-mvc.html)
-* [Spring for Apache Kafka](https://docs.spring.io/spring-boot/4.0.1/reference/messaging/kafka.html)
 
 ### Guides
 The following guides illustrate how to use some features concretely:
@@ -21,15 +21,13 @@ The following guides illustrate how to use some features concretely:
 * [Building a RESTful Web Service](https://spring.io/guides/gs/rest-service/)
 * [Serving Web Content with Spring MVC](https://spring.io/guides/gs/serving-web-content/)
 * [Building REST services with Spring](https://spring.io/guides/tutorials/rest/)
+* [Building a GraphQL service](https://spring.io/guides/gs/graphql-server/)
+* [Producing a SOAP web service](https://spring.io/guides/gs/producing-web-service/)
+* [Securing a Web Application](https://spring.io/guides/gs/securing-web/)
+* [Spring Boot and OAuth2](https://spring.io/guides/tutorials/spring-boot-oauth2/)
+* [Authenticating a User with LDAP](https://spring.io/guides/gs/authenticating-ldap/)
 * [Accessing Data with JPA](https://spring.io/guides/gs/accessing-data-jpa/)
 * [Validation](https://spring.io/guides/gs/validating-form-input/)
-* [Building a RESTful Web Service with Spring Boot Actuator](https://spring.io/guides/gs/actuator-service/)
-* [Creating a Batch Service](https://spring.io/guides/gs/batch-processing/)
-
-### Additional Links
-These additional references should also help you:
-
-* [Declarative REST calls with Spring Cloud OpenFeign sample](https://github.com/spring-cloud-samples/feign-eureka)
 
 ### Maven Parent overrides
 

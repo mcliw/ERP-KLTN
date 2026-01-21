@@ -10,7 +10,6 @@ public class CrmClient {
     // Đây là nơi bạn cấu hình RestTemplate hoặc WebClient để gọi API của Sales & CRM Service
     // Endpoint ví dụ: POST http://sales-crm-service/api/customers
     public void createCustomerProfile(UUID userId, RegisterRequest request) {
-        // TODO: Thực hiện gọi API sang Sales Service
         // Body gửi đi: { "id": userId, "fullName": request.getFullName(), ... }
         
         System.out.println(">>> Calling CRM Service to create Profile for ID: " + userId);
