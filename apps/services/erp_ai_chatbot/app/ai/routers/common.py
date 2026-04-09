@@ -21,7 +21,7 @@ _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 _GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 _client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else genai.Client()
 
-PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
+PLAN_JSON_SCHEMA_BASE = {
     "type": "object",
     "required": ["module", "intent", "needs_clarification", "steps", "final_response_template"],
     "properties": {
@@ -32,10 +32,10 @@ PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
         "steps": {
             "type": "array",
             "items": {
-                "type": "object",
-                "required": ["id", "tool", "args"],
+                "required": ["id", "module", "tool", "args"],
                 "properties": {
                     "id": {"type": "string", "pattern": "^s[0-9]+$"},
+                    "module": {"type": "string"},
                     "tool": {"type": "string"},
                     "args": {"type": "object"},
                     "save_as": {"type": ["string", "null"]},
@@ -49,8 +49,12 @@ PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
 def schema_for_module(module: str) -> Dict[str, Any]:
     schema = deepcopy(PLAN_JSON_SCHEMA_BASE)
     schema["properties"]["module"]["enum"] = [module]
+
     tool_names = [t.ten_tool for t in list_tools(module)]
     schema["properties"]["steps"]["items"]["properties"]["tool"]["enum"] = tool_names
+
+    # ✅ khóa luôn step.module = module (để planner không nhảy module)
+    schema["properties"]["steps"]["items"]["properties"]["module"]["enum"] = [module]
     return schema
 
 def tool_catalog(module: str) -> str:

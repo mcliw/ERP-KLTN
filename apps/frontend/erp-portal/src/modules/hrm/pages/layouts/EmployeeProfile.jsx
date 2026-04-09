@@ -1,309 +1,127 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/EmployeeProfile.jsx
 
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { employeeService } from "../../services/employee.service";
+import { useFetchDetail } from "../../../../shared/hooks/useFetchDetail";
 import { useLookupMaps } from "../../hooks/useLookupMaps";
-import "../styles/detail.css";
-import "../../../../shared/styles/button.css";
-import { FaUserEdit, FaArrowLeft } from "react-icons/fa";
-
-/* =========================
- * Helpers
- * ========================= */
-
-const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "—";
+import { formatDate } from "../../../../shared/utils/format";
+import {
+  DetailHeader, DetailTop, DetailSection, DetailGrid, DetailItem, EditButton
+} from "../../../../shared/components/DetailLayout";
+import "../../../../shared/styles/detail.css";
 
 export default function EmployeeProfile() {
   const { code } = useParams();
   const navigate = useNavigate();
-
   const { departmentMap, positionMap } = useLookupMaps();
 
-  const [employee, setEmployee] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { data: employee, loading } = useFetchDetail(employeeService.getByCode, code);
 
-  /* =========================
-   * Load employee
-   * ========================= */
+  if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
+  if (!employee) return <div style={{ padding: 20 }}>Không tìm thấy nhân viên</div>;
 
-  useEffect(() => {
-    let alive = true;
-
-    const loadEmployee = async () => {
-      setLoading(true);
-      try {
-        const emp = await employeeService.getByCode(code);
-        if (!alive) return;
-        setEmployee(emp);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    loadEmployee();
-    return () => {
-      alive = false;
-    };
-  }, [code]);
-
-  /* =========================
-   * Render guards
-   * ========================= */
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải...</div>;
-  }
-
-  if (!employee) {
-    return (
-      <div style={{ padding: 20 }}>
-        Không tìm thấy nhân viên
-      </div>
-    );
-  }
-
-  const departmentName =
-    departmentMap[employee.department] ||
-    employee.department ||
-    "—";
-
-  const positionName =
-    positionMap[employee.position] ||
-    employee.position ||
-    "—";
-
-  const missingAssignment =
-    employee.status === "Đang làm việc" &&
-    (!employee.department || !employee.position);
-
-  const isDeleted = Boolean(employee.deletedAt);
-
-  /* =========================
-   * Render
-   * ========================= */
+  const departmentName = departmentMap[employee.department] || employee.department || "—";
+  const positionName = positionMap[employee.position] || employee.position || "—";
+  const missingAssignment = employee.status === "Đang làm việc" && (!employee.department || !employee.position);
 
   return (
     <div className="main-detail">
-      {/* HEADER */}
-      <div className="profile-header">
-        <h2>Hồ sơ nhân viên</h2>
+      <DetailHeader
+        title="Hồ sơ nhân viên"
+        onBack={() => navigate("/hrm/ho-so-nhan-vien")}
+        actions={!employee.deletedAt && (
+          <EditButton
+            label="Chỉnh sửa"
+            onClick={() => navigate(`/hrm/ho-so-nhan-vien/${code}/chinh-sua`)}
+          />
+        )}
+      />
 
-        <div className="profile-actions">
-          <button onClick={() => navigate("/hrm/ho-so-nhan-vien")}>
-            <FaArrowLeft />
-            <span>Quay lại</span>
-          </button>
-
-          {!isDeleted && (
-            <button
-              className="btn-primary"
-              onClick={() =>
-                navigate(
-                  `/hrm/ho-so-nhan-vien/${code}/chinh-sua`
-                )
-              }
-            >
-              <FaUserEdit />
-              <span>Chỉnh sửa</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* TOP */}
-      <div className="profile-top">
-        <div className="profile-avatar">
-          {employee.avatarUrl ? (
-            <img src={employee.avatarUrl} alt="avatar" />
-          ) : (
-            <div className="profile-avatar-placeholder">
-              Ảnh
-            </div>
-          )}
-        </div>
-
-        <div className="profile-main">
-          <div className="profile-name">{employee.name}</div>
-
-          <div className="profile-sub">
-            {employee.code} • {departmentName} •{" "}
-            {positionName}
-          </div>
-
-          <div
-            className={`status-badge ${
-              employee.status === "Đang làm việc"
-                ? "active"
-                : "inactive"
-            }`}
-          >
-            {employee.status}
-          </div>
-
-          {isDeleted && (
-            <div className="deleted-note">
-              Hồ sơ này đã bị xoá
-            </div>
-          )}
-        </div>
-      </div>
+      <DetailTop
+        title={employee.name}
+        subtitle={`${employee.code} • ${departmentName} • ${positionName}`}
+        status={employee.status}
+        isDeleted={Boolean(employee.deletedAt)}
+        avatarUrl={employee.avatarUrl}
+      />
 
       {missingAssignment && (
         <div className="warning-banner">
           <strong>⚠ Nhân viên chưa được phân công</strong>
-          <div>
-            Hồ sơ đang ở trạng thái <b>Đang làm việc</b> nhưng
-            chưa có{" "}
-            {!employee.department && <b>phòng ban</b>}
-            {!employee.department && !employee.position && " và "}
-            {!employee.position && <b>chức vụ</b>}.
-          </div>
-
-          <button
-            className="btn-warning"
-            onClick={() =>
-              navigate(
-                `/hrm/ho-so-nhan-vien/${employee.code}/chinh-sua`
-              )
-            }
-          >
+          <div>Cần cập nhật phòng ban/chức vụ cho nhân viên này.</div>
+          <button className="btn-warning" onClick={() => navigate(`/hrm/ho-so-nhan-vien/${code}/chinh-sua`)}>
             Phân công ngay
           </button>
         </div>
       )}
 
-      {/* THÔNG TIN CÁ NHÂN */}
-      <Section title="Thông tin cá nhân">
-        <Info label="Mã nhân viên" value={employee.code} />
-        <Info label="Họ tên" value={employee.name} />
-        <Info label="Giới tính" value={employee.gender} />
-        <Info
-          label="Ngày sinh"
-          value={formatDate(employee.dob)}
-        />
-        <Info label="Quê quán" value={employee.hometown} />
-        <Info label="Số CCCD" value={employee.cccd} />
-      </Section>
+      <DetailSection title="Thông tin cá nhân">
+        <DetailGrid>
+          <DetailItem label="Mã nhân viên" value={employee.code} />
+          <DetailItem label="Họ tên" value={employee.name} />
+          <DetailItem label="Giới tính" value={employee.gender} />
+          <DetailItem label="Ngày sinh" value={formatDate(employee.dob)} />
+          <DetailItem label="Quê quán" value={employee.hometown} />
+          <DetailItem label="Số CCCD" value={employee.cccd} />
+        </DetailGrid>
+      </DetailSection>
 
-      {/* LIÊN HỆ */}
-      <Section title="Thông tin liên hệ">
-        <Info label="Email" value={employee.email} />
-        <Info label="Số điện thoại" value={employee.phone} />
-      </Section>
+      <DetailSection title="Thông tin liên hệ">
+        <DetailGrid>
+          <DetailItem label="Email" value={employee.email} />
+          <DetailItem label="Số điện thoại" value={employee.phone} />
+        </DetailGrid>
+      </DetailSection>
 
-      {/* CÔNG VIỆC */}
-      <Section title="Thông tin công việc">
-        <Info label="Phòng ban" value={departmentName} />
-        <Info label="Chức vụ" value={positionName} />
-        <Info
-          label="Ngày vào làm"
-          value={formatDate(employee.joinDate)}
-        />
-        <Info label="Trạng thái" value={employee.status} />
-        <Info
-          label="Ngày nghỉ việc"
-          value={
-            employee.resignedAt
-              ? formatDate(employee.resignedAt)
-              : "—"
-          }
-        />
-      </Section>
+      <DetailSection title="Thông tin công việc">
+        <DetailGrid>
+          <DetailItem label="Phòng ban" value={departmentName} />
+          <DetailItem label="Chức vụ" value={positionName} />
+          <DetailItem label="Ngày vào làm" value={formatDate(employee.joinDate)} />
+          <DetailItem label="Ngày nghỉ việc" value={formatDate(employee.resignedAt)} />
+        </DetailGrid>
+      </DetailSection>
 
-      {/* TÀI CHÍNH */}
-      <Section title="Thông tin tài chính">
-        <Info
-          label="Tên tài khoản ngân hàng"
-          value={employee.bankAccountName}
-        />
-        <Info
-          label="Số tài khoản ngân hàng"
-          value={employee.bankAccount}
-        />
-      </Section>
+      <DetailSection title="Thông tin tài chính">
+        <DetailGrid>
+          <DetailItem label="Ngân hàng" value={employee.bankAccountName} />
+          <DetailItem label="Số tài khoản" value={employee.bankAccount} />
+        </DetailGrid>
+      </DetailSection>
 
-      {/* HỒ SƠ GIẤY TỜ */}
-      <Section title="Hồ sơ giấy tờ">
-        <DocumentItem
-          label="Hợp đồng"
-          url={employee.contractUrl}
-        />
-
-        <DocumentItem
-          label="CV"
-          url={employee.cvUrl}
-        />
-
-        <DocumentItem
-          label="Giấy khám sức khỏe"
-          url={employee.healthCertUrl}
-        />
-
-        <DocumentItem
-          label="Bằng cấp / Chứng chỉ"
-          url={employee.degreeUrl}
-        />
-      </Section>
+      <DetailSection title="Hồ sơ giấy tờ">
+        <DocumentItem label="Hợp đồng" url={employee.contractUrl} />
+        <DocumentItem label="CV" url={employee.cvUrl} />
+        <DocumentItem label="Giấy khám sức khỏe" url={employee.healthCertUrl} />
+        <DocumentItem label="Bằng cấp / Chứng chỉ" url={employee.degreeUrl} />
+      </DetailSection>
     </div>
   );
 }
 
-/* =========================
- * Sub components
- * ========================= */
-
-function Section({ title, children }) {
-  return (
-    <div className="profile-section">
-      <h3>{title}</h3>
-      <div className="profile-grid">{children}</div>
-    </div>
-  );
-}
-
-function Info({ label, value }) {
-  return (
-    <div className="profile-item">
-      <div className="profile-label">{label}</div>
-      <div className="profile-value">{value || "—"}</div>
-    </div>
-  );
-}
-
+// Sub-component riêng cho PDF
 function DocumentItem({ label, url }) {
   const [open, setOpen] = useState(false);
+  if (!url) return <DetailItem label={label} value="—" />;
 
-  if (!url) {
-    return (
-      <div className="profile-item">
-        <div className="profile-label">{label}</div>
-        <div className="profile-value">—</div>
-      </div>
-    );
-  }
+  const isBase64 = String(url).startsWith("data:");
 
   return (
     <div className="profile-item full-width">
       <div className="profile-label">{label}</div>
-
       <div className="profile-value">
-        <button
-          className="btn-link"
-          onClick={() => setOpen((v) => !v)}
-        >
+        <button className="btn-link" onClick={() => setOpen(!open)}>
           {open ? "Ẩn PDF" : "Xem PDF"}
         </button>
 
         {open && (
           <div className="pdf-preview">
-            <iframe
-              src={url}
-              title={label}
-              width="100%"
-              height="500px"
-            />
+            {isBase64 ? (
+              <embed src={url} type="application/pdf" width="100%" height="500px" />
+            ) : (
+              <iframe src={url} title={label} width="100%" height="500px" />
+            )}
           </div>
         )}
       </div>

@@ -3,82 +3,56 @@
 import { z } from "zod";
 
 /* =========================
- * Common helpers
+ * Helpers
  * ========================= */
-
-// Cho phép "" từ input → coi như undefined
 const emptyToUndefined = (schema) =>
-  schema.optional().or(z.literal(""));
+  z.preprocess((val) => (val === "" || val === null ? undefined : val), schema.optional());
 
 /* =========================
- * Base fields (shared)
+ * Base Fields
  * ========================= */
-
 export const baseAccountFields = {
   username: z
     .string()
     .trim()
     .min(1, "Tên đăng nhập bắt buộc")
-    .max(30, "Tên đăng nhập quá dài"),
+    .max(30, "Tên đăng nhập quá dài")
+    .regex(/^[A-Za-z0-9._-]+$/, "Tên đăng nhập không chứa ký tự đặc biệt"),
 
-  employeeCode: z
-    .string()
-    .min(1, "Phải chọn nhân viên"),
+  employeeCode: z.string().trim().min(1, "Phải chọn nhân viên"),
 
   /**
-   * Auto-fill từ employee
-   * → readonly ở UI
-   * → không validate business
+   * Auto-fill từ employee (readonly ở UI)
    */
-  department: emptyToUndefined(z.string()),
-  position: emptyToUndefined(z.string()),
+  department: emptyToUndefined(z.string().trim()),
+  position: emptyToUndefined(z.string().trim()),
 
-  role: z
-    .string()
-    .min(1, "Vai trò bắt buộc"),
+  role: z.string().trim().min(1, "Vai trò bắt buộc"),
 
-  status: z.enum(
-    ["Hoạt động", "Ngưng hoạt động"],
-    {
-      errorMap: () => ({
-        message: "Trạng thái không hợp lệ",
-      }),
-    }
-  ),
+  status: z.enum(["Hoạt động", "Ngưng hoạt động"], {
+    errorMap: () => ({ message: "Trạng thái không hợp lệ" }),
+  }),
 
-  password: z
-    .string()
-    .min(6, "Mật khẩu phải ít nhất 6 ký tự")
-    .optional(),
+  // Create thường bắt buộc, Update có thể bỏ trống
+  password: emptyToUndefined(z.string().min(6, "Mật khẩu phải ít nhất 6 ký tự")),
 };
 
 /* =========================
- * CREATE schema
+ * Schemas
  * ========================= */
-
 export const accountCreateSchema = z.object({
   ...baseAccountFields,
-
-  // Khi tạo mới → luôn hoạt động
   status: z.literal("Hoạt động", {
     errorMap: () => ({
-      message:
-        "Không thể tạo tài khoản với trạng thái Ngưng hoạt động",
+      message: "Không thể tạo tài khoản với trạng thái Ngưng hoạt động",
     }),
   }),
+
+  // Tạo mới: bắt buộc có mật khẩu (override base)
+  password: z.string().min(6, "Mật khẩu phải ít nhất 6 ký tự"),
 });
 
-/* =========================
- * UPDATE schema
- * ========================= */
-
-export const accountUpdateSchema = z.object({
-  ...baseAccountFields,
-
-  // Cho tồn tại nhưng backend sẽ ignore
-  username: emptyToUndefined(z.string()),
-  employeeCode: emptyToUndefined(z.string()),
-
-  department: emptyToUndefined(z.string()),
-  position: emptyToUndefined(z.string()),
-});
+export const accountUpdateSchema = z
+  .object(baseAccountFields)
+  // Update: không cho sửa username & employeeCode (giống pattern employee/department/position)
+  .omit({ username: true, employeeCode: true });

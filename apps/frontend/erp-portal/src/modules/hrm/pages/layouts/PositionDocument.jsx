@@ -1,100 +1,54 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/PositionDocument.jsx
 
 import { useNavigate } from "react-router-dom";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-} from "react";
+import { useState, useMemo, useCallback } from "react";
 import PositionTable from "../../components/layouts/PositionTable";
 import PositionFilter from "../../components/layouts/PositionFilter";
+import PageHeader from "../../../../shared/components/PageHeader";
 import { positionService } from "../../services/position.service";
 import { useLookupMaps } from "../../hooks/useLookupMaps";
-import "../styles/document.css";
-import "../../../../shared/styles/button.css";
-import { FaPlus, FaRecycle } from "react-icons/fa";
+import { useAsyncData } from "../../../../shared/hooks/useAsyncData";
+import { useClientPagination } from "../../../../shared/hooks/useClientPagination";
 import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
 import { hasPermission } from "../../../../shared/utils/permission";
+import { useToast } from "../../../../shared/components/ToastProvider";
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
+import "../../../../shared/styles/document.css";
+import "../../../../shared/styles/button.css";
 
 /* =========================
  * Helpers
  * ========================= */
-
-const normalizeText = (v) =>
-  String(v || "").trim().toLowerCase();
-
-/* =========================
- * Component
- * ========================= */
+const normalizeText = (v) => String(v || "").trim().toLowerCase();
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function PositionDocument() {
   const navigate = useNavigate();
+  const toast = useToast();
+
   const { departmentMap } = useLookupMaps();
+  const user = useAuthStore((s) => s.user);
+  const canEdit = hasPermission(user?.role, HRM_PERMISSIONS.HRM_POSITION_UPDATE);
 
-  /* =========================
-   * State
-   * ========================= */
-
-  const [positions, setPositions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: positions, loading, refresh } = useAsyncData(positionService.getAll);
 
   const [keyword, setKeyword] = useState("");
   const [department, setDepartment] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
-
-  const pageSize = 7;
-
-  const user = useAuthStore((s) => s.user);
-
-  const canEditPosition = hasPermission(
-    user?.role,
-    HRM_PERMISSIONS.POSITION_EDIT
-  );
-
-  /* =========================
-   * Data loader
-   * ========================= */
-
-  const loadPositions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await positionService.getAll();
-      setPositions(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPositions();
-  }, [loadPositions]);
-
-  /* =========================
-   * Filter options
-   * ========================= */
 
   const departmentOptions = useMemo(
-    () =>
-      Object.entries(departmentMap).map(
-        ([value, label]) => ({
-          value,
-          label,
-        })
-      ),
+    () => Object.entries(departmentMap).map(([value, label]) => ({ value, label })),
     [departmentMap]
   );
 
-  const statusOptions = [
-    { value: "Hoạt động", label: "Hoạt động" },
-    { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
-  ];
-
-  /* =========================
-   * Filtering
-   * ========================= */
+  const statusOptions = useMemo(
+    () => [
+      { value: "Hoạt động", label: "Hoạt động" },
+      { value: "Ngưng hoạt động", label: "Ngưng hoạt động" },
+    ],
+    []
+  );
 
   const filteredPositions = useMemo(() => {
     const kw = normalizeText(keyword);
@@ -105,161 +59,81 @@ export default function PositionDocument() {
         normalizeText(p.name).includes(kw) ||
         normalizeText(p.code).includes(kw);
 
-      const matchDepartment =
-        !department || p.department === department;
+      const matchDepartment = !department || normalizeCode(p.department) === normalizeCode(department);
 
-      const matchStatus =
-        !status || p.status === status;
+      // đồng bộ theo pattern: status filter chỉ áp dụng với bản ghi chưa bị soft delete
+      const matchStatus = !status || (!isSoftDeleted(p.deletedAt) && p.status === status);
 
-      return (
-        matchKeyword &&
-        matchDepartment &&
-        matchStatus
-      );
+      return matchKeyword && matchDepartment && matchStatus;
     });
   }, [positions, keyword, department, status]);
 
-  /* =========================
-   * Pagination
-   * ========================= */
+  const { paginatedData, page, totalPages, goToPrev, goToNext } =
+    useClientPagination(filteredPositions, 7);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredPositions.length / pageSize)
+  const handleClearFilter = useCallback(() => {
+    setKeyword("");
+    setDepartment("");
+    setStatus("");
+  }, []);
+
+  const handleDelete = useCallback(
+    async (pos) => {
+      const assigned =
+        typeof pos.assigneeCount === "number" ? pos.assigneeCount : pos.assignees?.length ?? 0;
+
+      if (assigned > 0) {
+        toast.info("Không thể xoá chức vụ vì đang có nhân viên đảm nhận.");
+        return;
+      }
+
+      if (!window.confirm(`Xoá chức vụ "${pos.name}"?`)) return;
+
+      try {
+        await positionService.remove(pos.code);
+        toast.error(`Đã xoá chức vụ "${pos.name}"`);
+        refresh();
+      } catch (err) {
+        toast.error(err?.message || "Không thể xoá chức vụ");
+      }
+    },
+    [refresh, toast]
   );
 
-  const paginatedPositions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredPositions.slice(
-      start,
-      start + pageSize
-    );
-  }, [filteredPositions, page]);
-
-  /* =========================
-   * Handlers
-   * ========================= */
-
-  const handleDelete = async (pos) => {
-    if (pos.assigneeCount > 0) {
-      alert(
-        "Không thể xoá chức vụ vì đang có nhân viên đảm nhận"
-      );
-      return;
-    }
-
-    const ok = window.confirm(
-      `Xoá chức vụ ${pos.name}?`
-    );
-    if (!ok) return;
-
-    try {
-      await positionService.remove(pos.code);
-      await loadPositions();
-    } catch (err) {
-      alert(
-        err.message || "Không thể xoá chức vụ"
-      );
-    }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải...</div>;
-  }
+  if (loading) return <div style={{ padding: 20 }}>Đang tải...</div>;
 
   return (
     <div className="main-document">
-      {/* HEADER */}
-      <div className="page-header">
-        <h2>Quản lý chức vụ</h2>
+      <PageHeader
+        title="Quản lý chức vụ"
+        createLabel="Thêm chức vụ"
+        onCreate={canEdit ? () => navigate("/hrm/chuc-vu/them-moi") : null}
+        onRestore={canEdit ? () => navigate("/hrm/chuc-vu/khoi-phuc") : null}
+      />
 
-        <div style={{ display: "flex", gap: 10 }}>
-          {canEditPosition && (
-            <button
-              className="btn-primary"
-              onClick={() =>
-                navigate("/hrm/chuc-vu/them-moi")
-              }
-            >
-              <FaPlus />
-              <span>Thêm chức vụ</span>
-            </button>
-          )}
-
-          {/* ♻️ KHÔI PHỤC */}
-          {canEditPosition && (
-            <button
-              className="btn-restore"
-              onClick={() =>
-                navigate("/hrm/chuc-vu/khoi-phuc")
-              }
-            >
-              <FaRecycle />
-              <span>Khôi phục</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* FILTER */}
       <PositionFilter
         keyword={keyword}
         department={department}
         status={status}
         departmentOptions={departmentOptions}
         statusOptions={statusOptions}
-        onKeywordChange={(v) => {
-          setKeyword(v);
-          setPage(1);
-        }}
-        onDepartmentChange={(v) => {
-          setDepartment(v);
-          setPage(1);
-        }}
-        onStatusChange={(v) => {
-          setStatus(v);
-          setPage(1);
-        }}
-        onClear={() => {
-          setKeyword("");
-          setDepartment("");
-          setStatus("");
-          setPage(1);
-        }}
+        onKeywordChange={setKeyword}
+        onDepartmentChange={setDepartment}
+        onStatusChange={setStatus}
+        onClear={handleClearFilter}
       />
 
-      {/* TABLE */}
       <PositionTable
-        data={paginatedPositions}
+        data={paginatedData}
         departmentMap={departmentMap}
         page={page}
         totalPages={totalPages}
-        onPrev={() =>
-          setPage((p) => Math.max(p - 1, 1))
-        }
-        onNext={() =>
-          setPage((p) =>
-            Math.min(p + 1, totalPages)
-          )
-        }
-        onRowClick={(p) =>
-          navigate(`/hrm/chuc-vu/${p.code}`)
-        }
-        onView={(p) =>
-          navigate(`/hrm/chuc-vu/${p.code}`)
-        }
-        onEdit={
-          canEditPosition
-          ? (p) =>
-          navigate(
-            `/hrm/chuc-vu/${p.code}/chinh-sua`
-          ) : undefined
-        }
-        onDelete={canEditPosition ? handleDelete : undefined}
+        onPrev={goToPrev}
+        onNext={goToNext}
+        onRowClick={(p) => navigate(`/hrm/chuc-vu/${p.code}`)}
+        onView={(p) => navigate(`/hrm/chuc-vu/${p.code}`)}
+        onEdit={canEdit ? (p) => navigate(`/hrm/chuc-vu/${p.code}/chinh-sua`) : undefined}
+        onDelete={canEdit ? handleDelete : undefined}
       />
     </div>
   );

@@ -1,0 +1,37 @@
+# --- CẤU HÌNH TẢI PYTORCH GPU (QUAN TRỌNG) ---
+# Dòng này bảo pip: "Ngoài kho gốc, hãy tìm thêm ở kho của PyTorch CUDA 12.1"
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# --- PyTorch Core (Sẽ tự tải bản CUDA nhờ dòng trên) ---
+torch
+torchvision
+torchaudio
+
+# --- Backend & Database ---
+fastapi>=0.100.0
+uvicorn[standard]
+python-multipart
+python-dotenv
+sqlalchemy
+psycopg2-binary
+requests
+pyttsx3
+
+# --- Vector Database ---
+chromadb>=0.4.0
+
+# --- AI Core ---
+opencv-python
+mediapipe
+scikit-learn
+joblib
+numpy<2.0.0
+pandas
+
+# --- Face Recognition ---
+facenet-pytorch
+
+# --- Frontend ---
+streamlit
+plotly
+# streamlit run .\frontend_app.py

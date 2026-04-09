@@ -1,15 +1,25 @@
 package erp.company.sales;
 
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 
+import io.github.cdimascio.dotenv.Dotenv;
 
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
+@SpringBootApplication
 public class SalesApplication {
+ 
+    public static void main(String[] args) {
+        // Nạp file .env vào System Properties
+        Dotenv dotenv = Dotenv.configure()
+                .directory("./") // Đường dẫn đến thư mục chứa file .env
+                .ignoreIfMissing()
+                .load();
 
-	public static void main(String[] args) {
-		SpringApplication.run(SalesApplication.class, args);
-	}
+        dotenv.entries().forEach(entry -> 
+            System.setProperty(entry.getKey(), entry.getValue())
+        );
 
+        SpringApplication.run(SalesApplication.class, args);
+    }
 }

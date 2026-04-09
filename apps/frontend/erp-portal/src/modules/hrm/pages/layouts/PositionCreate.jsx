@@ -1,60 +1,34 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/PositionCreate.jsx
 
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
 import PositionForm from "../../components/layouts/PositionForm";
 import { positionService } from "../../services/position.service";
-
-/* =========================
- * Component
- * ========================= */
+import { useCreateResource } from "../../../../shared/hooks/useCreateResource";
+import PageContainer from "../../../../shared/components/PageContainer";
 
 export default function PositionCreate() {
-  const navigate = useNavigate();
-  const [submitting, setSubmitting] = useState(false);
-
-  /* =========================
-   * Handlers
-   * ========================= */
-
-  const handleCreate = async (formData) => {
-    if (submitting) return;
-
-    setSubmitting(true);
-
-    const payload = {
-      ...formData,
-    };
-
-    try {
-      await positionService.create(payload);
-
-      navigate("/hrm/chuc-vu");
-    } catch (err) {
-      if (err?.status === 409 && err?.field === "code") {
-        alert("Mã chức vụ đã tồn tại");
-      } else if (err?.field) {
-        alert(err.message);
-      } else {
-        alert("Có lỗi khi tạo chức vụ");
-      }
-    } finally {
-      setSubmitting(false);
+  const { submitting, handleSubmit, handleCancel } = useCreateResource(
+    (data) => positionService.create(data),
+    "/hrm/chuc-vu",
+    {
+      resourceName: "chức vụ",
+      errorMessages: {
+        code: "Mã chức vụ đã tồn tại",
+      },
+      onSuccess: () => {
+        console.log("Đã tạo xong chức vụ mới");
+      },
     }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
+  );
 
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer title="Thêm mới chức vụ">
       <PositionForm
         mode="create"
-        onSubmit={handleCreate}
-        onCancel={() => navigate(-1)}
+        onSubmit={handleSubmit}
+        onCancel={handleCancel}
         disabled={submitting}
+        checkCodeExists={positionService.checkCodeExists?.bind(positionService)}
       />
-    </div>
+    </PageContainer>
   );
 }

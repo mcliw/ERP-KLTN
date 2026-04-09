@@ -4,23 +4,32 @@ import re
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
+from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
+
+"""HRM helpers (đồng bộ với DB HRM mới theo V1__Init_HRM_Schema.sql).
+
+Schema HRM mới dùng:
+- employees.employee_id (PK)
+- departments.department_id (PK)
+- employees.account_id (UUID) map Identity user_id
+"""
 
 from app.modules.hrm.models import Employee, Department
 
 
 _EMP_CODE_RE = re.compile(r"^[A-Z]{0,4}\d{1,10}$", re.IGNORECASE)
 
+def _norm(s):
+    if s is None:
+        return ""
+    return str(s).strip()
 
-def _norm(s: str) -> str:
-    return (s or "").strip()
-
-
-def find_employee_by_user_id(session: Session, user_id: int) -> Optional[Employee]:
-    if user_id is None:
-        return None
-    return session.query(Employee).filter(Employee.user_id == int(user_id)).first()
+def find_employee_by_user_id(session, user_id: UUID):
+    # DB mới: account_id
+    col = getattr(Employee, "account_id", None) or getattr(Employee, "user_id", None)
+    return session.query(Employee).filter(col == user_id).first()
 
 
 def find_employee_exact_code(session: Session, employee_code: str) -> Optional[Employee]:
@@ -37,7 +46,8 @@ def find_employee(session: Session, tu_khoa: str) -> Optional[Employee]:
 
     # numeric => id
     if kw.isdigit():
-        return session.query(Employee).filter(Employee.id == int(kw)).first()
+        col = getattr(Employee, "employee_id", None) or getattr(Employee, "id", None)
+        return session.query(Employee).filter(col == int(kw)).first()
 
     # looks like code => try exact employee_code
     if _EMP_CODE_RE.match(kw):
@@ -47,7 +57,8 @@ def find_employee(session: Session, tu_khoa: str) -> Optional[Employee]:
 
     # fallback: name contains
     q = session.query(Employee).filter(func.lower(Employee.full_name).like(f"%{kw.lower()}%"))
-    return q.order_by(Employee.id.asc()).first()
+    col = getattr(Employee, "employee_id", None) or getattr(Employee, "id", None)
+    return q.order_by(col.asc()).first()
 
 
 def find_employees(session: Session, tu_khoa: str, limit: int = 10) -> List[Employee]:
@@ -56,7 +67,8 @@ def find_employees(session: Session, tu_khoa: str, limit: int = 10) -> List[Empl
         return []
 
     if kw.isdigit():
-        emp = session.query(Employee).filter(Employee.id == int(kw)).first()
+        col = getattr(Employee, "employee_id", None) or getattr(Employee, "id", None)
+        emp = session.query(Employee).filter(col == int(kw)).first()
         return [emp] if emp else []
 
     # prefer exact code hit first
@@ -71,7 +83,8 @@ def find_employees(session: Session, tu_khoa: str, limit: int = 10) -> List[Empl
             func.lower(Employee.employee_code).like(f"%{kw.lower()}%"),
         )
     )
-    return q.order_by(Employee.id.asc()).limit(max(1, min(limit, 50))).all()
+    col = getattr(Employee, "employee_id", None) or getattr(Employee, "id", None)
+    return q.order_by(col.asc()).limit(max(1, min(limit, 50))).all()
 
 
 def find_department_by_code(session: Session, department_code: str) -> Optional[Department]:

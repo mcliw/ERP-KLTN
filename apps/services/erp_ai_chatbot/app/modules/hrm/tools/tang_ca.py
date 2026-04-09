@@ -5,8 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
-from app.modules.hrm.models import OTRequest
-from app.modules.hrm.models import TimesheetDaily, Employee
+from app.modules.hrm.models import Timesheet, Employee
 from datetime import datetime, date as date_type
 from typing import Optional
 
@@ -100,16 +99,17 @@ def ot_theo_ngay(session: Session, employee_id: int | None = None, employee_code
         emp = session.query(Employee).filter(Employee.employee_code == employee_code).first()
         if not emp:
             return can_lam_ro(f"Không tìm thấy nhân viên với mã {employee_code}.", [])
-        employee_id = int(emp.id)
+        employee_id = int(getattr(emp, "employee_id", None) or getattr(emp, "id", None))
 
     target_date = _parse_date(date) if date else _today_local()
     if not target_date:
         return can_lam_ro("Ngày không hợp lệ. Dùng YYYY-MM-DD hoặc DD/MM/YYYY.", [])
 
 
+    date_col = getattr(Timesheet, "work_date", None) or getattr(Timesheet, "date", None)
     r = (
-        session.query(TimesheetDaily)
-        .filter(TimesheetDaily.employee_id == int(employee_id), TimesheetDaily.date == target_date)
+        session.query(Timesheet)
+        .filter(Timesheet.employee_id == int(employee_id), date_col == target_date)
         .first()
     )
 
@@ -118,7 +118,9 @@ def ot_theo_ngay(session: Session, employee_id: int | None = None, employee_code
         data = {"date": target_date.isoformat(), "has_ot": False, "ot_hours": 0}
         return ok(data, f"Chưa có dữ liệu chấm công ngày {target_date:%d/%m/%Y}, nên chưa xác định được OT.")
 
-    ot_hours = float(getattr(r, "ot_hours", 0) or 0)
+    # DB mới không có cột OT riêng. Ước tính: OT = max(0, working_hours - 8)
+    wh = float(getattr(r, "working_hours", 0) or 0)
+    ot_hours = max(0.0, wh - 8.0)
     data = {"date": target_date.isoformat(), "has_ot": ot_hours > 0, "ot_hours": ot_hours}
 
     if ot_hours > 0:
@@ -127,14 +129,15 @@ def ot_theo_ngay(session: Session, employee_id: int | None = None, employee_code
 
 
 class DanhSachDonTangCaArgs(BaseModel):
+    """DB mới không có bảng đơn tăng ca. Tool này liệt kê các ngày có OT (ước tính từ timesheets.working_hours)."""
     employee_id: int = Field(..., ge=1)
-    status: str | None = Field(None, description="PENDING|APPROVED|REJECTED")
     month: int | None = Field(None, ge=1, le=12)
     year: int | None = Field(None, ge=2000, le=2100)
     limit: int = Field(20, ge=1, le=100)
 
 
 class ChiTietDonTangCaArgs(BaseModel):
+    """Diễn giải ot_request_id như timesheet_id trong DB mới."""
     ot_request_id: int = Field(..., ge=1)
 
 
@@ -149,97 +152,116 @@ class DonTangCaChoDuyetArgs(BaseModel):
     limit: int = Field(20, ge=1, le=100)
 
 
-def danh_sach_don_tang_ca(session: Session, employee_id: int, status: str | None = None, month: int | None = None, year: int | None = None, limit: int = 20):
-    q = session.query(OTRequest).filter(OTRequest.employee_id == int(employee_id))
-    if status:
-        q = q.filter(OTRequest.status == status)
+def danh_sach_don_tang_ca(session: Session, employee_id: int, month: int | None = None, year: int | None = None, limit: int = 20):
+    date_col = getattr(Timesheet, "work_date", None) or getattr(Timesheet, "date", None)
+    q = session.query(Timesheet).filter(Timesheet.employee_id == int(employee_id))
     if month:
-        q = q.filter(func.extract("month", OTRequest.ot_date) == int(month))
+        q = q.filter(func.extract("month", date_col) == int(month))
     if year:
-        q = q.filter(func.extract("year", OTRequest.ot_date) == int(year))
+        q = q.filter(func.extract("year", date_col) == int(year))
 
-    rows = q.order_by(OTRequest.ot_date.desc()).limit(limit).all()
-    data = [{
-        "ot_request_id": r.id,
-        "ot_date": str(r.ot_date) if r.ot_date else None,
-        "from_time": str(r.from_time) if r.from_time else None,
-        "to_time": str(r.to_time) if r.to_time else None,
-        "total_hours": r.total_hours,
-        "ot_type": r.ot_type,
-        "status": r.status,
-        "approver_id": r.approver_id,
-        "reason": r.reason,
-    } for r in rows]
-    return ok(data, "Danh sách đơn tăng ca.")
+    q = q.order_by(date_col.desc())
+    rows = q.limit(int(limit)).all()
+
+    data = []
+    for r in rows:
+        wh = float(getattr(r, "working_hours", 0) or 0)
+        ot_hours = max(0.0, wh - 8.0)
+        if ot_hours <= 0:
+            continue
+        data.append({
+            "ot_request_id": getattr(r, "timesheet_id", None) or getattr(r, "id", None),
+            "ot_date": str(getattr(r, "work_date", None) or getattr(r, "date", None)),
+            "total_hours": ot_hours,
+            "working_hours": wh,
+            "status": getattr(r, "status", None),
+            "note": getattr(r, "note", None),
+        })
+
+    return ok(data, "Danh sách ngày có tăng ca (ước tính từ timesheets.working_hours).")
 
 
 def chi_tiet_don_tang_ca(session: Session, ot_request_id: int):
-    r = session.query(OTRequest).filter(OTRequest.id == int(ot_request_id)).first()
+    # DB mới không có bảng OTRequest; diễn giải ot_request_id = timesheet_id
+    id_col = getattr(Timesheet, "timesheet_id", None) or getattr(Timesheet, "id", None)
+    r = session.query(Timesheet).filter(id_col == int(ot_request_id)).first()
     if not r:
-        return can_lam_ro("Không tìm thấy đơn tăng ca theo id.", [])
+        return can_lam_ro("Không tìm thấy bản ghi timesheet theo id (dùng thay cho OT request).", [])
+
+    wh = float(getattr(r, "working_hours", 0) or 0)
+    ot_hours = max(0.0, wh - 8.0)
+
     data = {
-        "ot_request_id": r.id,
-        "employee_id": r.employee_id,
-        "ot_date": str(r.ot_date) if r.ot_date else None,
-        "from_time": str(r.from_time) if r.from_time else None,
-        "to_time": str(r.to_time) if r.to_time else None,
-        "total_hours": r.total_hours,
-        "ot_type": r.ot_type,
-        "reason": r.reason,
-        "status": r.status,
-        "approver_id": r.approver_id,
+        "ot_request_id": int(ot_request_id),
+        "employee_id": getattr(r, "employee_id", None),
+        "ot_date": str(getattr(r, "work_date", None) or getattr(r, "date", None)),
+        "working_hours": wh,
+        "total_hours": ot_hours,
+        "status": getattr(r, "status", None),
+        "check_in_time": str(getattr(r, "check_in_time", None)) if getattr(r, "check_in_time", None) else None,
+        "check_out_time": str(getattr(r, "check_out_time", None)) if getattr(r, "check_out_time", None) else None,
+        "note": getattr(r, "note", None),
     }
-    return ok(data, "Chi tiết đơn tăng ca.")
+    return ok(data, "Chi tiết tăng ca (ước tính từ timesheet).")
 
 
 def tong_hop_tang_ca_thang(session: Session, employee_id: int, month: int, year: int):
+    date_col = getattr(Timesheet, "work_date", None) or getattr(Timesheet, "date", None)
     rows = (
-        session.query(
-            OTRequest.ot_type,
-            func.sum(func.coalesce(OTRequest.total_hours, 0)).label("hours"),
-            func.count(OTRequest.id).label("count"),
-        )
+        session.query(Timesheet)
         .filter(
-            OTRequest.employee_id == int(employee_id),
-            OTRequest.status == "APPROVED",
-            func.extract("month", OTRequest.ot_date) == int(month),
-            func.extract("year", OTRequest.ot_date) == int(year),
+            Timesheet.employee_id == int(employee_id),
+            func.extract("month", date_col) == int(month),
+            func.extract("year", date_col) == int(year),
         )
-        .group_by(OTRequest.ot_type)
         .all()
     )
-    data = [{
-        "ot_type": r.ot_type,
-        "approved_total_hours": float(r.hours or 0),
-        "approved_count": int(r.count or 0),
-    } for r in rows]
-    return ok({"month": month, "year": year, "breakdown": data}, "Tổng hợp tăng ca đã duyệt theo tháng.")
+
+    total_ot = 0.0
+    count_days = 0
+    for r in rows:
+        wh = float(getattr(r, "working_hours", 0) or 0)
+        ot_hours = max(0.0, wh - 8.0)
+        if ot_hours > 0:
+            total_ot += ot_hours
+            count_days += 1
+
+    return ok(
+        {
+            "month": int(month),
+            "year": int(year),
+            "approved_total_hours": float(total_ot),
+            "ot_days": int(count_days),
+            "note": "DB hiện tại không có bảng duyệt OT; OT được ước tính từ working_hours > 8.",
+        },
+        "Tổng hợp tăng ca theo tháng (ước tính).",
+    )
 
 
 def don_tang_ca_cho_duyet(session: Session, approver_id: int, limit: int = 20):
-    rows = (
-        session.query(OTRequest)
-        .filter(OTRequest.status == "PENDING", OTRequest.approver_id == int(approver_id))
-        .order_by(OTRequest.ot_date.asc())
-        .limit(limit)
-        .all()
+    # DB mới không có quy trình duyệt tăng ca riêng.
+    return ok(
+        [],
+        "DB HRM hiện tại không có bảng đơn tăng ca/duyệt tăng ca. Tool trả về rỗng để LLM biết nghiệp vụ này chưa được mô hình hoá.",
     )
-    data = [{
-        "ot_request_id": r.id,
-        "employee_id": r.employee_id,
-        "ot_date": str(r.ot_date) if r.ot_date else None,
-        "total_hours": r.total_hours,
-        "ot_type": r.ot_type,
-        "reason": r.reason,
-        "status": r.status,
-    } for r in rows]
-    return ok(data, "Danh sách đơn tăng ca đang chờ duyệt.")
 
 
 TANG_CA_TOOLS = [
     ToolSpec("danh_sach_don_tang_ca", "Danh sách đơn tăng ca của nhân viên.", DanhSachDonTangCaArgs, danh_sach_don_tang_ca, "hrm"),
     ToolSpec("chi_tiet_don_tang_ca", "Chi tiết một đơn tăng ca.", ChiTietDonTangCaArgs, chi_tiet_don_tang_ca, "hrm"),
-    ToolSpec("tong_hop_tang_ca_thang", "Tổng hợp OT đã duyệt theo tháng.", TongHopTangCaThangArgs, tong_hop_tang_ca_thang, "hrm"),
-    ToolSpec("ot_theo_ngay", "Tra cứu OT theo ngày (từ TimesheetDaily.ot_hours).", TangCaTheoNgayArgs, ot_theo_ngay, "hrm"),
+    ToolSpec(
+        "tong_hop_tang_ca_thang",
+        "Tổng hợp OT theo tháng (ước tính từ timesheets.working_hours).",
+        TongHopTangCaThangArgs,
+        tong_hop_tang_ca_thang,
+        "hrm",
+    ),
+    ToolSpec(
+        "ot_theo_ngay",
+        "Tra cứu OT theo ngày (ước tính từ timesheets.working_hours).",
+        TangCaTheoNgayArgs,
+        ot_theo_ngay,
+        "hrm",
+    ),
     ToolSpec("don_tang_ca_cho_duyet", "Danh sách đơn tăng ca chờ duyệt theo approver_id.", DonTangCaChoDuyetArgs, don_tang_ca_cho_duyet, "hrm"),
 ]

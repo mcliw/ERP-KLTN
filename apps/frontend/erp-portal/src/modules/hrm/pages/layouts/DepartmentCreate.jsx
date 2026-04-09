@@ -1,60 +1,37 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/DepartmentCreate.jsx
 
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
 import DepartmentForm from "../../components/layouts/DepartmentForm";
 import { departmentService } from "../../services/department.service";
-
-/* =========================
- * Component
- * ========================= */
+import { useCreateResource } from "../../../../shared/hooks/useCreateResource";
+import PageContainer from "../../../../shared/components/PageContainer";
 
 export default function DepartmentCreate() {
-  const navigate = useNavigate();
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, handleSubmit, handleCancel } = useCreateResource(
+    (data) => departmentService.create(data),
+    "/hrm/phong-ban",
+    {
+      resourceName: "phòng ban",
 
-  /* =========================
-   * Handlers
-   * ========================= */
+      // nếu hook của bạn vẫn dùng errorMessages để map lỗi trùng code
+      errorMessages: {
+        code: "Mã phòng ban đã tồn tại",
+      },
 
-  const handleCreate = async (formData) => {
-    if (submitting) return;
-
-    setSubmitting(true);
-
-    const payload = {
-      ...formData,
-    };
-
-    try {
-      await departmentService.create(payload);
-
-      navigate("/hrm/phong-ban");
-    } catch (err) {
-      if (err?.status === 409 && err?.field === "code") {
-        alert("Mã phòng ban đã tồn tại");
-      } else if (err?.status === 400) {
-        alert(err.message || "Dữ liệu không hợp lệ");
-      } else {
-        alert("Có lỗi khi tạo phòng ban");
-      }
-    } finally {
-      setSubmitting(false);
+      onSuccess: () => {
+        console.log("Đã tạo xong phòng ban mới");
+      },
     }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
+  );
 
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer title="Thêm mới phòng ban">
       <DepartmentForm
         mode="create"
-        onSubmit={handleCreate}
-        onCancel={() => navigate(-1)}
+        onSubmit={handleSubmit}
+        onCancel={handleCancel}
         disabled={submitting}
+        checkCodeExists={departmentService.checkCodeExists?.bind(departmentService)}
       />
-    </div>
+    </PageContainer>
   );
 }

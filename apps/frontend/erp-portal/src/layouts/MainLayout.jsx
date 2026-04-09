@@ -24,7 +24,7 @@ export default function MainLayout() {
       <main
         style={{
           ...styles.content,
-          marginLeft: collapsed ? 64 : 220,
+          marginLeft: collapsed ? 64 : 270,
           flex: 1,
         }}
       >

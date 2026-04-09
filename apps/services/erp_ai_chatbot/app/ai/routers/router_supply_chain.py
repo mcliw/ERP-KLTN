@@ -1,108 +1,48 @@
+# apps/services/erp_ai_chatbot/app/ai/routers/router_supply_chain.py
 from __future__ import annotations
 
-import re
 from app.ai.plan_schema import Plan
-from app.ai.routers.common import gemini_fallback, build_system_instruction
+from app.ai.routers.common import gemini_fallback
+
 
 def plan_route_supply_chain(module: str, message: str, auth: dict) -> Plan:
     msg = (message or "").strip()
     low = msg.lower()
 
-    # # PO code
-    # has_po_code = re.search(r"\bpo-\d+\b", msg, re.IGNORECASE)
+    extra_hints = [
+        # Nguyên tắc chung (giống HRM)
+        "QUY TẮC: Nếu thiếu required args của tool => needs_clarification=true và steps=[] (không gọi tool).",
+        "KHÔNG bịa mã chứng từ/code. Không tự inject auth.",
 
-    # is_po_question = any(k in low for k in ["po", "đơn mua", "don mua", "đơn đặt mua", "don dat mua", "purchase order"])
-    # is_deadline = any(k in low for k in [
-    #     "sắp đến hạn", "sap den han", "chuẩn bị đến hạn", "chuan bi den han",
-    #     "đến hạn giao", "den han giao", "gần đến hạn", "gan den han",
-    #     "etd sớm nhất", "etd som nhat", "giao sớm nhất", "giao som nhat",
-    #     "đến hạn giao nhất", "den han giao nhat",
-    # ])
+        # Nhận diện code thường gặp
+        "NHẬN DIỆN CODE: PO thường dạng 'PO-...' ; GR dạng 'GR-...' ; GI dạng 'GI-...' ; SKU dạng chữ+số có thể có '-'",
+        "Nếu user nói 'phiếu nhập/GR' nhưng không đưa GR code => dùng gr_gan_day(days, limit) để lấy danh sách gần đây rồi chain sang chi_tiet_phieu_nhap(gr_code).",
+        "Nếu user nói 'phiếu xuất/GI' nhưng không đưa GI code => ưu tiên hỏi lại hoặc dùng danh sách theo loại nếu user có nói issue_type.",
 
-    # wants_progress = any(k in low for k in ["tiến độ", "tien do", "nhập đến đâu", "nhap den dau", "%", "bao nhiêu %", "bao nhieu %"])
-    # wants_missing = any(k in low for k in ["còn thiếu", "con thieu", "thiếu hàng", "thieu hang", "thiếu sku", "thieu sku"])
+        # Kho tri thức
+        "Chính sách/hướng dẫn/FAQ: tra_cuu_kho_tri_thuc(cau_hoi, top_k).",
 
-    # # deadline + tiến độ/thiếu, không có mã PO
-    # if is_po_question and is_deadline and (wants_progress or wants_missing) and not has_po_code:
-    #     return Plan(
-    #         module=module,
-    #         intent="po_sap_den_han_va_tien_do_nhap",
-    #         needs_clarification=False,
-    #         clarifying_question=None,
-    #         steps=[
-    #             {"id": "s1", "tool": "tim_po_sap_den_han_giao_nhat", "args": {}, "save_as": None},
-    #             {"id": "s2", "tool": "tien_do_nhap_po", "args": {"po_code": "{{s1.data.po_code}}"}, "save_as": None},
-    #         ],
-    #         final_response_template=None
-    #     )
+        # Nhập kho / mua hàng
+        "Phiếu nhập gần đây: gr_gan_day(days, limit).",
+        "GR theo PO: danh_sach_gr_theo_po(po_code) hoặc doi_chieu_so_luong_po_va_gr(po_code).",
+        "Tiến độ nhập PO: tien_do_nhap_po(po_code).",
+        "PO sắp đến hạn: tim_po_sap_den_han_giao_nhat() (status PO: DRAFT/SENT/PARTIAL_RECEIVED/RECEIVED/CANCELLED/COMPLETED).",
 
-    # # có mã PO + hỏi tiến độ/thiếu
-    # if has_po_code and (wants_progress or wants_missing):
-    #     po_code = has_po_code.group(0).upper()
-    #     return Plan(
-    #         module=module,
-    #         intent="tien_do_nhap_po",
-    #         needs_clarification=False,
-    #         clarifying_question=None,
-    #         steps=[{"id": "s1", "tool": "tien_do_nhap_po", "args": {"po_code": po_code}, "save_as": None}],
-    #         final_response_template=None
-    #     )
+        # Xuất kho
+        "Xuất kho GI: tra_cuu_trang_thai_phieu_xuat(gi_code), chi_tiet_phieu_xuat(gi_code), danh_sach_gi_theo_loai(issue_type=SALES|MANUFACTURING|TRANSFER|DISPOSAL|ADJUSTMENT).",
+    ]
 
-    # # deadline + hỏi trạng thái
-    # if is_po_question and is_deadline and not has_po_code:
-    #     return Plan(
-    #         module=module,
-    #         intent="po_sap_den_han_giao_nhat",
-    #         needs_clarification=False,
-    #         clarifying_question=None,
-    #         steps=[
-    #             {"id": "s1", "tool": "tim_po_sap_den_han_giao_nhat", "args": {}, "save_as": None},
-    #             {"id": "s2", "tool": "tra_cuu_trang_thai_don_mua", "args": {"po_code": "{{s1.data.po_code}}"}, "save_as": None},
-    #         ],
-    #         final_response_template=None
-    #     )
-
-    # # GR gần đây
-    # is_gr_recent = (("phiếu nhập" in low or "phieu nhap" in low or "gr" in low) and any(k in low for k in ["gần đây", "gan day", "mới nhất", "moi nhat", "recent"]))
-    # mentions_supplier = any(k in low for k in ["ncc", "nhà cung cấp", "nha cung cap", "sup"])
-    # mentions_po = re.search(r"\bpo-\d+\b", msg, re.IGNORECASE) is not None
-
-    # if is_gr_recent and (not mentions_supplier) and (not mentions_po):
-    #     m = re.search(r"(\d+)", low)
-    #     limit = int(m.group(1)) if m else 5
-    #     limit = max(1, min(limit, 20))
-
-    #     days = 7
-    #     if "hôm nay" in low or "hom nay" in low:
-    #         days = 1
-    #     elif "tuần" in low or "tuan" in low:
-    #         days = 7
-    #     elif "tháng" in low or "thang" in low:
-    #         days = 30
-
-    #     return Plan(
-    #         module=module,
-    #         intent="gr_gan_day",
-    #         needs_clarification=False,
-    #         clarifying_question=None,
-    #         steps=[{"id": "s1", "tool": "gr_gan_day", "args": {"days": days, "limit": limit}, "save_as": None}],
-    #         final_response_template=None
-    #     )
-
-    # RAG
-    # if should_use_rag(msg):
-    #     return Plan(
-    #         module=module,
-    #         intent="rag",
-    #         needs_clarification=False,
-    #         clarifying_question=None,
-    #         steps=[{"id": "s1", "tool": "tra_cuu_kho_tri_thuc", "args": {"cau_hoi": msg, "top_k": 4}, "save_as": None}],
-    #         final_response_template=None,
-    #     )
+    # (Optional) thêm 1–2 hint theo keyword để LLM bắt nhanh hơn, nhưng không tự tạo plan rule-based
+    if "hướng dẫn" in low or "chính sách" in low or "faq" in low:
+        extra_hints.insert(0, "Nếu câu hỏi là hỏi quy trình/chính sách => ưu tiên tra_cuu_kho_tri_thuc.")
+    if "tiến độ" in low and "po" in low:
+        extra_hints.insert(0, "Nếu user hỏi tiến độ nhập PO => cần po_code; thiếu po_code thì hỏi lại.")
 
     return gemini_fallback(module, low, auth, extra_hints=[
-        "Chính sách/hướng dẫn/FAQ: tra_cuu_kho_tri_thuc(cau_hoi, top_k).",
-        "Phiếu nhập gần đây: gr_gan_day(days, limit).",
-        "PO sắp đến hạn: tim_po_sap_den_han_giao_nhat() + tra_cuu_trang_thai_don_mua(po_code).",
-        "Tiến độ nhập PO: tien_do_nhap_po(po_code).",
-    ])
+    "Chính sách/hướng dẫn/FAQ: tra_cuu_kho_tri_thuc(cau_hoi, top_k).",
+    "Phiếu nhập gần đây: gr_gan_day(days, limit).",
+    "GR theo PO: danh_sach_gr_theo_po(po_code) hoặc doi_chieu_so_luong_po_va_gr(po_code).",
+    "PO sắp đến hạn: tim_po_sap_den_han_giao_nhat() (status PO dùng enum: DRAFT/SENT/PARTIAL_RECEIVED/RECEIVED/CANCELLED/COMPLETED).",
+    "Tiến độ nhập PO: tien_do_nhap_po(po_code).",
+    "Xuất kho GI: tra_cuu_trang_thai_phieu_xuat(gi_code), chi_tiet_phieu_xuat(gi_code), danh_sach_gi_theo_loai(issue_type=SALES|MANUFACTURING|TRANSFER|DISPOSAL|ADJUSTMENT).",
+])

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.tooling import ToolSpec, ok
 from app.modules.sale_crm.models import (
-    Order, OrderDetail, ProductVariant, Product, Brand
+    Order, OrderDetail, ProductVariant, Product, Brand, CateBrandLink
 )
 
 class TopBrandArgs(BaseModel):
@@ -35,7 +35,8 @@ def hang_mua_nhieu_nhat(
             qty_expr,
             amt_expr,
         )
-        .join(Product, Product.brand_id == Brand.id)
+        .join(CateBrandLink, CateBrandLink.brand_id == Brand.id)
+        .join(Product, Product.cate_brand_link_id == CateBrandLink.id)
         .join(ProductVariant, ProductVariant.product_id == Product.id)
         .join(OrderDetail, OrderDetail.product_variant_id == ProductVariant.id)
         .join(Order, Order.id == OrderDetail.order_id)

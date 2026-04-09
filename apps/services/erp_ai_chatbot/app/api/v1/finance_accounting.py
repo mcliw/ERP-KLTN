@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
+from uuid import UUID
 
 from apps.services.erp_ai_chatbot.app.ai.executor.executor_finance_accounting import execute_chat_finance_accounting
 
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/finance_accounting")
 
 class ChatRequest(BaseModel):
     module: str = "finance_accounting"
-    user_id: int | None = None
+    user_id: UUID | None = None
     role: str | None = None
     message: str
     debug: bool = False

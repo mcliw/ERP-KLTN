@@ -1,3 +1,304 @@
+erp
 pnpm install
 pnpm --filter erp-portal add zod
 npm install recharts
+npm install xlsx file-saver
+
+website
+npm install zustand clsx tailwind-merge lucide-react axios
+npm install lucide-react
+npm install
+npm install zustand 
+npm install sonner 
+
+
+services:
+  # --- INFRASTRUCTURE: REVERSE PROXY (GATEKEEPER) ---
+  nginx:
+    build:
+      context: ./infra/nginx
+    image: arsneonci/erp-nginx:latest
+    container_name: erp-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - gateway-service
+    networks:
+      - erp-network
+
+  # --- FRONTEND APPLICATIONS ---
+  
+  # 1. ERP Portal (React Vite - Internal postgres)
+  erp-portal:
+    build:
+      context: ./apps/frontend/erp-portal
+    image: arsneonci/erp-portal:latest
+    container_name: erp-portal
+    expose:
+      - "80" # Chạy Nginx nội bộ container
+    networks:
+      - erp-network
+
+  # 2. Ecommerce Store (NextJS - Customer Facing)
+  ecommerce-store:
+    build:
+      context: ./apps/frontend/ecommerce-store
+    image: arsneonci/ecommerce-store:latest
+    container_name: ecommerce-store
+    expose:
+      - "3000" # Chạy Node server
+    environment:
+      - NEXT_PUBLIC_API_URL=https://ldgcompany.local/api # Gọi API qua Nginx chính
+    networks:
+      - erp-network
+
+  # --- API GATEWAY (JAVA) ---
+  gateway-service:
+    build: 
+      context: ./apps/gateway
+    env_file:
+      - .env
+    image: arsneonci/gateway-service:latest
+    container_name: gateway-service
+    expose:
+      - "8080"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - IDENTITY_SERVICE_URL=http://identity-service:8080
+      - HRM_SERVICE_URL=http://hrm-service:8080
+      - SUPPLY_CHAIN_URL=http://supply-chain-service:8080
+      - SALES_SERVICE_URL=http://sales-service:8080
+      - ACCOUNTING_SERVICE_URL=http://accounting-service:8080
+      - AI_SERVICE_URL=http://ai-service:8000
+    depends_on:
+      - identity-service
+      - hrm-service
+      - supply-chain-service
+#      - ai-service
+      - sales-service
+      - accounting-service
+    networks:
+      - erp-network
+
+  # --- MICROSERVICES & DATABASES ---
+
+  # 1. Identity Service (Java)
+  identity-service:
+    build: 
+      context: ./apps/identity
+    env_file:
+    - .env
+    image: arsneonci/identity-service:latest
+    container_name: identity-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-identity:5432/identity_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+      - JWT_SECRET=${JWT_SECRET}
+      - SERVER_SERVLET_CONTEXT_PATH=/identity
+      - SPRING_GRAPHQL_PATH=/graphql
+      - SERVER_PORT=8080
+    depends_on:
+      - db-identity
+    networks:
+      - erp-network
+
+  db-identity:
+    image: postgres:15-alpine
+    container_name: db-identity
+    environment:
+      - POSTGRES_DB=identity_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 2. HRM Service (Java)
+  hrm-service:
+    build: 
+      context: ./apps/services/hrm
+    env_file:
+    - .env
+    image: arsneonci/hrm-service:latest
+    container_name: hrm-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-hrm:5432/hrm_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-hrm
+    networks:
+      - erp-network
+
+  db-hrm:
+    image: postgres:15-alpine
+    container_name: db-hrm
+    environment:
+      - POSTGRES_DB=hrm_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - hrm-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 3. Supply Chain Service
+  supply-chain-service:
+    build: 
+      context: ./apps/services/supply-chain
+    env_file:
+    - .env
+    image: arsneonci/supply-chain-service:latest
+    container_name: supply-chain-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-supply:5432/supply_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-supply
+    networks:
+      - erp-network
+
+  db-supply:
+    image: postgres:15-alpine
+    container_name: db-supply
+    environment:
+      - POSTGRES_DB=supply_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - supply-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+# 4. Sales CRM Service (Java)
+  sales-service:
+    build: 
+      context: ./apps/services/sales
+    image: arsneonci/sales-service:latest
+    container_name: sales-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-sales:5432/sales_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-sales
+    networks:
+      - erp-network
+
+  db-sales:
+    image: postgres:15-alpine
+    container_name: db-sales
+    environment:
+      - POSTGRES_DB=sales_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - sales-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  # 5. Accounting Service (Java)
+  accounting-service:
+    build: 
+      context: ./apps/services/accounting
+    image: arsneonci/accounting-service:latest
+    container_name: accounting-service
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-accounting:5432/accounting_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=DEADlift12Hard
+    depends_on:
+      - db-accounting
+    networks:
+      - erp-network
+
+  db-accounting:
+    image: postgres:15-alpine
+    container_name: db-accounting
+    environment:
+      - POSTGRES_DB=accounting_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=DEADlift12Hard
+    volumes:
+      - accounting-data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+  # 6. AI Assistant Service (Python FastAPI)
+#  ai-service:
+#    build: 
+#      context: ./apps/services/erp_ai_chatbot
+#    image: arsneonci/ai-service:latest
+#    container_name: ai-service
+#    environment:
+#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-ai:5432/ai_db
+#    depends_on:
+#      - db-ai
+#    networks:
+#      - erp-network
+#  db-ai:
+#    image: postgres:15-alpine
+#    container_name: db-ai
+#    environment:
+#      - POSTGRES_DB=ai_db
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=DEADlift12Hard
+#    volumes:
+#      - ai-data:/var/lib/postgresql/data
+#    networks:
+#      - erp-network
+
+  # 6. Face Recognition Service (Python FastAPI)
+#  face-service:
+#      context: ./apps/services/face-recognition-attendance-system
+#    image: arsneonci/face-service:latest
+#    container_name: face-service
+#    environment:
+#      # Kết nối database PostgreSQL
+#      - DATABASE_URL=postgresql://postgres:DEADlift12Hard@db-hrm:5432/hrm_db
+#      # Cấu hình kết nối ChromaDB (Server mode)
+#      - CHROMA_DB_HOST=chromadb
+#      - CHROMA_DB_PORT=8000
+#    depends_on:
+#      - db-hrm
+#      - chromadb # Chờ ChromaDB khởi động xong
+#    networks:
+#      - erp-network
+
+#  chromadb:
+#    image: chromadb/chroma:latest
+#    container_name: chromadb_container
+#    volumes:
+      # Mount volume để không bị mất dữ liệu khuôn mặt khi restart
+#      - chroma-data:/chroma/chroma
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - IS_PERSISTENT=TRUE
+#      - ANONYMIZED_TELEMETRY=FALSE
+#    networks:
+#      - erp-network
+
+networks:
+  erp-network:
+    driver: bridge
+
+volumes:
+  identity-data:
+  hrm-data:
+  supply-data:
+  ai-data:
+  sales-data:
+  accounting-data:
+  chroma-data:
+  
+mkdir -p services
+mkdir -p repository
+mkdir -p entity
+mkdir -p controller
+mkdir -p config
+mkdir -p dto

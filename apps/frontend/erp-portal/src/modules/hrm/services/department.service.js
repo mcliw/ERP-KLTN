@@ -1,306 +1,221 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/department.service.js
-
-import { employeeService } from "./employee.service";
+import { axiosClient } from "../../../services/axiosClient";
 import { positionService } from "./position.service";
-
-const KEY = "DEPARTMENTS";
+import { employeeService } from "./employee.service";
 
 /* =========================
- * Utils & Helpers
+ * Config & Constants
  * ========================= */
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/departments";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-const storage = {
-  get() {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
-  },
-  set(data) {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  },
+const STATUS = {
+  ACTIVE: "Hoạt động",
+  INACTIVE: "Ngưng hoạt động",
 };
 
-const normalizeCode = (code) =>
-  String(code || "").trim().toUpperCase();
-
-const createHttpError = (status, message, field) => {
-  const err = new Error(message);
-  err.status = status;
-  if (field) err.field = field;
-  return err;
+const ERROR_MSGS = {
+  FETCH_FAILED: "Lỗi kết nối đến máy chủ",
+  NOT_FOUND: "Không tìm thấy phòng ban",
+  EXISTS: "Mã phòng ban đã tồn tại",
+  HAS_EMPLOYEES: "Không thể ngưng hoạt động phòng ban vì vẫn còn nhân viên đang làm việc",
+  UPDATE_FAILED: "Không thể cập nhật dữ liệu",
 };
 
 /* =========================
- * Enrich helpers
+ * Helpers
  * ========================= */
+const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 
-/**
- * Enrich phòng ban:
- * - Số lượng nhân viên đang làm việc
- * - Tên trưởng phòng (nếu có)
- */
-async function enrichDepartment(department) {
-  if (!department) return null;
+const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-  const employees = await employeeService.getAll();
-  const positions = await positionService.getAll();
-
-  const deptCode = normalizeCode(department.code);
-
-  const activeEmployees = employees.filter(
-    (e) =>
-      !e.deletedAt &&
-      e.status === "Đang làm việc" &&
-      normalizeCode(e.department) === deptCode
+/* =========================
+ * Internal Logic (Enrich Data)
+ * ========================= */
+// Logic tính toán số lượng nhân viên và chức vụ trong phòng ban
+const enrichDepartmentData = (department, allEmployees, allPositions) => {
+  const deptCode = department.code;
+  
+  const deptEmployees = allEmployees.filter(e => 
+    e.department === deptCode && !isSoftDeleted(e.deletedAt)
   );
-
-  const manager = activeEmployees.find((e) => {
-    const pos = positions.find(
-      (p) =>
-        normalizeCode(p.code) ===
-        normalizeCode(e.position)
-    );
-    return pos?.name === "Trưởng phòng";
-  });
+  
+  const deptPositions = allPositions.filter(p => p.department === deptCode);
 
   return {
     ...department,
-    employeeCount: activeEmployees.length,
-    managerName: manager?.name || null,
+    employeeCount: deptEmployees.length,
+    positionCount: deptPositions.length,
+    managerName: department.manager ? (allEmployees.find(e => e.code === department.manager)?.name || department.manager) : "Chưa cập nhật"
   };
-}
-
-async function hasActiveEmployees(departmentCode) {
-  const employees = await employeeService.getAll();
-  const code = normalizeCode(departmentCode);
-
-  return employees.some(
-    (e) =>
-      !e.deletedAt &&
-      e.status === "Đang làm việc" &&
-      normalizeCode(e.department) === code
-  );
-}
+};
 
 /* =========================
- * Department Service
+ * Business Validators
  * ========================= */
-
-export const departmentService = {
-  /**
-   * Lấy danh sách phòng ban
-   */
-  async getAll({ includeDeleted = false } = {}) {
-    await delay();
-
-    const list = storage.get();
-    const filtered = includeDeleted
-      ? list
-      : list.filter((d) => !d.deletedAt);
-
-    return Promise.all(
-      filtered.map(enrichDepartment)
+const validators = {
+  async checkHasActiveEmployees(deptCode) {
+    const employees = await employeeService.getAll();
+    const activeInDept = employees.filter(e => 
+      e.department === deptCode && 
+      e.status === "Đang làm việc" && 
+      !isSoftDeleted(e.deletedAt)
     );
+    
+    if (activeInDept.length > 0) {
+      throw new Error(ERROR_MSGS.HAS_EMPLOYEES);
+    }
+  }
+};
+
+/* =========================
+ * Main Service
+ * ========================= */
+export const departmentService = {
+  async getAll({ includeDeleted = false, enrich = true } = {}) {
+    try {
+      // Sử dụng axiosClient đã cấu hình interceptor để lấy data trực tiếp
+      const departments = await axiosClient.get(API_URL);
+
+      let result = Array.isArray(departments) ? departments : [];
+
+      if (!includeDeleted) {
+        result = result.filter((d) => !isSoftDeleted(d.deletedAt));
+      }
+
+      if (enrich) {
+        // [FIX]: Gọi positionService với enrich: false
+        const [employees, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          positionService.getAll({ includeDeleted: true, enrich: false }) 
+        ]);
+        
+        result = result.map(d => enrichDepartmentData(d, employees, positions));
+      }
+
+      return result.sort((a, b) => normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
+    } catch (error) {
+      console.error(ERROR_MSGS.FETCH_FAILED, error);
+      return [];
+    }
   },
 
-  /**
-   * Lấy phòng ban theo mã
-   */
-  async getByCode(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const found = storage
-      .get()
-      .find((d) => normalizeCode(d.code) === c);
-
-    return found
-      ? enrichDepartment(found)
-      : null;
+  async getById(id) {
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
   },
 
-  /**
-   * Kiểm tra mã phòng ban đã tồn tại
-   */
+  async getByCode(code, { enrich = true } = {}) {
+    try {
+      const targetCode = normalizeCode(code);
+      const data = await axiosClient.get(API_URL, {
+        params: { code: targetCode }
+      });
+      
+      const dept = Array.isArray(data) && data.length > 0 ? data[0] : null;
+      
+      if (dept && enrich) {
+        const [employees, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          positionService.getAll({ includeDeleted: true })
+        ]);
+        return enrichDepartmentData(dept, employees, positions);
+      }
+      
+      return dept;
+    } catch {
+      return null;
+    }
+  },
+
   async checkCodeExists(code) {
-    await delay(200);
-
-    const c = normalizeCode(code);
-    if (!c) return false;
-
-    return storage
-      .get()
-      .some((d) => normalizeCode(d.code) === c);
+    const dept = await this.getByCode(code, { enrich: false });
+    return !!dept;
   },
 
-  /**
-   * Tạo mới phòng ban
-   */
   async create(data) {
-    await delay();
-
-    const list = storage.get();
     const code = normalizeCode(data?.code);
+    
+    const exists = await this.checkCodeExists(code);
+    if (exists) throw new Error(ERROR_MSGS.EXISTS);
 
-    if (!code) {
-      throw createHttpError(
-        400,
-        "Mã phòng ban bắt buộc",
-        "code"
-      );
-    }
-
-    if (
-      list.some(
-        (d) => normalizeCode(d.code) === code
-      )
-    ) {
-      throw createHttpError(
-        409,
-        "Mã phòng ban đã tồn tại",
-        "code"
-      );
-    }
-
-    const department = {
+    const newDepartment = {
       ...data,
       code,
-      status: data?.status ?? "Hoạt động",
+      status: data.status || STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    storage.set([...list, department]);
-    return department;
+    return await axiosClient.post(API_URL, newDepartment);
   },
 
-  /**
-   * Cập nhật phòng ban (không cho đổi mã)
-   */
   async update(code, data) {
-    await delay();
-
-    const list = storage.get();
     const targetCode = normalizeCode(code);
+    
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (d) => normalizeCode(d.code) === targetCode
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy phòng ban",
-        "code"
-      );
+    // Nếu chuyển sang Ngưng hoạt động, cần kiểm tra nhân viên
+    if (data.status === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
+      await validators.checkHasActiveEmployees(targetCode);
     }
 
-    const updated = {
-      ...list[index],
+    const updatedDepartment = {
+      ...current,
       ...data,
-      code: list[index].code, // khóa mã
+      code: targetCode,
       updatedAt: new Date().toISOString(),
     };
 
-    list[index] = updated;
-    storage.set(list);
-
-    return updated;
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedDepartment);
   },
 
-  /**
-   * Xóa phòng ban (soft delete)
-   */
   async remove(code) {
-    await delay();
+    const targetCode = normalizeCode(code);
 
-    const c = normalizeCode(code);
-    const list = storage.get();
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (d) => normalizeCode(d.code) === c
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy phòng ban",
-        "code"
-      );
-    }
-
-    /* ===== NGHIỆP VỤ CHẶN XOÁ ===== */
-    const stillHasEmployees = await hasActiveEmployees(c);
-    if (stillHasEmployees) {
-      throw createHttpError(
-        400,
-        "Không thể xoá phòng ban vì vẫn còn nhân viên đang làm việc"
-      );
-    }
+    // Không cho phép xoá nếu còn nhân viên đang làm việc
+    await validators.checkHasActiveEmployees(targetCode);
 
     const now = new Date().toISOString();
+    const softDeleteData = {
+      ...current,
+      deletedAt: now,
+      status: STATUS.INACTIVE,
+      updatedAt: now,
+    };
 
-    list[index].deletedAt = now;
-    list[index].updatedAt = now;
-
-    storage.set(list);
-    return true;
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
-  /**
-   * Xóa phòng ban vĩnh viễn (hard delete)
-   */
-  async destroy(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const list = storage.get();
-
-    const index = list.findIndex(
-      (d) => normalizeCode(d.code) === c
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy phòng ban",
-        "code"
-      );
-    }
-
-    list.splice(index, 1);
-    storage.set(list);
-
-    return true;
-  },
-
-  /**
-   * Khôi phục phòng ban đã xóa
-   */
   async restore(code) {
-    await delay();
+    const targetCode = normalizeCode(code);
 
-    const c = normalizeCode(code);
-    const list = storage.get();
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (d) => normalizeCode(d.code) === c
-    );
+    const restoreData = {
+      ...current,
+      deletedAt: null,
+      status: STATUS.ACTIVE,
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy phòng ban",
-        "code"
-      );
-    }
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
+  },
 
-    list[index].deletedAt = null;
-    list[index].updatedAt =
-      new Date().toISOString();
+  async destroy(code) {
+    const current = await this.getByCode(code, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    storage.set(list);
-    return list[index];
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

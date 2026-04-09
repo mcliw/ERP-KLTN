@@ -1,14 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import "../styles/form.css";
+// apps/frontend/erp-portal/src/modules/hrm/components/layouts/DepartmentForm.jsx
+
+import { useMemo, useEffect, useState } from "react";
 import {
   departmentCreateSchema,
   departmentUpdateSchema,
 } from "../../validations/department.schema";
-import { FaSave, FaTimes } from "react-icons/fa";
+import {
+  useFormManager,
+  FormInput,
+  FormSelect,
+  FormTextarea,
+  FormActions,
+} from "../../../../shared/components/FormCommon";
+import { useToast } from "../../../../shared/components/ToastProvider";
 
-/* =========================
- * Constants
- * ========================= */
+/* ==============================
+ * Helpers & Configs
+ * ============================== */
+const cleanData = (data) => {
+  if (!data) return {};
+  const cleaned = {};
+  Object.keys(data).forEach((key) => {
+    cleaned[key] = data[key] === null || data[key] === undefined ? "" : data[key];
+  });
+  return cleaned;
+};
 
 const DEFAULT_FORM = {
   code: "",
@@ -17,252 +33,134 @@ const DEFAULT_FORM = {
   status: "Hoạt động",
 };
 
-/* =========================
- * Component
- * ========================= */
-
+/* ==============================
+ * Main Component
+ * ============================== */
 export default function DepartmentForm({
   mode = "create",
-  initialData = null,
-  employeeCount = 0, // ⭐ QUAN TRỌNG
+  initialData,
+  employeeCount = 0,
   onSubmit,
   onCancel,
 }) {
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [errors, setErrors] = useState({});
+  const toast = useToast();
   const [infoMessage, setInfoMessage] = useState("");
 
-  const initialSnapshotRef = useRef(null);
+  const safeInitialValues = useMemo(() => {
+    if (!initialData) return DEFAULT_FORM;
+    const cleaned = cleanData(initialData);
+    return { ...DEFAULT_FORM, ...cleaned };
+  }, [initialData]);
 
-  /* =========================
-   * Edit mode init
-   * ========================= */
+  const { form, setForm, errors, handleChange, validate } = useFormManager({
+    initialValues: safeInitialValues,
+    mode,
+    schema: mode === "create" ? departmentCreateSchema : departmentUpdateSchema,
+  });
 
-  useEffect(() => {
-    if (mode !== "edit" || !initialData) return;
-
-    const nextForm = {
-      ...DEFAULT_FORM,
-      ...initialData,
-    };
-
-    setForm(nextForm);
-    initialSnapshotRef.current = { ...nextForm };
-  }, [mode, initialData]);
-
-  /* =========================
-   * Auto guard status
-   * ========================= */
+  const isDirty = useMemo(() => {
+    return JSON.stringify(form) !== JSON.stringify(safeInitialValues);
+  }, [form, safeInitialValues]);
 
   useEffect(() => {
-    if (
-      mode === "edit" &&
-      form.status === "Ngưng hoạt động" &&
-      employeeCount > 0
-    ) {
-      setInfoMessage(
-        "Không thể ngưng hoạt động phòng ban khi vẫn còn nhân viên đang làm việc."
-      );
-
-      setForm((prev) => ({
-        ...prev,
-        status: "Hoạt động",
-      }));
+    if (initialData) {
+      setForm((prev) => ({ ...prev, ...cleanData(initialData) }));
     }
-  }, [form.status, employeeCount, mode]);
+  }, [initialData, setForm]);
 
-  /* =========================
-   * Handlers
-   * ========================= */
+  // Guard Status: Không cho "Ngưng hoạt động" nếu còn nhân viên
+  useEffect(() => {
+    if (mode !== "edit") return;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setInfoMessage("");
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+    if (form.status === "Ngưng hoạt động" && employeeCount > 0) {
+      setInfoMessage("Không thể ngưng hoạt động phòng ban khi vẫn còn nhân viên.");
+      setForm((prev) => ({ ...prev, status: "Hoạt động" }));
+    } else {
+      setInfoMessage("");
+    }
+  }, [form.status, employeeCount, mode, setForm]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     if (mode === "edit" && !isDirty) {
-      setInfoMessage("Không có thay đổi nào để lưu.");
+      toast.info("Dữ liệu không có gì thay đổi.");
       return;
     }
 
-    const schema =
-      mode === "create"
-        ? departmentCreateSchema
-        : departmentUpdateSchema;
+    // Department: giữ nguyên payload (kể cả code) cho cả create/edit
+    const submitData = {
+      code: form.code ?? "",
+      name: form.name ?? "",
+      description: form.description ?? "",
+      status: form.status ?? "Hoạt động",
+    };
 
-    const submitData =
-      mode === "edit"
-        ? (() => {
-            const { code, ...rest } = form;
-            return rest;
-          })()
-        : form;
+    if (!validate(submitData)) return;
 
-    const result = schema.safeParse(submitData);
-
-    if (!result.success) {
-      const fieldErrors = {};
-      result.error.issues.forEach((i) => {
-        fieldErrors[i.path[0]] = i.message;
-      });
-
-      setErrors(fieldErrors);
-
-      document
-        .querySelector(
-          `[name="${Object.keys(fieldErrors)[0]}"]`
-        )
-        ?.focus();
-
+    if (!window.confirm(mode === "create" ? "Tạo phòng ban?" : "Lưu thay đổi?"))
       return;
-    }
-
-    setErrors({});
-    setInfoMessage("");
-
-    const ok = window.confirm(
-      mode === "create"
-        ? "Bạn có chắc chắn muốn tạo phòng ban này?"
-        : "Bạn có chắc chắn muốn lưu thay đổi phòng ban này?"
-    );
-    if (!ok) return;
 
     onSubmit?.(submitData);
   };
 
-  /* =========================
-   * Derived
-   * ========================= */
-
-  const isDirty = useMemo(() => {
-    if (mode !== "edit") return true;
-    if (!initialSnapshotRef.current) return false;
-
-    return (
-      JSON.stringify(form) !==
-      JSON.stringify(initialSnapshotRef.current)
-    );
-  }, [mode, form]);
-
-  const renderError = (field) =>
-    errors[field] && (
-      <span className="error">{errors[field]}</span>
-    );
-
-  /* =========================
-   * Render
-   * ========================= */
+  const disableWhenInactive = mode === "edit" && form.status === "Ngưng hoạt động";
 
   return (
-    <form
-      className="department-form"
-      onSubmit={handleSubmit}
-    >
-      <h3>
-        {mode === "create"
-          ? "Tạo phòng ban"
-          : "Cập nhật phòng ban"}
-      </h3>
+    <form className="department-form" onSubmit={handleSubmit}>
+      <h3>{mode === "create" ? "Tạo phòng ban" : "Cập nhật phòng ban"}</h3>
 
       <div className="form-grid">
-        {/* Code */}
-        <div className="form-group">
-          <label>Mã phòng ban *</label>
-          <input
-            name="code"
-            value={form.code}
-            onChange={handleChange}
-            disabled={mode === "edit"}
-          />
-          {renderError("code")}
-        </div>
+        <FormInput
+          label="Mã phòng ban"
+          name="code"
+          value={form.code}
+          onChange={handleChange}
+          required
+          disabled={mode === "edit"}
+          error={errors.code}
+        />
 
-        {/* Name */}
-        <div className="form-group">
-          <label>Tên phòng ban *</label>
-          <input
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            disabled={
-              mode === "edit" &&
-              form.status === "Ngưng hoạt động"
-            }
-          />
-          {renderError("name")}
-        </div>
+        <FormInput
+          label="Tên phòng ban"
+          name="name"
+          value={form.name}
+          onChange={handleChange}
+          required
+          disabled={disableWhenInactive}
+          error={errors.name}
+        />
 
-        {/* Status */}
-        <div className="form-group">
-          <label>Trạng thái</label>
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-          >
-            <option value="Hoạt động">
-              Hoạt động
-            </option>
+        <FormSelect
+          label="Trạng thái"
+          name="status"
+          value={form.status}
+          onChange={handleChange}
+          disabled={mode === "edit" && employeeCount > 0} // chặn đổi status nếu còn NV
+          error={errors.status}
+        >
+          <option value="Hoạt động">Hoạt động</option>
+          {mode === "edit" && <option value="Ngưng hoạt động">Ngưng hoạt động</option>}
+        </FormSelect>
 
-            {mode === "edit" && (
-              <option value="Ngưng hoạt động">
-                Ngưng hoạt động
-              </option>
-            )}
-          </select>
-        </div>
-
-        {/* Description */}
-        <div className="form-group full-width">
-          <label>Mô tả</label>
-          <textarea
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            rows={3}
-          />
-          {renderError("description")}
-        </div>
+        <FormTextarea
+          label="Mô tả"
+          name="description"
+          value={form.description}
+          onChange={handleChange}
+          disabled={disableWhenInactive}
+          error={errors.description}
+        />
       </div>
 
-      {infoMessage && (
-        <div className="info-message">
-          {infoMessage}
-        </div>
-      )}
+      {infoMessage && <div className="info-message">{infoMessage}</div>}
 
-      <div className="form-actions">
-        <button
-          type="submit"
-          className="btn-primary"
-          title={
-            mode === "edit" && !isDirty
-              ? "Chưa có thay đổi để lưu"
-              : ""
-          }
-        >
-          <FaSave />{" "}
-          <span>{mode === "create"
-            ? "Tạo phòng ban"
-            : "Lưu thay đổi"}</span>
-        </button>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={onCancel}
-        >
-          <FaTimes /> <span>Hủy</span>
-        </button>
-      </div>
+      <FormActions
+        mode={mode}
+        isDirty={isDirty}
+        onCancel={onCancel}
+        submitLabel={mode === "create" ? "Tạo phòng ban" : "Lưu thay đổi"}
+      />
     </form>
   );
 }

@@ -12,9 +12,18 @@ export const useAuthStore = create((set) => ({
   login: async (payload) => {
     set({ loading: true, error: null });
     try {
-      const { user, token } = await loginApi(payload);
+      // --- SỬA ĐỔI TẠI ĐÂY ---
+      // loginApi trả về accessToken, không phải token
+      const response = await loginApi(payload);
+      
+      const user = response.user;
+      const token = response.accessToken; // Lấy đúng trường accessToken
+      // -----------------------
 
       localStorage.setItem("erp_user", JSON.stringify(user));
+      
+      // Lưu ý: auth.service.js có thể đã lưu rồi, nhưng store lưu lại để đồng bộ state cũng không sao,
+      // miễn là giá trị token không bị undefined.
       localStorage.setItem("erp_token", token);
 
       set({ user, token, loading: false });

@@ -50,7 +50,8 @@ def tao_danh_gia_kem_anh(session: Session, product_id: int, user_id: int, conten
     session.add(r)
     session.flush()
     for url in image_urls:
-        session.add(ImgReview(review_id=r.id, image_url=url))
+        # Schema: img_review(image)
+        session.add(ImgReview(review_id=r.id, image=url))
     _recalc_product_avg_rating(session, product_id)
     session.commit()
     return ok({"review_id": r.id, "images_added": len(image_urls)})
@@ -81,12 +82,11 @@ def anh_danh_gia_san_pham(session: Session, product_id: Optional[int] = None, re
         q = q.filter(ImgReview.review_id == review_id)
     if product_id:
         q = q.join(Review, ImgReview.review_id == Review.id).filter(Review.product_id == product_id)
-    rows = q.order_by(ImgReview.created_at.desc()).limit(limit).all()
+    rows = q.order_by(ImgReview.id.desc()).limit(limit).all()
     return ok([{
         "img_review_id": x.id,
         "review_id": x.review_id,
-        "image_url": x.image_url,
-        "created_at": x.created_at,
+        "image": getattr(x, "image", None),
     } for x in rows])
 
 def thong_ke_danh_gia_san_pham(session: Session, product_id: int) -> Dict[str, Any]:

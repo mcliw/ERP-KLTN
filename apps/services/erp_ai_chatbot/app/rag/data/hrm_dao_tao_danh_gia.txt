@@ -1,0 +1,58 @@
+TÀI LIỆU QUY TRÌNH ĐÀO TẠO VÀ ĐÁNH GIÁ HIỆU SUẤT
+MÃ TÀI LIỆU HRM TRAINING KPI 01
+
+CHƯƠNG 1. ĐÁNH GIÁ HIỆU SUẤT PERFORMANCE REVIEW
+
+Điều 1. Thiết lập mục tiêu KPI Objectives
+1. Thời điểm thiết lập:
+- Vào đầu mỗi quý hoặc đầu năm tài chính, nhân viên cùng Quản lý trực tiếp thống nhất bộ chỉ tiêu KPI (Key Performance Indicators) hoặc OKR (Objectives and Key Results).
+- Mục tiêu phải đảm bảo nguyên tắc SMART: Cụ thể, Đo lường được, Khả thi, Thực tế và Có thời hạn.
+2. Cấu trúc trọng số Weighting:
+- Các chỉ tiêu công việc chính chiếm trọng số 70% đến 80%.
+- Các chỉ tiêu về thái độ, tuân thủ quy trình và phát triển bản thân chiếm trọng số 20% đến 30%.
+- Tổng trọng số của tất cả các mục tiêu phải bằng đúng 100%.
+
+Điều 2. Quy trình Đánh giá định kỳ
+1. Đánh giá sơ bộ hàng tháng:
+- Hệ thống tự động ghi nhận các kết quả định lượng (Doanh số, Số dòng code, Số lỗi Bug) để tính điểm sơ bộ.
+- Kết quả này dùng để tính lương mềm (lương hiệu quả) hàng tháng.
+2. Đánh giá tổng kết cuối năm Year End Review:
+- Nhân viên thực hiện Tự đánh giá (Self Assessment) về các thành tích và điểm cần khắc phục.
+- Quản lý thực hiện Đánh giá (Manager Review) và tổ chức buổi họp 1-1 để phản hồi chi tiết.
+- Kết quả xếp hạng cuối cùng (Ranking) sẽ quyết định mức tăng lương và tiền thưởng năm.
+
+Điều 3. Xếp hạng nhân viên Ranking System
+- Hạng A (Outstanding): Vượt mong đợi, đạt trên 110% chỉ tiêu. Là nhân sự hạt giống cần giữ chân.
+- Hạng B (Meet Expectation): Đạt yêu cầu, hoàn thành từ 90% đến 110% chỉ tiêu. Là lực lượng nòng cốt.
+- Hạng C (Below Expectation): Dưới yêu cầu, đạt từ 70% đến 90%. Cần có kế hoạch cải thiện (PIP).
+- Hạng D (Unsatisfactory): Kém, dưới 70%. Xem xét chấm dứt hợp đồng lao động.
+
+CHƯƠNG 2. QUY TRÌNH ĐÀO TẠO VÀ PHÁT TRIỂN L&D
+
+Điều 4. Đào tạo hội nhập Onboarding Training
+1. Đối tượng áp dụng:
+- Bắt buộc đối với tất cả nhân viên mới gia nhập công ty trong tuần đầu tiên.
+2. Nội dung đào tạo:
+- Giới thiệu Lịch sử hình thành, Sứ mệnh, Tầm nhìn và Giá trị cốt lõi của công ty.
+- Phổ biến Nội quy lao động, Quy định bảo mật thông tin và Văn hóa doanh nghiệp.
+- Hướng dẫn sử dụng các công cụ làm việc nội bộ: Hệ thống ERP, Email, Chat, Quy trình xin nghỉ phép.
+
+Điều 5. Đào tạo chuyên môn và Kỹ năng mềm
+1. Đào tạo nội bộ Internal Training:
+- Công ty khuyến khích mô hình "Người đi trước hướng dẫn người đi sau" (Mentorship).
+- Các buổi chia sẻ kiến thức (Knowledge Sharing) được tổ chức hàng tháng do các Trưởng bộ phận chủ trì.
+2. Đào tạo bên ngoài External Training:
+- Căn cứ vào nhu cầu công việc, công ty cử nhân viên đi học các khóa nâng cao nghiệp vụ (Chứng chỉ Kế toán trưởng, Quản trị dự án PMP, AWS...).
+- Chi phí đào tạo do công ty chi trả 100%.
+
+Điều 6. Cam kết đào tạo Training Bond
+1. Điều kiện ký cam kết:
+- Áp dụng cho các khóa đào tạo bên ngoài có chi phí lớn (thường trên 10 triệu đồng).
+- Nhân viên phải ký Bản cam kết phục vụ sau đào tạo (Commitment Letter) trước khi khóa học bắt đầu.
+2. Thời gian cam kết:
+- Chi phí dưới 20 triệu: Cam kết làm việc ít nhất 12 tháng sau khi kết thúc khóa học.
+- Chi phí từ 20 đến 50 triệu: Cam kết làm việc ít nhất 24 tháng.
+- Chi phí trên 50 triệu: Cam kết làm việc ít nhất 36 tháng.
+3. Bồi hoàn chi phí:
+- Nếu nhân viên tự ý nghỉ việc trước thời hạn cam kết, nhân viên phải bồi hoàn lại chi phí đào tạo cho công ty.
+- Số tiền bồi hoàn được tính theo tỷ lệ thời gian cam kết còn lại chưa thực hiện (Pro-rata basis).

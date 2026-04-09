@@ -1,0 +1,518 @@
+{
+  "product_categories": [
+    {
+      "id": "cat_001",
+      "name": "Thiết bị điện tử",
+      "parentId": null,
+      "description": "Các thiết bị điện tử, công nghệ",
+      "status": "Hoạt động",
+      "createdAt": "2023-01-01T08:00:00Z",
+      "updatedAt": "2026-01-18T10:00:00Z"
+    },
+    {
+      "id": "cat_002",
+      "name": "Laptop & Máy tính",
+      "parentId": "cat_001",
+      "description": "Máy tính xách tay và máy bộ",
+      "status": "Hoạt động",
+      "createdAt": "2023-01-05T09:00:00Z",
+      "updatedAt": "2026-01-19T15:52:24.391Z",
+      "deletedAt": null
+    },
+    {
+      "id": "cat_003",
+      "name": "Nội thất văn phòng",
+      "parentId": null,
+      "description": "Bàn ghế, tủ hồ sơ",
+      "status": "Hoạt động",
+      "createdAt": "2023-02-10T08:00:00Z",
+      "updatedAt": "2026-01-19T15:52:15.243Z",
+      "deletedAt": null
+    }
+  ],
+  "products": [
+    {
+      "id": "prod_101",
+      "code": "LAP-DELL-001",
+      "name": "Dell XPS 13 Plus",
+      "categoryId": "cat_002",
+      "type": "Hàng hóa kinh doanh",
+      "brand": "Dell",
+      "unit": "Cái",
+      "price": 45000000,
+      "minStock": 10,
+      "warranty": 24,
+      "description": "Laptop cao cấp viền mỏng, Core i7",
+      "image": "https://example.com/images/dell-xps-13.jpg",
+      "status": "Hoạt động",
+      "createdAt": "2023-06-15T08:00:00Z",
+      "updatedAt": "2026-01-18T14:30:00Z"
+    },
+    {
+      "id": "prod_102",
+      "code": "LAP-MAC-002",
+      "name": "MacBook Pro M3",
+      "categoryId": "cat_002",
+      "type": "Hàng hóa kinh doanh",
+      "brand": "Apple",
+      "unit": "Cái",
+      "price": 45000000,
+      "minStock": 5,
+      "warranty": 12,
+      "description": "MacBook Pro chip M3 14 inch",
+      "image": "https://example.com/images/dell-xps-13.jpg",
+      "status": "Hoạt động",
+      "createdAt": "2023-11-20T10:00:00Z",
+      "updatedAt": "2026-01-18T18:00:46.425Z",
+      "deletedAt": null
+    },
+    {
+      "id": "prod_201",
+      "code": "FUR-HOAPHAT-001",
+      "name": "Bàn làm việc CEO",
+      "categoryId": "cat_003",
+      "type": "Tài sản công ty",
+      "brand": "Hòa Phát",
+      "unit": "Cái",
+      "price": 45000000,
+      "minStock": 0,
+      "warranty": 36,
+      "description": "Bàn gỗ tự nhiên cho giám đốc",
+      "image": "https://example.com/images/ban-giam-doc.jpg",
+      "status": "Hoạt động",
+      "createdAt": "2023-03-01T08:00:00Z",
+      "updatedAt": "2026-01-18T09:22:25.467Z"
+    }
+  ],
+  "suppliers": [
+    {
+      "id": "1",
+      "code": "SUP-FPT-001",
+      "name": "Công ty TNHH Phân Phối FPT",
+      "taxCode": "0101234567",
+      "rating": 4.85,
+      "contactEmail": "sales.phanphoi@fpt.com.vn",
+      "contactPhone": "02473008888",
+      "address": "Số 17 Duy Tân, Cầu Giấy, Hà Nội",
+      "financePartnerId": 8801,
+      "createdAt": "2023-01-10T08:30:00Z",
+      "contractUrl": "",
+      "status": "Đang hợp tác",
+      "note": "Đối tác chiến lược mảng thiết bị CNTT. Hợp đồng gia hạn hàng năm."
+    },
+    {
+      "id": "2",
+      "code": "SUP-DIGI-002",
+      "name": "Digiworld Corporation",
+      "taxCode": "0301234568",
+      "rating": 4.7,
+      "contactEmail": "b2b@digiworld.com.vn",
+      "contactPhone": "02839290059",
+      "address": "Quận 3, TP. Hồ Chí Minh",
+      "financePartnerId": 8802,
+      "createdAt": "2023-01-15T14:00:00Z",
+      "contractUrl": "",
+      "status": "Đang hợp tác",
+      "note": "Cần cập nhật lại giấy phép kinh doanh mới trước quý 4.",
+      "deletedAt": null,
+      "stoppedAt": null,
+      "updatedAt": "2026-01-18T18:00:34.172Z"
+    }
+  ],
+  "warehouses": [
+    {
+      "id": "1",
+      "code": "WH-HNO-01",
+      "name": "Kho Trung Tâm Hà Nội",
+      "type": "CENTRAL",
+      "address": "Khu Công Nghiệp Thăng Long, Hà Nội",
+      "is_active": true,
+      "createdAt": "2023-01-15T08:00:00Z",
+      "updatedAt": "2026-01-18T17:26:14.311Z",
+      "deletedAt": null
+    },
+    {
+      "id": "2",
+      "code": "WH-HCM-RT01",
+      "name": "Cửa Hàng Quận 1 - HCM",
+      "type": "RETAIL",
+      "address": "Đường Nguyễn Huệ, Quận 1, TP.HCM",
+      "is_active": true,
+      "createdAt": "2023-06-20T09:30:00Z",
+      "updatedAt": "2026-01-18T17:46:25.411Z",
+      "deletedAt": null
+    }
+  ],
+  "bin_locations": [
+    {
+      "id": "56a2",
+      "code": "BIN1",
+      "warehouse_id": 1,
+      "max_capacity": 100,
+      "description": "Testt",
+      "createdAt": "2026-01-19T17:21:28.976Z",
+      "updatedAt": "2026-01-19T17:37:27.974Z",
+      "deletedAt": null,
+      "is_active": true
+    }
+  ],
+  "current_stock": [
+    {
+      "id": "5001",
+      "warehouse_id": 1,
+      "bin_id": "101",
+      "product_id": "prod_101",
+      "quantity_on_hand": 50,
+      "quantity_allocated": 5,
+      "quantity_available": 45,
+      "updatedAt": "2023-10-25T14:20:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": "37cc",
+      "warehouse_id": 2,
+      "bin_id": "201",
+      "product_id": "prod_101",
+      "quantity_on_hand": 100,
+      "quantity_allocated": 0,
+      "quantity_available": 100,
+      "updatedAt": "2026-01-19T16:47:26.511Z",
+      "deletedAt": ""
+    },
+    {
+      "id": "2158",
+      "warehouse_id": 2,
+      "bin_id": "201",
+      "product_id": "prod_102",
+      "quantity_on_hand": 10,
+      "quantity_allocated": 0,
+      "notes": "Test",
+      "quantity_available": 10,
+      "updatedAt": "2026-01-19T16:55:48.191Z",
+      "deletedAt": null
+    },
+    {
+      "id": "a17f",
+      "warehouse_id": 1,
+      "bin_id": "56a2",
+      "product_id": "prod_101",
+      "quantity_on_hand": 0,
+      "quantity_allocated": 0,
+      "notes": "test",
+      "quantity_available": 0,
+      "updatedAt": "2026-01-19T18:06:15.018Z",
+      "deletedAt": ""
+    }
+  ],
+  "stocktakes": [
+    {
+      "id": "701",
+      "code": "ST-2023-10-001",
+      "warehouse_id": 1,
+      "start_date": "2023-10-01",
+      "end_date": "2023-10-02",
+      "status": "COMPLETED",
+      "details": [
+        {
+          "id": 9001,
+          "stocktake_id": 701,
+          "product_id": "prod_101",
+          "system_quantity": 52,
+          "actual_quantity": 50,
+          "difference": -2
+        },
+        {
+          "id": 9002,
+          "stocktake_id": 701,
+          "product_id": "prod_102",
+          "system_quantity": 200,
+          "actual_quantity": 200,
+          "difference": 0
+        }
+      ]
+    }
+  ],
+  "inventory_transaction_logs": [
+    {
+      "id": "1000001",
+      "type": "INBOUND",
+      "product_id": "prod_101",
+      "warehouse_id": 1,
+      "bin_id": "101",
+      "quantity_change": 100,
+      "reference_code": "PO-2023-999",
+      "transaction_date": "2023-09-15T08:30:00Z",
+      "performed_by": 101
+    },
+    {
+      "id": "1000099",
+      "type": "ADJUSTMENT",
+      "product_id": "prod_101",
+      "warehouse_id": 1,
+      "bin_id": "101",
+      "quantity_change": -2,
+      "reference_code": "ST-2023-10-001",
+      "transaction_date": "2023-10-02T17:00:00Z",
+      "performed_by": 999
+    },
+    {
+      "id": "1768845975025",
+      "type": "ADJUSTMENT",
+      "warehouse_id": 1,
+      "product_id": "prod_101",
+      "bin_id": "56a2",
+      "quantity_change": -90,
+      "reference_code": "MANUAL-ADJ",
+      "transaction_date": "2026-01-19T18:06:15.025Z",
+      "performed_by": 1
+    }
+  ],
+  "purchase_requests": [
+    {
+      "id": "1",
+      "pr_code": "PR-2023-1001",
+      "requester_id": "69ca",
+      "department_id": "8503",
+      "request_date": "2023-10-01",
+      "reason": "Mua sắm thiết bị làm việc cho nhân viên mới Team IT",
+      "status": "APPROVED",
+      "createdAt": "2023-10-01T08:30:00Z"
+    },
+    {
+      "id": "2",
+      "pr_code": "PR-2023-1002",
+      "requester_id": "0710",
+      "department_id": "345d",
+      "request_date": "2023-10-05",
+      "reason": "Thay thế văn phòng phẩm quý 4",
+      "status": "APPROVED",
+      "createdAt": "2023-10-05T09:15:00Z",
+      "deletedAt": null,
+      "updatedAt": "2026-01-19T02:50:25.782Z"
+    },
+    {
+      "id": "99de",
+      "pr_code": "PR-2023-1005",
+      "requester_id": "a639",
+      "department_id": "8503",
+      "request_date": "2026-01-19",
+      "reason": "Thay thế văn phòng phẩm quý 4",
+      "status": "REJECTED",
+      "createdAt": "2026-01-19T04:06:45.054Z",
+      "updatedAt": "2026-01-19T12:13:46.838Z",
+      "deletedAt": "2026-01-19T12:13:46.838Z",
+      "rejection_reason": "Tes"
+    },
+    {
+      "id": "abb5",
+      "pr_code": "PR-2023-10023",
+      "requester_id": "a639",
+      "department_id": "345d",
+      "request_date": "2026-01-20",
+      "reason": "Mua sắm thiết bị làm việc cho nhân viên mới Team IT",
+      "status": "DRAFT",
+      "createdAt": "2026-01-20T02:17:21.550Z",
+      "updatedAt": null,
+      "deletedAt": null
+    }
+  ],
+  "pr_items": [
+    {
+      "id": "1",
+      "pr_id": "1",
+      "product_id": "prod_102",
+      "quantity_requested": 2,
+      "expected_date": "2023-10-15"
+    },
+    {
+      "id": "2",
+      "pr_id": "1",
+      "product_id": "prod_101",
+      "quantity_requested": 2,
+      "expected_date": "2023-10-15"
+    },
+    {
+      "id": "3",
+      "pr_id": "2",
+      "product_id": "prod_102",
+      "quantity_requested": 50,
+      "expected_date": "2023-10-20"
+    },
+    {
+      "id": "b94e",
+      "product_id": "prod_101",
+      "quantity_requested": 1,
+      "expected_date": "",
+      "pr_id": "99de"
+    },
+    {
+      "id": "02f8",
+      "product_id": "prod_101",
+      "quantity_requested": 1,
+      "expected_date": "2026-01-20",
+      "pr_id": "abb5"
+    }
+  ],
+  "quotations": [
+    {
+      "id": "101",
+      "rfq_code": "RFQ-23-055",
+      "supplier_id": "1",
+      "pr_id": "1",
+      "quotation_date": "2023-10-03",
+      "valid_until": "2023-11-03",
+      "total_amount": 45000000,
+      "status": "REJECTED",
+      "is_selected": false,
+      "deletedAt": null,
+      "updatedAt": "2026-01-19T11:41:35.407Z",
+      "rejection_reason": "tets"
+    },
+    {
+      "id": "102",
+      "rfq_code": "RFQ-23-055",
+      "supplier_id": "2",
+      "pr_id": "1",
+      "quotation_date": "2023-10-04",
+      "valid_until": "2023-10-20",
+      "total_amount": 44500000,
+      "status": "APPROVED",
+      "is_selected": true
+    },
+    {
+      "id": "c0bb",
+      "rfq_code": "RFQ-23-055",
+      "supplier_id": "2",
+      "pr_id": "99de",
+      "quotation_date": "2026-01-19",
+      "valid_until": "2026-01-20",
+      "total_amount": 20000000,
+      "status": "APPROVED",
+      "is_selected": true,
+      "createdAt": "2026-01-19T08:53:33.196Z",
+      "updatedAt": "2026-01-19T08:55:29.962Z",
+      "deletedAt": null
+    },
+    {
+      "id": "00f5",
+      "rfq_code": "RFQ-23-058",
+      "supplier_id": "2",
+      "pr_id": "2",
+      "quotation_date": "2026-01-19",
+      "valid_until": "2026-01-20",
+      "total_amount": 1000000000,
+      "status": "APPROVED",
+      "is_selected": true,
+      "items": [
+        {
+          "product_id": "prod_102",
+          "quantity": 50,
+          "unit_price": 20000000,
+          "total_line": 1000000000
+        }
+      ],
+      "createdAt": "2026-01-19T11:50:38.245Z",
+      "updatedAt": "2026-01-19T11:59:41.201Z",
+      "deletedAt": null
+    }
+  ],
+  "purchase_orders": [
+    {
+      "id": "1001",
+      "po_code": "PO-2023-500",
+      "quotation_id": "102",
+      "supplier_id": "2",
+      "order_date": "2023-10-06",
+      "expected_delivery_date": "2023-10-15",
+      "total_amount": 44500000,
+      "tax_amount": 4450000,
+      "discount_amount": 0,
+      "status": "APPROVED",
+      "approved_by": "99",
+      "createdAt": "2023-10-06T10:00:00Z"
+    },
+    {
+      "id": "d9a0",
+      "po_code": "PO-1234565",
+      "quotation_id": "00f5",
+      "supplier_id": "2",
+      "order_date": "2026-01-19",
+      "expected_delivery_date": "2026-01-20",
+      "total_amount": 1099000000,
+      "tax_amount": 100000000,
+      "discount_amount": 1000000,
+      "status": "APPROVED",
+      "approved_by": "99",
+      "createdAt": "2026-01-19T12:41:17.827Z",
+      "updatedAt": "2026-01-19T13:02:09.718Z",
+      "deletedAt": null,
+      "rejection_reason": "test",
+      "items": [
+        {
+          "id": "78cd",
+          "po_id": "d9a0",
+          "product_id": "prod_102",
+          "quantity_ordered": 50,
+          "quantity_received": 0,
+          "unit_price": 20000000,
+          "total_line_amount": 1000000000
+        }
+      ]
+    },
+    {
+      "id": "daca",
+      "po_code": "PO-1234566",
+      "quotation_id": "00f5",
+      "supplier_id": "2",
+      "order_date": "2026-01-19",
+      "expected_delivery_date": "2026-01-20",
+      "total_amount": 1100000000,
+      "tax_amount": 100000000,
+      "discount_amount": 0,
+      "status": "REJECTED",
+      "approved_by": null,
+      "createdAt": "2026-01-19T13:02:33.669Z",
+      "updatedAt": "2026-01-19T13:02:40.648Z",
+      "deletedAt": null,
+      "rejection_reason": "Test"
+    }
+  ],
+  "po_items": [
+    {
+      "id": "1",
+      "po_id": "1001",
+      "product_id": "prod_102",
+      "quantity_ordered": 2,
+      "quantity_received": 0,
+      "unit_price": 20000000,
+      "total_line_amount": 40000000
+    },
+    {
+      "id": "2",
+      "po_id": "1001",
+      "product_id": "prod_101",
+      "quantity_ordered": 2,
+      "quantity_received": 0,
+      "unit_price": 2250000,
+      "total_line_amount": 4500000
+    },
+    {
+      "id": "78cd",
+      "po_id": "d9a0",
+      "product_id": "prod_102",
+      "quantity_ordered": 50,
+      "quantity_received": 0,
+      "unit_price": 20000000,
+      "total_line_amount": 1000000000
+    },
+    {
+      "id": "2ded",
+      "po_id": "daca",
+      "product_id": "prod_102",
+      "quantity_ordered": 50,
+      "quantity_received": 0,
+      "unit_price": 20000000,
+      "total_line_amount": 1000000000
+    }
+  ]
+}

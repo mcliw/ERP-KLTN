@@ -1,0 +1,51 @@
+TÀI LIỆU QUY ĐỊNH QUẢN LÝ HỒ SƠ VÀ HỢP ĐỒNG LAO ĐỘNG
+MÃ TÀI LIỆU HRM PROFILE 01
+
+CHƯƠNG 1. QUẢN LÝ HỒ SƠ NHÂN VIÊN EMPLOYEE PROFILE
+
+Điều 1. Quy định về Mã nhân viên và Thông tin cá nhân
+1. Cấu trúc Mã nhân viên Employee ID:
+- Mỗi nhân viên khi gia nhập công ty sẽ được cấp một Mã định danh duy nhất trên hệ thống ERP.
+- Mã nhân viên không thay đổi trong suốt quá trình làm việc, kể cả khi thuyên chuyển bộ phận hoặc thăng chức.
+- Mã này được dùng để kết nối dữ liệu giữa các phân hệ Chấm công, Tính lương và Cấp phát tài sản.
+2. Cập nhật thông tin cá nhân:
+- Nhân viên có trách nhiệm cung cấp chính xác các thông tin cơ bản: Họ tên, Ngày sinh, Số CCCD, Mã số thuế cá nhân, Số tài khoản ngân hàng.
+- Khi có sự thay đổi về địa chỉ thường trú, số điện thoại hoặc tình trạng hôn nhân (để tính giảm trừ gia cảnh), nhân viên phải cập nhật trên cổng Portal cá nhân trong vòng 03 ngày.
+3. Bảo mật dữ liệu Data Privacy:
+- Hồ sơ nhân viên được coi là Dữ liệu mật cấp độ 2.
+- Chỉ có nhân viên phòng Nhân sự và Quản lý trực tiếp mới có quyền truy cập xem thông tin chi tiết.
+- Nghiêm cấm hành vi sao chép, phát tán số điện thoại hoặc mức lương của nhân viên ra bên ngoài.
+
+Điều 2. Quản lý Hồ sơ gốc Hard Copy
+1. Thành phần hồ sơ nhận việc:
+- Sơ yếu lý lịch có xác nhận của địa phương (bản gốc).
+- Bản sao công chứng Bằng cấp, Chứng chỉ chuyên môn.
+- Giấy khám sức khỏe (khổ A3) có thời hạn không quá 06 tháng.
+- Bản sao CCCD và Hộ khẩu (nếu có yêu cầu).
+2. Lưu trữ và Bảo quản:
+- Hồ sơ gốc được lưu tại tủ hồ sơ bảo mật của phòng Nhân sự.
+- Việc mượn hoặc rút hồ sơ gốc phải có phiếu đề nghị và được sự phê duyệt của Trưởng phòng Nhân sự.
+- Khi nhân viên nghỉ việc, hồ sơ gốc có thể được trả lại (trừ các giấy tờ nội bộ của công ty) sau khi hoàn tất thủ tục thanh lý.
+
+CHƯƠNG 2. QUẢN LÝ HỢP ĐỒNG LAO ĐỘNG CONTRACT
+
+Điều 3. Các loại Hợp đồng lao động
+1. Hợp đồng Thử việc Probation Contract:
+- Áp dụng cho nhân viên mới tuyển dụng. Thời hạn từ 1 đến 2 tháng tùy vị trí.
+- Trong thời gian này, hai bên có quyền chấm dứt thỏa thuận mà không cần báo trước và không cần bồi thường.
+2. Hợp đồng Xác định thời hạn Fixed term:
+- Thời hạn thường là 12 tháng, 24 tháng hoặc 36 tháng.
+- Áp dụng sau khi nhân viên hoàn thành thử việc đạt yêu cầu.
+3. Hợp đồng Không xác định thời hạn Indefinite term:
+- Áp dụng cho nhân viên đã ký tối đa 02 lần hợp đồng xác định thời hạn liên tiếp.
+- Đây là loại hợp đồng gắn bó lâu dài, chỉ chấm dứt khi nhân viên nghỉ hưu hoặc có vi phạm kỷ luật nghiêm trọng.
+
+Điều 4. Quy trình Tái ký hoặc Chấm dứt hợp đồng
+1. Đánh giá tái ký Renewal Process:
+- Trước khi hợp đồng hiện tại hết hạn 30 ngày, hệ thống sẽ gửi thông báo nhắc nhở cho Quản lý trực tiếp.
+- Quản lý thực hiện đánh giá hiệu quả làm việc để đề xuất: Gia hạn hợp đồng, Ký chính thức hoặc Không gia hạn.
+- Nếu không gia hạn, công ty phải gửi thông báo bằng văn bản cho nhân viên trước ít nhất 15 ngày (đối với HĐ xác định thời hạn).
+2. Quy trình Nghỉ việc Resignation:
+- Nhân viên muốn thôi việc phải nộp đơn xin nghỉ việc (Resignation Letter) trên hệ thống trước thời hạn quy định (30 ngày hoặc 45 ngày tùy loại hợp đồng).
+- Nhân viên phải thực hiện bàn giao công việc, tài sản (máy tính, thẻ xe) đầy đủ.
+- Công ty có trách nhiệm chốt sổ Bảo hiểm xã hội và thanh toán các khoản lương còn lại trong vòng 07 ngày làm việc kể từ ngày nghỉ chính thức.

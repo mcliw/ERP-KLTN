@@ -1,13 +1,12 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/DepartmentTable.jsx
 
 import {
-  FaCaretLeft,
-  FaCaretRight,
-  FaEye,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-import "../styles/table.css";
+  TablePagination,
+  TableActions,
+  EmptyRow
+} from "../../../../shared/components/TableComponents";
+
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
 export default function DepartmentTable({
   data = [],
@@ -21,10 +20,8 @@ export default function DepartmentTable({
   onDelete,
   renderExtraActions,
 }) {
-  const hasActions =
-    onView || onEdit || onDelete || renderExtraActions;
-
-  const colSpan = hasActions ? 7 : 6;
+  const hasActions = onView || onEdit || onDelete || renderExtraActions;
+  const colCount = hasActions ? 7 : 6;
 
   return (
     <>
@@ -37,113 +34,64 @@ export default function DepartmentTable({
             <th>Mô tả</th>
             <th>Số NV</th>
             <th>Trạng thái</th>
-            {hasActions && (
-              <th className="action-col">Thao tác</th>
-            )}
+            {hasActions && <th className="action-col">Thao tác</th>}
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan={colSpan} className="empty">
-                Không có dữ liệu
-              </td>
-            </tr>
+            <EmptyRow colSpan={colCount} />
           ) : (
-            data.map((d) => (
-              <tr
-                key={d.code}
-                className={[
-                  onRowClick && "clickable",
-                  d.deletedAt && "deleted",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => onRowClick?.(d)}
-              >
-                <td>{d.code}</td>
-                <td>{d.name}</td>
-                <td>{d.managerName || "—"}</td>
-                <td>{d.description || "—"}</td>
-                <td>{d.employeeCount ?? 0}</td>
-                <td>
-                  {d.deletedAt
-                    ? "Đã xoá"
-                    : d.status === "Ngưng hoạt động"
-                    ? "Ngưng hoạt động"
-                    : "Hoạt động"}
-                </td>
+            data.map((d) => {
+              const deleted = isSoftDeleted(d.deletedAt);
+              const employeeCount = d.employeeCount ?? 0;
+              const canDelete = !(employeeCount > 0);
 
-                {hasActions && (
-                  <td
-                    className="actions"
-                    onClick={(ev) =>
-                      ev.stopPropagation()
-                    }
-                  >
-                    {onView && (
-                      <button
-                        title="Xem"
-                        onClick={() => onView(d)}
-                      >
-                        <FaEye />
-                      </button>
-                    )}
-
-                    {onEdit && !d.deletedAt && (
-                      <button
-                        title="Sửa"
-                        onClick={() => onEdit(d)}
-                      >
-                        <FaEdit />
-                      </button>
-                    )}
-
-                    {onDelete && !d.deletedAt && (
-                      <button
-                        className="danger"
-                        title={
-                          d.employeeCount > 0
-                            ? "Không thể xoá vì vẫn còn nhân viên"
-                            : "Xoá"
-                        }
-                        onClick={() => onDelete(d)}
-                      >
-                        <FaTrash />
-                      </button>
-                    )}
-
-                    {renderExtraActions &&
-                      renderExtraActions(d)}
+              return (
+                <tr
+                  key={d.code}
+                  className={[
+                    onRowClick && "clickable",
+                    deleted && "deleted"
+                  ].filter(Boolean).join(" ")}
+                  onClick={() => onRowClick?.(d)}
+                >
+                  <td>{d.code}</td>
+                  <td>{d.name}</td>
+                  <td>{d.managerName || "—"}</td>
+                  <td>{d.description || "—"}</td>
+                  <td>{employeeCount}</td>
+                  <td>
+                    {deleted
+                      ? "Đã xoá"
+                      : d.status === "Ngưng hoạt động"
+                      ? "Ngưng hoạt động"
+                      : "Hoạt động"}
                   </td>
-                )}
-              </tr>
-            ))
+
+                  {hasActions && (
+                    <TableActions
+                      data={d}
+                      onView={onView}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      renderExtra={renderExtraActions}
+                      isDeleted={deleted}
+                      // Logic riêng: Không xoá nếu còn nhân viên
+                      canDelete={canDelete}
+                      deleteTitle={
+                        canDelete ? "Xoá" : "Không thể xoá vì vẫn còn nhân viên"
+                      }
+                    />
+                  )}
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
 
-      {/* PAGINATION */}
-      <div className="pagination">
-        <button
-          disabled={page === 1}
-          onClick={onPrev}
-        >
-          <FaCaretLeft /> Trước
-        </button>
-
-        <span>
-          Trang {page} / {totalPages}
-        </span>
-
-        <button
-          disabled={page === totalPages}
-          onClick={onNext}
-        >
-          Sau <FaCaretRight />
-        </button>
-      </div>
+      <TablePagination page={page} totalPages={totalPages} onPrev={onPrev} onNext={onNext} />
     </>
   );
 }
