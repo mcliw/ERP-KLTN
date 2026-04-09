@@ -5,12 +5,18 @@ import Login from "../auth/layouts/Login";
 import ForgotPassword from "../auth/layouts/ForgotPassword";
 import MainLayout from "../layouts/MainLayout";
 import hrmRoutes from "../modules/hrm/routes";
+import supplychainRoutes from "../modules/supply-chain/routes";
+import financeRoutes from "../modules/fa/routes";
+import salesRoutes from "../modules/sales/routes";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* --- SỬA DÒNG NÀY --- */}
+        {/* Thay vì về login, hãy chuyển hướng thẳng vào dashboard của HRM */}
+        <Route path="/" element={<Navigate to="hrm/trang-chu-nhan-su" replace />} />
+        {/* <Route path="/" element={<Navigate to="/login" replace />} /> */}
 
         {/* AUTH */}
         <Route path="/login" element={<Login />} />
@@ -19,6 +25,9 @@ export default function AppRoutes() {
         {/* ERP Layout */}
         <Route element={<MainLayout />}>
           {hrmRoutes}
+          {supplychainRoutes}
+          {financeRoutes}
+          {salesRoutes}
         </Route>
       </Routes>
     </BrowserRouter>

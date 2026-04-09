@@ -3,18 +3,21 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.ai.tooling import ToolSpec, ok, can_lam_ro
-from app.modules.hrm.models import LeaveRequest
+
+# DB HRM mới: leave_requests + leave_balances
+from app.modules.hrm.models import LeaveRequest, LeaveBalance
 
 
 def _normalize_leave_status(status: str | None) -> str | None:
     if status is None:
         return None
-    raw = status.strip()
+    raw = str(status).strip()
     if not raw:
         return None
 
@@ -33,24 +36,52 @@ def _normalize_leave_status(status: str | None) -> str | None:
         "rejected": "REJECTED",
         "tu choi": "REJECTED",
         "từ chối": "REJECTED",
-
-        "cancelled": "CANCELLED",
-        "canceled": "CANCELLED",
-        "huy": "CANCELLED",
-        "hủy": "CANCELLED",
     }
     return aliases.get(low, raw.upper())
 
 
-# THÊM CANCELLED để khớp alias + enum DB (nếu có)
-LeaveStatus = Literal["PENDING", "APPROVED", "REJECTED", "CANCELLED"]
-LeaveType = Literal["ANNUAL", "SICK", "UNPAID"]
+def _normalize_leave_type(t: str | None) -> str | None:
+    """Map alias về enum leave_type_enum của DB mới.
+
+    DB mới: PAID | UNPAID | SICK | MATERNITY
+    Thực tế người dùng hay hỏi: ANNUAL/SICK/UNPAID
+    """
+    if t is None:
+        return None
+    raw = str(t).strip()
+    if not raw:
+        return None
+
+    low = raw.lower()
+    aliases = {
+        "annual": "PAID",
+        "paid": "PAID",
+        "phep nam": "PAID",
+        "phép năm": "PAID",
+
+        "unpaid": "UNPAID",
+        "khong luong": "UNPAID",
+        "không lương": "UNPAID",
+
+        "sick": "SICK",
+        "om": "SICK",
+        "ốm": "SICK",
+
+        "maternity": "MATERNITY",
+        "thai san": "MATERNITY",
+        "thai sản": "MATERNITY",
+    }
+    return aliases.get(low, raw.upper())
+
+
+LeaveStatus = Literal["PENDING", "APPROVED", "REJECTED"]
+LeaveType = Literal["PAID", "UNPAID", "SICK", "MATERNITY"]
 
 
 class DanhSachDonNghiPhepArgs(BaseModel):
     employee_id: int = Field(..., ge=1)
-    status: LeaveStatus | None = Field(None, description="PENDING|APPROVED|REJECTED|CANCELLED")
-    leave_type: LeaveType | None = Field(None, description="ANNUAL|SICK|UNPAID")
+    status: LeaveStatus | None = Field(None, description="PENDING|APPROVED|REJECTED")
+    leave_type: LeaveType | None = Field(None, description="PAID|UNPAID|SICK|MATERNITY")
     tu_ngay: str | None = Field(None, description="YYYY-MM-DD")
     den_ngay: str | None = Field(None, description="YYYY-MM-DD")
     limit: int = Field(20, ge=1, le=100)
@@ -60,15 +91,14 @@ class DanhSachDonNghiPhepArgs(BaseModel):
     def _norm_status(cls, v):
         if v is None:
             return None
-        return _normalize_leave_status(str(v))
+        return _normalize_leave_status(v)
 
     @field_validator("leave_type", mode="before")
     @classmethod
-    def _norm_leave_type(cls, v):
+    def _norm_type(cls, v):
         if v is None:
             return None
-        s = str(v).strip().upper()
-        return s or None
+        return _normalize_leave_type(v)
 
 
 class ChiTietDonNghiPhepArgs(BaseModel):
@@ -78,7 +108,7 @@ class ChiTietDonNghiPhepArgs(BaseModel):
 class TongHopNghiPhepNamArgs(BaseModel):
     employee_id: int = Field(..., ge=1)
     year: int = Field(..., ge=2000, le=2100)
-    leave_type: str | None = Field(None, description="ANNUAL|SICK|UNPAID")
+    leave_type: str | None = Field(None, description="PAID|UNPAID|SICK|MATERNITY")
 
 
 class DonNghiPhepChoDuyetArgs(BaseModel):
@@ -92,39 +122,50 @@ def _parse_date(s: str):
     except Exception:
         return None
 
+def _days_between(start, end) -> int:
+    if not start or not end:
+        return 0
+    try:
+        return max(0, (end - start).days + 1)
+    except Exception:
+        return 0
 
-# SỬA: nhận đủ args đúng như ArgsModel để khỏi lỗi unexpected keyword
+
 def danh_sach_don_nghi_phep(
     session: Session,
-    employee_id: int,
+    employee_id: int | str,
     status: str | None = None,
     leave_type: str | None = None,
     tu_ngay: str | None = None,
     den_ngay: str | None = None,
     limit: int = 20,
 ):
-    q = session.query(LeaveRequest).filter(LeaveRequest.employee_id == int(employee_id))
+    if employee_id is None or str(employee_id).strip() == "":
+        return can_lam_ro("Thiếu employee_id để tra cứu đơn nghỉ phép.", [])
 
-    # status
+    try:
+        emp_id = int(employee_id)
+    except Exception:
+        return can_lam_ro("employee_id không hợp lệ (phải là số).", [])
+
+    # clamp limit để an toàn
+    try:
+        lim = int(limit)
+    except Exception:
+        lim = 20
+    lim = max(1, min(lim, 100))
+
+    q = session.query(LeaveRequest).filter(LeaveRequest.employee_id == emp_id)
+
     if status:
         status_norm = _normalize_leave_status(status)
-
-        allowed = set(getattr(getattr(LeaveRequest, "status").type, "enums", []) or [])
-        if allowed and status_norm not in allowed:
-            return can_lam_ro(
-                f"Trạng thái nghỉ phép '{status}' không hợp lệ. Hợp lệ: {', '.join(sorted(allowed))}.",
-                goi_y=sorted(allowed),
-            )
-
         q = q.filter(LeaveRequest.status == status_norm)
 
-    # leave_type
     if leave_type:
-        leave_type_norm = str(leave_type).strip().upper()
-        if leave_type_norm:
-            q = q.filter(LeaveRequest.leave_type == leave_type_norm)
+        t_norm = _normalize_leave_type(leave_type)
+        if t_norm:
+            q = q.filter(LeaveRequest.leave_type == t_norm)
 
-    # date range
     d_from = _parse_date(tu_ngay) if tu_ngay else None
     d_to = _parse_date(den_ngay) if den_ngay else None
 
@@ -134,70 +175,84 @@ def danh_sach_don_nghi_phep(
         return can_lam_ro("`den_ngay` không đúng định dạng YYYY-MM-DD.", [])
 
     if d_from:
-        q = q.filter(LeaveRequest.from_date >= d_from)
+        q = q.filter(LeaveRequest.start_date >= d_from)
     if d_to:
-        q = q.filter(LeaveRequest.to_date <= d_to)
+        q = q.filter(LeaveRequest.end_date <= d_to)
 
-    rows = q.order_by(LeaveRequest.from_date.desc()).limit(int(limit)).all()
+    rows = q.order_by(LeaveRequest.start_date.desc()).limit(lim).all()
 
-    if not rows:
-        return ok([], f"Không có đơn nghỉ phép nào{' đang ' + status.lower() if status else ''} cho nhân viên ID {employee_id}.")
-
-    data = [{
-        "leave_request_id": r.id,
-        "id": r.id,
-        "leave_type": r.leave_type,
-        "from_date": r.from_date.isoformat() if r.from_date else None,
-        "to_date": r.to_date.isoformat() if r.to_date else None,
-        "total_days": r.total_days,
-        "status": r.status,
-        "approver_id": r.approver_id,
-        "reason": r.reason,
-        "approved_at": r.approved_at.isoformat() if getattr(r, "approved_at", None) else None,
-    } for r in rows]
+    data = []
+    for r in rows:
+        total_days = _days_between(getattr(r, "start_date", None), getattr(r, "end_date", None))
+        data.append({
+            "leave_request_id": getattr(r, "request_id", None) or getattr(r, "id", None),
+            "employee_id": r.employee_id,
+            "leave_type": r.leave_type,
+            "start_date": r.start_date.isoformat() if r.start_date else None,
+            "end_date": r.end_date.isoformat() if r.end_date else None,
+            "total_days": total_days,
+            "reason": getattr(r, "reason", None),
+            "status": r.status,
+            "approver_id": getattr(r, "approver_id", None),
+            "rejection_reason": getattr(r, "rejection_reason", None),
+            "created_at": r.created_at.isoformat() if getattr(r, "created_at", None) else None,
+            "updated_at": r.updated_at.isoformat() if getattr(r, "updated_at", None) else None,
+        })
 
     return ok(data, "Danh sách đơn nghỉ phép.")
 
-
 def chi_tiet_don_nghi_phep(session: Session, leave_request_id: int):
-    r = session.query(LeaveRequest).filter(LeaveRequest.id == int(leave_request_id)).first()
+    id_col = getattr(LeaveRequest, "request_id", None) or getattr(LeaveRequest, "id", None)
+    r = session.query(LeaveRequest).filter(id_col == int(leave_request_id)).first()
     if not r:
         return can_lam_ro("Không tìm thấy đơn nghỉ phép theo id.", [])
+
+    total_days = _days_between(getattr(r, "start_date", None), getattr(r, "end_date", None))
+
     data = {
-        "leave_request_id": r.id,
+        "leave_request_id": getattr(r, "request_id", None) or getattr(r, "id", None),
         "employee_id": r.employee_id,
         "leave_type": r.leave_type,
-        "from_date": r.from_date.isoformat() if r.from_date else None,
-        "to_date": r.to_date.isoformat() if r.to_date else None,
-        "total_days": r.total_days,
-        "reason": r.reason,
+        "start_date": r.start_date.isoformat() if r.start_date else None,
+        "end_date": r.end_date.isoformat() if r.end_date else None,
+        "total_days": total_days,
+        "reason": getattr(r, "reason", None),
         "status": r.status,
-        "approver_id": r.approver_id,
-        "approved_at": r.approved_at.isoformat() if getattr(r, "approved_at", None) else None,
+        "approver_id": getattr(r, "approver_id", None),
+        "rejection_reason": getattr(r, "rejection_reason", None),
+        "created_at": r.created_at.isoformat() if getattr(r, "created_at", None) else None,
+        "updated_at": r.updated_at.isoformat() if getattr(r, "updated_at", None) else None,
     }
     return ok(data, "Chi tiết đơn nghỉ phép.")
 
 
 def tong_hop_nghi_phep_nam(session: Session, employee_id: int, year: int, leave_type: str | None = None):
-    q = (
-        session.query(
-            func.sum(func.coalesce(LeaveRequest.total_days, 0)).label("total_days")
-        )
-        .filter(
-            LeaveRequest.employee_id == int(employee_id),
-            LeaveRequest.status == "APPROVED",
-            func.extract("year", LeaveRequest.from_date) == int(year),
-        )
+    # 1) Tổng ngày nghỉ đã duyệt theo leave_requests (tính theo start_date/end_date)
+    q = session.query(LeaveRequest).filter(
+        LeaveRequest.employee_id == int(employee_id),
+        LeaveRequest.status == "APPROVED",
+        func.extract("year", LeaveRequest.start_date) == int(year),
     )
-    if leave_type:
-        q = q.filter(LeaveRequest.leave_type == leave_type)
 
-    row = q.first()
+    if leave_type:
+        t_norm = _normalize_leave_type(leave_type)
+        if t_norm:
+            q = q.filter(LeaveRequest.leave_type == t_norm)
+
+    rows = q.all()
+    approved_days = sum(_days_between(r.start_date, r.end_date) for r in rows)
+
+    # 2) Lấy leave_balance (nếu có) để bổ sung entitlement/used/remaining
+    bal = session.query(LeaveBalance).filter(LeaveBalance.employee_id == int(employee_id), LeaveBalance.year == int(year)).first()
+
     data = {
         "employee_id": int(employee_id),
         "year": int(year),
-        "leave_type": leave_type,
-        "approved_total_days": float(row.total_days or 0),
+        "leave_type": _normalize_leave_type(leave_type) if leave_type else None,
+        "approved_total_days": float(approved_days),
+        "entitlement": float(getattr(bal, "total_entitlement", 0) or 0) if bal else None,
+        "used": float(getattr(bal, "used", 0) or 0) if bal else None,
+        "remaining": float(getattr(bal, "remaining", 0) or 0) if bal else None,
     }
     return ok(data, "Tổng hợp nghỉ phép đã duyệt theo năm.")
 
@@ -206,20 +261,24 @@ def don_nghi_phep_cho_duyet(session: Session, approver_id: int, limit: int = 20)
     rows = (
         session.query(LeaveRequest)
         .filter(LeaveRequest.status == "PENDING", LeaveRequest.approver_id == int(approver_id))
-        .order_by(LeaveRequest.from_date.asc())
-        .limit(limit)
+        .order_by(LeaveRequest.start_date.asc())
+        .limit(int(limit))
         .all()
     )
-    data = [{
-        "leave_request_id": r.id,
-        "employee_id": r.employee_id,
-        "leave_type": r.leave_type,
-        "from_date": r.from_date.isoformat() if r.from_date else None,
-        "to_date": r.to_date.isoformat() if r.to_date else None,
-        "total_days": r.total_days,
-        "reason": r.reason,
-        "status": r.status,
-    } for r in rows]
+
+    data = []
+    for r in rows:
+        data.append({
+            "leave_request_id": getattr(r, "request_id", None) or getattr(r, "id", None),
+            "employee_id": r.employee_id,
+            "leave_type": r.leave_type,
+            "start_date": r.start_date.isoformat() if r.start_date else None,
+            "end_date": r.end_date.isoformat() if r.end_date else None,
+            "total_days": _days_between(r.start_date, r.end_date),
+            "reason": getattr(r, "reason", None),
+            "status": r.status,
+        })
+
     return ok(data, "Danh sách đơn nghỉ phép đang chờ duyệt.")
 
 

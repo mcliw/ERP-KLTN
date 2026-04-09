@@ -1,108 +1,104 @@
 // apps/frontend/erp-portal/src/modules/hrm/pages/layouts/DepartmentEdit.jsx
 
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import DepartmentForm from "../../components/layouts/DepartmentForm";
+import PageContainer from "../../../../shared/components/PageContainer";
 import { departmentService } from "../../services/department.service";
+import { useEditResource } from "../../../../shared/hooks/useEditResource";
 
 export default function DepartmentEdit() {
   const { code } = useParams();
-  const navigate = useNavigate();
 
-  const [department, setDepartment] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  // 1. Breadcrumbs động
+  const breadcrumbs = useMemo(
+    () => [
+      { label: "Trang chủ", link: "/" },
+      { label: "Nhân sự", link: "/hrm" },
+      { label: "Phòng ban", link: "/hrm/phong-ban" },
+      { label: `Cập nhật: ${code}`, active: true },
+    ],
+    [code]
+  );
 
-  /* =========================
-   * Load department
-   * ========================= */
+  // 2. Service functions (ổn định dependency)
+  const fetcher = useCallback((id) => departmentService.getByCode(id, { enrich: true }), []);
+  const updater = useCallback((id, data) => departmentService.update(id, data), []);
 
-  useEffect(() => {
-    let alive = true;
+  // 3. Hook chuẩn hóa
+  const {
+    data: department,
+    loading,
+    submitting,
+    isNotFound,
+    isDeleted,
+    handleUpdate,
+    handleCancel,
+  } = useEditResource({
+    id: code,
+    fetcher,
+    updater,
+    successPath: "/hrm/phong-ban",
+    options: {
+      resourceName: "phòng ban",
+      transformPayload: (formData) => {
+        const { code, employeeCount, ...rest } = formData; // 🔒 không gửi code; các field tính toán cũng bỏ
+        return rest;
+      },
+    },
+  });
 
-    const loadDepartment = async () => {
-      setLoading(true);
-      try {
-        const data = await departmentService.getByCode(code);
-        if (!alive) return;
-        setDepartment(data);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    loadDepartment();
-    return () => {
-      alive = false;
-    };
-  }, [code]);
-
-  /* =========================
-   * Guards
-   * ========================= */
-
+  // 4. Render trạng thái đặc biệt
   if (loading) {
-    return <div style={{ padding: 20 }}>Đang tải dữ liệu...</div>;
-  }
-
-  if (!department) {
     return (
-      <div style={{ padding: 20 }}>
-        Không tìm thấy phòng ban
-      </div>
+      <PageContainer title="Đang tải dữ liệu..." breadcrumbs={breadcrumbs}>
+        <div className="text-center py-5">Đang lấy thông tin phòng ban...</div>
+      </PageContainer>
     );
   }
 
-  if (department.deletedAt) {
+  if (isNotFound) {
     return (
-      <div style={{ padding: 20 }}>
-        Phòng ban đã bị xoá, không thể chỉnh sửa
-      </div>
+      <PageContainer title="Không tìm thấy" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-danger">
+          Không tìm thấy phòng ban với mã: <strong>{code}</strong>
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
     );
   }
 
-  /* =========================
-   * Handlers
-   * ========================= */
+  if (isDeleted) {
+    return (
+      <PageContainer title="Phòng ban đã xóa" breadcrumbs={breadcrumbs}>
+        <div className="alert alert-warning">
+          Phòng ban <strong>{department?.name || code}</strong> đã bị xóa/ngưng hoạt động.
+          Bạn cần khôi phục trước khi chỉnh sửa.
+        </div>
+        <button className="btn btn-secondary mt-3" onClick={handleCancel}>
+          Quay lại danh sách
+        </button>
+      </PageContainer>
+    );
+  }
 
-  const handleUpdate = async (formData) => {
-    if (submitting) return;
-    setSubmitting(true);
-
-    try {
-      await departmentService.update(code, {
-        ...formData,
-        code: undefined, // 🔒 khóa mã
-      });
-
-      navigate(`/hrm/phong-ban/${code}`);
-    } catch (err) {
-      if (err?.status === 404) {
-        alert("Không tìm thấy phòng ban");
-      } else if (err?.field) {
-        alert(err.message);
-      } else {
-        alert("Có lỗi khi cập nhật phòng ban");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  /* =========================
-   * Render
-   * ========================= */
-
+  // 5. Render Form chính
   return (
-    <div style={{ padding: 20 }}>
+    <PageContainer
+      title={`Cập nhật: ${department?.name || code}`}
+      breadcrumbs={breadcrumbs}
+    >
       <DepartmentForm
         mode="edit"
         initialData={department}
-        employeeCount={department.employeeCount ?? 0}
+        employeeCount={department?.employeeCount ?? 0}
         onSubmit={handleUpdate}
-        onCancel={() => navigate(-1)}
+        onCancel={handleCancel}
         disabled={submitting}
+        checkCodeExists={departmentService.checkCodeExists?.bind(departmentService)}
       />
-    </div>
+    </PageContainer>
   );
 }

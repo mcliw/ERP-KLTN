@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from uuid import UUID
 
 _PLACEHOLDERS = {
     "CUSTOMER_ID", "USER_ID", "ME", "SELF", "CURRENT_USER", "AUTH_USER_ID",
@@ -11,7 +12,7 @@ _PLACEHOLDERS = {
 def _is_placeholder(v: Any) -> bool:
     return isinstance(v, str) and v.strip().upper() in _PLACEHOLDERS
 
-def _inject_recursively(obj: Any, auth_user_id: int) -> Any:
+def _inject_recursively(obj: Any, auth_user_id: UUID) -> Any:
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
@@ -29,7 +30,7 @@ def _inject_recursively(obj: Any, auth_user_id: int) -> Any:
 
 def inject_auth_into_args(
     *,
-    auth_user_id: int | None,
+    auth_user_id: UUID | None,
     tool_args: Dict[str, Any] | None,
     has_target_user_id_field: bool,
     **_: Any,  # <- NUỐT THAM SỐ THỪA (message, role, ...)

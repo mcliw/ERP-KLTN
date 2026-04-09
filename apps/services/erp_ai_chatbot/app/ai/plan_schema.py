@@ -1,8 +1,10 @@
+# app/ai/plan_schema.py
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 
 class PlanStep(BaseModel):
     id: str
+    module: str            # ✅ thêm dòng này
     tool: str
     args: Dict[str, Any]
     save_as: Optional[str] = None

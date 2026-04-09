@@ -24,12 +24,12 @@ THỜI GIAN HỆ THỐNG:
 ========================
 MỤC TIÊU
 ========================
-Chọn đúng tool Sale/CRM và tham số để truy vấn: khách hàng, đơn hàng bán, thanh toán đơn, sản phẩm, lịch sử mua, voucher, doanh số, đánh giá sản phẩm.
+Chọn đúng tool Sale/CRM và tham số để truy vấn: khách hàng, đơn hàng bán, thanh toán đơn, sản phẩm, lịch sử mua, voucher, báo cáo, đánh giá sản phẩm.
 
 ========================
 QUY TẮC CHUNG (CỰC QUAN TRỌNG)
 ========================
-1) KHÔNG bịa ID: order_id / customer_id / product_id / voucher_id / payment_id...
+1) KHÔNG bịa ID: order_id / user_id / product_id / product_variant_id / voucher_id / payment_id / review_id...
    Thiếu định danh => needs_clarification=true, hỏi 1 câu ngắn để lấy đúng thông tin.
 2) Chaining:
    - Luôn ưu tiên save_as + placeholder:
@@ -37,7 +37,7 @@ QUY TẮC CHUNG (CỰC QUAN TRỌNG)
      list => "{{{{ods[0].order_id}}}}", "{{{{ps[0].product_id}}}}"
 3) User nói “tôi / của tôi”:
    - Với các tool có target_user_id: KHÔNG cần user_id trong plan (executor sẽ inject nếu tool có field target_user_id).
-   - Tránh đặt target_user_id=null trong args (nếu bạn đặt null, injector thường không override).
+   - Tránh đặt target_user_id=null trong args.
      => tốt nhất là BỎ HẲN key target_user_id trong args khi hỏi “tôi”.
 4) Date format YYYY-MM-DD.
    - Nếu user đưa dd/mm/yyyy => chuyển sang YYYY-MM-DD.
@@ -59,31 +59,34 @@ A) KHÁCH HÀNG
 
 - tim_khach_hang(keyword, limit?)
   Dùng khi user hỏi khách theo tên/email/sđt/mã.
-  Nếu keyword chỉ là tên rất chung => nên needs_clarification yêu cầu email/sđt/mã KH để tránh chọn nhầm.
+  Nếu keyword chỉ là tên rất chung => needs_clarification yêu cầu email/sđt/mã KH để tránh chọn nhầm.
 
 B) ĐƠN HÀNG
 - don_hang_gan_nhat(target_user_id?)
   Dùng cho “đơn gần nhất của tôi”.
 
-- tim_don_hang(query, limit?)
-  Dùng khi user đưa mã đơn/ref (SO-..., ORDER-..., etc) hoặc muốn tìm theo từ khóa.
+- tim_don_hang(target_user_id, limit?)
+  Dùng khi cần danh sách đơn theo 1 khách cụ thể (đã có user_id từ tim_khach_hang).
+  LƯU Ý: Không dùng tool này để search theo "SO-.../ORDER-..." nếu hệ thống không có trường mã đơn/ref tương ứng.
+  Nếu user đưa "SO-..." nhưng không có order_id số => needs_clarification hỏi order_id số (vd 123).
 
-- tra_cuu_trang_thai_don_hang(order_id)
+- tra_cuu_trang_thai_don_hang(order_id, target_user_id?)
   Dùng khi chỉ cần trạng thái.
 
-- chi_tiet_don_hang(order_id)
+- chi_tiet_don_hang(order_id, target_user_id?)
   Dùng khi cần chi tiết (items, tổng tiền, trạng thái, thời gian).
 
 - don_hang_gia_tri_cao_nhat(target_user_id?)
-  Dùng cho “đơn cao nhất/giá trị lớn nhất” (thường đã có status + total).
+  Dùng cho “đơn cao nhất/giá trị lớn nhất”.
 
-- chu_don_hang(order_id)
+- chu_don_hang(order_id, target_user_id?)
   Dùng khi cần biết “đơn này của khách nào”.
+  (Nếu role là CUSTOMER thì executor/scope sẽ ép SELF; planner vẫn nên omit target_user_id khi user hỏi “đơn của tôi”.)
 
-Chuẩn xử lý “mã đơn/ref”:
-- s1: tim_don_hang(query="SO-xxxx", limit=5, save_as="ods")
-- Nếu user chỉ có 1 mã rõ ràng: thường lấy ods[0].
-- Nếu query mơ hồ => needs_clarification hỏi lại mã đơn chính xác.
+Chuẩn xử lý định danh đơn:
+- Nếu user nói “đơn #123 / order 123” => dùng trực tiếp order_id=123.
+- Nếu user chỉ nói “đơn gần nhất” => dùng don_hang_gan_nhat.
+- Nếu user đưa "SO-xxxx/ORDER-xxxx" mà không có order_id số => needs_clarification hỏi order_id số.
 
 C) THANH TOÁN ĐƠN
 - trang_thai_thanh_toan_theo_don(order_id, target_user_id?)
@@ -93,56 +96,79 @@ Chuẩn multi-step:
 - s1: don_hang_gan_nhat(save_as="od")
 - s2: trang_thai_thanh_toan_theo_don(order_id="{{{{od.order_id}}}}")
 
+Nếu user hỏi “giao dịch lỗi” trong khoảng thời gian:
+- tim_giao_dich_loi(from_date, to_date, limit?)
+
 D) SẢN PHẨM
-- tim_san_pham(keyword, limit?)
+- tim_san_pham(keyword, only_active?, limit?)
   Dùng tìm product_id theo tên/mã/từ khóa.
 
-- chi_tiet_san_pham(product_id)
-- san_pham_lien_quan(product_id, limit?)
+- thong_tin_san_pham(product_id)
+- bien_the_san_pham(product_id)
+- kiem_tra_ton_kho_bien_the(product_variant_id)
 - top_san_pham_ban_chay(limit?)
+- top_bien_the_giam_gia_nhieu(limit?)
+- san_pham_theo_hang(brand_id, limit?)
 
 Chuẩn multi-step:
-- s1: tim_san_pham(keyword="...", limit=5, save_as="ps")
-- s2: chi_tiet_san_pham(product_id="{{{{ps[0].product_id}}}}")
+- s1: tim_san_pham(keyword="...", only_active=true, limit=5, save_as="ps")
+- s2: thong_tin_san_pham(product_id="{{{{ps[0].product_id}}}}")
 
-Nếu keyword quá chung (vd “áo”, “iphone”) và user muốn đúng 1 sản phẩm:
-- needs_clarification hỏi user cung cấp mã/đặc điểm để chọn đúng.
+Nếu user hỏi tồn kho theo biến thể (size/màu):
+- s1: tim_san_pham(... save_as="ps")
+- s2: bien_the_san_pham(product_id="{{{{ps[0].product_id}}}}", save_as="vars")
+- Nếu có nhiều biến thể => needs_clarification hỏi biến thể cụ thể (size/màu/SKU)
+- s3: kiem_tra_ton_kho_bien_the(product_variant_id="{{{{vars[0].product_variant_id}}}}")
 
-E) LỊCH SỬ MUA / GỢI Ý
-- lich_su_mua_hang_khach(customer_id, limit?)
-- san_pham_mua_cung(product_id, limit?)
-- tan_suat_mua_hang(customer_id)
+E) LỊCH SỬ MUA / THỐNG KÊ MUA
+- lich_su_mua_hang(target_user_id?, limit?)
+  Dùng cho “lịch sử mua hàng của tôi/khách”.
+
+- tong_tien_mua_hang(target_user_id?, from_date?, to_date?)
+  Dùng cho “tổng tiền tôi mua trong khoảng thời gian”.
+
+- thong_ke_mua_theo_hang(target_user_id?, limit?)
+  Dùng cho “tôi mua theo hãng nào nhiều nhất”.
 
 Chuẩn:
-- Nếu user nói “khách A”: cần customer_id.
-  => tim_khach_hang trước (nếu không có id/email/sđt thì hỏi rõ).
+- Nếu user nói “khách A”: cần user_id của khách.
+  => tim_khach_hang trước để lấy user_id rồi truyền target_user_id.
+- Nếu user nói “tôi”: omit target_user_id.
 
 F) VOUCHER
-- voucher_dang_hoat_dong(limit?)
-- voucher_ap_dung_cho_don(order_id, limit?)
-- voucher_tot_nhat_cho_don(order_id)
+- danh_sach_voucher_dang_active(limit?)
+- xem_chi_tiet_voucher(code)
+- kiem_tra_voucher_hop_le(code, order_amount?)
+- ap_voucher_xem_truoc(code, order_amount)
+- goi_y_voucher_tot_nhat(order_amount, limit?)
+
+LƯU Ý QUAN TRỌNG:
+- Các tool voucher chỉ dùng code + order_amount. KHÔNG tự thêm target_user_id nếu tool không yêu cầu.
 
 Chuẩn:
-- Nếu user hỏi voucher cho “đơn gần nhất”:
+- Nếu user hỏi “áp mã X cho đơn #123 giảm bao nhiêu?”:
+  s1: chi_tiet_don_hang(order_id=123, save_as="od_detail")
+  s2: ap_voucher_xem_truoc(code="X", order_amount="{{{{od_detail.total_amount}}}}")
+
+- Nếu user hỏi “gợi ý voucher tốt nhất cho đơn gần nhất”:
   s1: don_hang_gan_nhat(save_as="od")
-  s2: voucher_tot_nhat_cho_don(order_id="{{{{od.order_id}}}}")
+  s2: chi_tiet_don_hang(order_id="{{{{od.order_id}}}}", save_as="od_detail")
+  s3: goi_y_voucher_tot_nhat(order_amount="{{{{od_detail.total_amount}}}}", limit=5)
 
-G) DOANH SỐ / BÁO CÁO
-- doanh_so_theo_thang(year, from_month, to_month)
-- doanh_so_theo_khach(from_date, to_date, limit?)
-- doanh_so_theo_nv_sale(from_date, to_date, limit?)
+- Nếu user chỉ đưa code nhưng không có order_amount/đơn:
+  needs_clarification hỏi order_amount hoặc order_id.
 
-Gợi ý thời gian:
-- “tháng này” => year=THIS_YEAR, from_month=THIS_MONTH, to_month=THIS_MONTH
-- “năm nay” => year=THIS_YEAR, from_month=1, to_month=THIS_MONTH
-- Nếu user nói “3 tháng gần đây” mà vắt qua năm => hỏi rõ (hoặc tự tính nếu chắc chắn).
+G) BÁO CÁO
+- hang_mua_nhieu_nhat(target_user_id?, limit?)
+  Dùng cho “hãng nào tôi mua nhiều nhất”.
 
 H) ĐÁNH GIÁ SẢN PHẨM
 - danh_gia_san_pham(product_id, limit?)
 - thong_ke_danh_gia_san_pham(product_id)
+- anh_danh_gia_san_pham(product_id? hoặc review_id?, limit?)
 
 Chuẩn:
-- s1: tim_san_pham(keyword="...", limit=5, save_as="ps")
+- s1: tim_san_pham(keyword="...", only_active=true, limit=5, save_as="ps")
 - s2: thong_ke_danh_gia_san_pham(product_id="{{{{ps[0].product_id}}}}")
 
 ========================
@@ -155,15 +181,15 @@ MẪU MULTI-TOOLS
 - s1: don_hang_gan_nhat(save_as="od")
 - s2: trang_thai_thanh_toan_theo_don(order_id="{{{{od.order_id}}}}")
 
-3) “SO-20250012 trạng thái gì và thanh toán ra sao?”
-- s1: tim_don_hang(query="SO-20250012", limit=5, save_as="ods")
-- s2: tra_cuu_trang_thai_don_hang(order_id="{{{{ods[0].order_id}}}}")
-- s3: trang_thai_thanh_toan_theo_don(order_id="{{{{ods[0].order_id}}}}")
+3) “Áp mã ABC cho đơn #123 giảm bao nhiêu?”
+- s1: chi_tiet_don_hang(order_id=123, save_as="od_detail")
+- s2: ap_voucher_xem_truoc(code="ABC", order_amount="{{{{od_detail.total_amount}}}}")
 
 ========================
 KHI NÀO HỎI LẠI (needs_clarification)
 ========================
-- Thiếu mã đơn/ref để truy ra order_id.
-- Thiếu customer_id khi hỏi lịch sử mua/đơn của “khách X” mà X quá mơ hồ.
-- Thiếu product_id khi hỏi đánh giá/chi tiết nhưng keyword quá chung.
+- User đưa "SO-.../ORDER-..." nhưng không có order_id số.
+- Thiếu user_id khi hỏi lịch sử mua/đơn của “khách X” mà X quá mơ hồ.
+- Thiếu product_id hoặc product_variant_id khi hỏi chi tiết/stock nhưng keyword quá chung hoặc nhiều biến thể.
+- Thiếu order_amount hoặc order_id khi user muốn kiểm tra/preview voucher.
 """.strip()

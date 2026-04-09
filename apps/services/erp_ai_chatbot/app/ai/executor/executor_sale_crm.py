@@ -1,22 +1,31 @@
 from __future__ import annotations
 
 import re
+from uuid import UUID
 from typing import Any, Dict, Optional, List
 
-from app.core.rbac import check_role
-from app.core.audit_log import audit
-from app.core.errors import PermissionDenied, ToolExecutionError
 from app.ai.router import plan_route
 from app.ai.plan_validator import validate_plan
 from app.ai.module_registry import get_tool
 from app.ai.tooling import ToolSpec
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough
+from app.ai.executor.context_injection import inject_auth_into_args
+from app.ai.llm_payload_filter import filter_step_infos_for_llm
 
 from app.db.sale_crm_database import SaleCrmSessionLocal
 
-from app.ai.executor.context_injection import inject_auth_into_args
+from app.core.audit_log import audit
+from app.core.errors import PermissionDenied, ToolExecutionError
 
-from typing import Any, Dict
+from app.core.role.auth_context import build_auth_context
+from app.core.role.rbac import check_role
+from app.core.role.tool_policies import TOOL_POLICIES
+from app.core.role.scope_resolver import resolve_scope
+from app.core.role.enforcer import (
+    check_required_permissions,
+    sanitize_args_by_scope,
+    apply_field_policy,
+)
 
 def _fmt_money(v: Any) -> str:
     try:
@@ -24,78 +33,6 @@ def _fmt_money(v: Any) -> str:
         return f"{n:,.0f}".replace(",", ".") + " VNĐ"
     except Exception:
         return str(v)
-
-# def build_answer_sale_crm(intent: str, store: Dict[str, Any]) -> str | None:
-#     s1 = store.get("s1") or {}
-#     r1 = s1 if isinstance(s1, dict) else {}
-#     ok1 = r1.get("ok") is True
-#     d1 = r1.get("data") if isinstance(r1, dict) else None
-
-#     # 1) Hồ sơ khách hàng
-#     if intent in ("get_user_account_info", "ho_so_khach_hang"):
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         return (
-#             f"Tài khoản: {d1.get('username')} (ID {d1.get('user_id')}). "
-#             f"SĐT: {d1.get('phone')}. Email: {d1.get('email')}. "
-#             f"Role: {d1.get('role_name')}."
-#         )
-
-#     # 2) Trạng thái đơn + thanh toán
-#     if intent == "tra_cuu_trang_thai_don_hang":
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         pay = d1.get("payment") or {}
-#         if isinstance(pay, dict) and pay:
-#             return (
-#                 f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. "
-#                 f"Thanh toán: {pay.get('payment_status')} ({pay.get('payment_method')})."
-#             )
-#         return f"Đơn {d1.get('order_id')}: {d1.get('order_status')}. Chưa có dữ liệu thanh toán."
-
-#     if intent == "trang_thai_thanh_toan_theo_don":
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         pay = d1.get("payment") or {}
-#         if not isinstance(pay, dict) or not pay:
-#             return "Đơn này chưa có dữ liệu thanh toán."
-#         return f"Thanh toán đơn {d1.get('order_id')}: {pay.get('payment_status')} ({pay.get('payment_method')})."
-
-#     # 3) Đơn gần nhất
-#     if intent == "don_hang_gan_nhat":
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         return (
-#             f"Đơn gần nhất: #{d1.get('order_id')} - {d1.get('order_status')}, "
-#             f"giá trị {_fmt_money(d1.get('total_amount'))}."
-#         )
-
-#     # 4) Hãng mua nhiều nhất
-#     if intent == "hang_mua_nhieu_nhat":
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         tb = d1.get("top_brand") or {}
-#         if not isinstance(tb, dict) or not tb:
-#             return "Không có dữ liệu."
-#         return (
-#             f"Bạn mua nhiều nhất hãng {tb.get('brand_name')}: "
-#             f"{tb.get('total_qty')} sản phẩm, tổng {_fmt_money(tb.get('total_amount'))}."
-#         )
-
-#     # 5) Voucher preview
-#     if intent == "ap_voucher_xem_truoc":
-#         if not ok1 or not isinstance(d1, dict):
-#             return (r1.get("thong_diep") or "Không có dữ liệu.")
-#         valid = d1.get("valid")
-#         reason = d1.get("reason")
-#         if valid is True:
-#             return "Voucher dùng được cho đơn này."
-#         if valid is False:
-#             return f"Voucher không dùng được: {reason or 'không rõ lý do'}."
-#         return "Không có dữ liệu."
-
-#     return None
-# =========================
 
 def _args_has_target_user_id_field(tool) -> bool:
     # tool.args_model là Pydantic model class
@@ -273,80 +210,58 @@ def _execute_tool(module: str, tool: ToolSpec, args: Dict[str, Any]) -> Dict[str
         session.close()
 
 # =========================
-# Fallback deterministic (khi compose fail)
-# =========================
-def _fallback_from_result(result: Any) -> Optional[str]:
-    if not isinstance(result, dict):
-        return None
-
-    data = result.get("data")
-    msg = (result.get("thong_diep") or "").strip()
-
-    if data is None:
-        return msg or None
-
-    # order status
-    if isinstance(data, dict) and "order_id" in data and "order_status" in data:
-        oid = data.get("order_id")
-        st = data.get("order_status")
-        pay = data.get("payment")
-        if isinstance(pay, dict):
-            pst = pay.get("payment_status")
-            pm = pay.get("payment_method")
-            return f"Đơn {oid}: trạng thái {st}. Thanh toán: {pst} ({pm})."
-        return f"Đơn {oid}: trạng thái {st}."
-
-    # order detail
-    if isinstance(data, dict) and "items" in data and "total_amount" in data and "order_id" in data:
-        oid = data.get("order_id")
-        total = data.get("total_amount")
-        items = data.get("items") if isinstance(data.get("items"), list) else []
-        return f"Đơn {oid} có {len(items)} sản phẩm. Tổng tiền: {total}."
-
-    # payment by order
-    if isinstance(data, dict) and "payment" in data and "order_id" in data:
-        p = data.get("payment")
-        if not p:
-            return f"Đơn {data.get('order_id')}: chưa có thông tin thanh toán."
-        return f"Thanh toán đơn {data.get('order_id')}: {p.get('payment_status')} ({p.get('payment_method')})."
-
-    # voucher preview
-    if isinstance(data, dict) and {"code", "discount_amount", "payable_amount", "order_amount"}.issubset(set(data.keys())):
-        return f"Mã {data.get('code')}: giảm {data.get('discount_amount')}, còn {data.get('payable_amount')}."
-
-    if isinstance(data, list):
-        if len(data) == 0:
-            return msg or "Không có dữ liệu phù hợp."
-        return msg or f"Có {len(data)} kết quả."
-
-    return msg or None
-
-# =========================
 # Main
 # =========================
 def execute_chat_sale_crm(
     module: str,
-    user_id: int | None,
+    user_id: UUID | None,
     role: str | None,
     message: str,
-    paraphrase_enabled: bool = True,
     compose_enabled: bool = True,
 ):
-    if not check_role(module, role):
-        raise PermissionDenied(f"Role '{role}' không được phép dùng chatbot module '{module}'.")
+    # ===== Auth + Permissions =====
+    auth_ctx = build_auth_context(user_id=user_id)
+    if not auth_ctx.is_authenticated or not auth_ctx.role:
+        raise PermissionDenied("Bạn không có quyền truy cập.")
 
-    auth = {"user_id": user_id, "role": role, "is_authenticated": True}
+    user_perms = set(getattr(auth_ctx, "permissions", []) or [])
+    auth = auth_ctx.model_dump()
+
+    if not check_role(module, auth_ctx):
+        raise PermissionDenied(f"Role '{auth_ctx}' không được phép dùng chatbot module '{module}'.")
+
+    # ===== helper: lấy policy tool (hỗ trợ cả 2 dạng TOOL_POLICIES) =====
+    def _get_policy(mod: str, tool_name: str) -> dict | None:
+        # dạng 1: TOOL_POLICIES = {"sale_crm": {"tool": {...}}}
+        if isinstance(TOOL_POLICIES, dict) and mod in TOOL_POLICIES and isinstance(TOOL_POLICIES.get(mod), dict):
+            return TOOL_POLICIES[mod].get(tool_name)
+        # dạng 2: TOOL_POLICIES = {"tool": {...}}
+        if isinstance(TOOL_POLICIES, dict):
+            return TOOL_POLICIES.get(tool_name)
+        return None
+
+    def _strip_fields(obj: Any, deny_fields: set[str]) -> Any:
+        if not deny_fields:
+            return obj
+        if isinstance(obj, dict):
+            return {k: _strip_fields(v, deny_fields) for k, v in obj.items() if k not in deny_fields}
+        if isinstance(obj, list):
+            return [_strip_fields(x, deny_fields) for x in obj]
+        return obj
+
+    # ===== Plan =====
     plan = plan_route(module=module, message=message, auth=auth)
     audit({"event": "plan_created", "module": module, "plan": plan.model_dump()})
 
     if plan.needs_clarification:
         return {"answer": plan.clarifying_question, "plan": plan.model_dump()}
 
-    validate_plan(plan)
+    validate_plan(plan, auth=auth, user_perms=user_perms)
 
     store: Dict[str, Any] = {}
     step_infos: list[dict] = []
 
+    # --- run tools ---
     for idx, step in enumerate(plan.steps, start=1):
         tool = get_tool(plan.module, step.tool)
         if tool is None:
@@ -358,15 +273,62 @@ def execute_chat_sale_crm(
             audit({"event": "arg_unresolved_stop", "error": str(e), "step": step.model_dump()})
             break
 
+        # inject_auth_into_args như code sẵn có (giữ nguyên)
         resolved_args = inject_auth_into_args(
+            message=message,
+            role=role,
             auth_user_id=user_id,
             tool_args=resolved_args,
             has_target_user_id_field=_args_has_target_user_id_field(tool),
         )
 
+        # ===== ENFORCE: permission + scope + sanitize args + field masking =====
+        policy = _get_policy(plan.module, step.tool)
+        if not policy:
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_policy"})
+            raise PermissionDenied(f"Tool '{step.tool}' chưa khai báo policy (TOOL_POLICIES).")
 
+        required = set(policy.get("required_permissions", []))
+        if required and not required.issubset(user_perms):
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_permissions"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        scope = resolve_scope(role_name=auth.get("role"), module=plan.module, tool_name=step.tool)
+        if scope == "NONE":
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "scope_NONE"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        allowed_scopes = policy.get("allowed_scopes", ["SELF"])
+        if scope not in allowed_scopes:
+            scope = policy.get("default_scope", "SELF")
+            if scope not in allowed_scopes:
+                audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "scope_not_allowed"})
+                raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        audit({"event": "scope_resolved", "module": plan.module, "tool": step.tool, "scope": scope})
+
+        before_args = dict(resolved_args)
+
+        # sanitize theo scope cho sale_crm (ưu tiên target_user_id)
+        if scope == "SELF":
+            if "target_user_id" in resolved_args and auth.get("user_id") is not None:
+                resolved_args["target_user_id"] = auth["user_id"]
+            if "user_id" in resolved_args and auth.get("user_id") is not None:
+                resolved_args["user_id"] = auth["user_id"]
+
+        if before_args != resolved_args:
+            audit({"event": "args_sanitized", "module": plan.module, "tool": step.tool, "before": before_args, "after": resolved_args})
+
+        # ===== Execute tool =====
         audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
         result = _execute_tool(plan.module, tool, resolved_args)
+
+        # field masking (deny_fields)
+        deny_fields = set(((policy.get("field_policy") or {}).get("deny_fields")) or [])
+        if isinstance(result, dict) and "data" in result and deny_fields:
+            result = dict(result)
+            result["data"] = _strip_fields(result.get("data"), deny_fields)
+
         audit({"event": "tool_result", "module": plan.module, "tool": step.tool, "result": result})
 
         step_infos.append({"id": step.id, "tool": step.tool, "args": resolved_args, "result": result})
@@ -384,74 +346,19 @@ def execute_chat_sale_crm(
             else:
                 store[step.save_as] = result
 
-    # FILTER context-only tool outputs trước khi compose/answer
-    step_infos_for_compose = _filter_step_infos_for_compose(plan.module, message, step_infos)
-    step_infos_for_answer = _filter_step_infos_for_answer(plan.module, message, step_infos)
-
-    has_real_data = any(
-        (si.get("result") or {}).get("ok") is True
-        and (si.get("result") or {}).get("data") not in (None, {}, [])
-        for si in step_infos
-    )
-
-
-    # ===== Compose answer bằng LLM =====
+    # ===== Compose answer =====
     answer = None
-    composed_used = False
-    compose_error = None
-
     if compose_enabled:
         try:
-            composed = compose_answer_with_llm(plan.module, message, step_infos_for_compose)
+            step_infos_for_answer = _filter_step_infos_for_answer(plan.module, message, step_infos)
+            step_infos_for_llm = filter_step_infos_for_llm(plan.module, step_infos_for_answer)
+            composed = compose_answer_with_llm(plan.module, message, step_infos_for_llm)
             if composed:
-                # nếu tool có dữ liệu mà LLM nói "không có dữ liệu" -> coi như compose sai
-                if has_real_data and "không có dữ liệu" in composed.lower():
-                    compose_error = "LLM trả lời sai; fallback deterministic."
-                    audit({"event": "compose_bad_answer", "answer": composed})
-                else:
-                    answer = composed
-                    composed_used = True
+                answer = composed
         except Exception as e:
-            compose_error = str(e)
-            audit({"event": "compose_failed", "error": compose_error})
+            audit({"event": "compose_failed", "error": str(e)})
 
+    if not answer:
+        answer = "Không tìn thấy thông tin."
 
-    ans = answer
-    if compose_enabled and composed_used and ans and "không có dữ liệu" in ans.lower():
-        # nếu tool ok và data không rỗng => fallback deterministic
-        has_real_data = any(
-            (si.get("result") or {}).get("ok") is True and (si.get("result") or {}).get("data") not in (None, {}, [])
-            for si in step_infos
-        )
-        if has_real_data and plan.intent == "hang_mua_nhieu_nhat":
-            tb = (store.get("s1") or {}).get("data", {}).get("top_brand")
-            if tb:
-                ans = f"Bạn mua nhiều nhất hãng {tb['brand_name']}: {tb['total_qty']} sản phẩm, tổng {tb['total_amount']}."
-                composed_used = False
-                compose_error = "LLM trả lời sai; fallback deterministic."
-
-    # ===== Fallback deterministic nếu LLM fail / không dùng =====
-    if not composed_used:
-
-        det = build_answer_sale_crm(plan.intent, store)
-
-        if det:
-            answer = det
-        else:
-            # fallback mềm: dùng step_infos (KHÔNG dùng step_infos_for_answer vì có thể bị filter mất)
-            parts: list[str] = []
-            for si in step_infos[::-1]:
-                fb = _fallback_from_result(si.get("result"))
-                if fb and fb not in parts:
-                    parts.append(fb)
-                if len(parts) >= 2:
-                    break
-            answer = "\n".join(parts) if parts else "Không có dữ liệu."
-
-    return {
-        "answer": answer,
-        "composed_used": composed_used,
-        "compose_error": compose_error,
-        "data": store,
-        "plan": plan.model_dump(),
-    }
+    return {"answer": answer, "data": store, "plan": plan.model_dump()}

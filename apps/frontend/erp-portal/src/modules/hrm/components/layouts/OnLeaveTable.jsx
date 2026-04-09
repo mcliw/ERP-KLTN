@@ -1,25 +1,25 @@
 // apps/frontend/erp-portal/src/modules/hrm/components/layouts/OnLeaveTable.jsx
 
-import {
-  FaCaretLeft,
-  FaCaretRight,
-  FaEye,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-import "../styles/table.css";
 import { useAuthStore } from "../../../../auth/auth.store";
 import { HRM_PERMISSIONS } from "../../../../shared/permissions/hrm.permissions";
+import { isSoftDeleted } from "../../../../shared/utils/softDelete";
 
-/* ================= HELPERS ================= */
-const formatDate = (v) =>
-  v ? new Date(v).toLocaleDateString("vi-VN") : "—";
+import {
+  TablePagination,
+  TableActions,
+  StatusBadge,
+  EmptyRow,
+  formatDate,
+} from "../../../../shared/components/TableComponents";
 
-const normalizeStatus = (v) =>
-  String(v || "").toLowerCase();
+const normalizeCode = (v) => String(v || "").trim().toUpperCase();
 
 export default function OnLeaveTable({
   data = [],
+  // chuẩn hoá giống EmployeeTable: nhận map để resolve tên theo code (nếu muốn)
+  departmentMap = {},
+  positionMap = {},
+
   page = 1,
   totalPages = 1,
   onPrev,
@@ -32,10 +32,17 @@ export default function OnLeaveTable({
 }) {
   const { user } = useAuthStore();
 
-  const hasActions =
-    onView || onEdit || onDelete || renderExtraActions;
+  const resolve = (map, value) => map[normalizeCode(value)] || value || "";
+  const hasActions = onView || onEdit || onDelete || renderExtraActions;
+  const colCount = hasActions ? 10 : 9;
 
-  const colSpan = hasActions ? 10 : 9;
+  const handleRowClick = (e, row) => {
+    const inActionCol = e.target.closest?.(".action-col");
+    const inButtonOrLink = e.target.closest?.("button, a");
+    if (inActionCol || inButtonOrLink) return;
+
+    onRowClick?.(row);
+  };
 
   return (
     <>
@@ -51,90 +58,60 @@ export default function OnLeaveTable({
             <th>Đến ngày</th>
             <th>Lý do</th>
             <th>Trạng thái</th>
-            {hasActions && (
-              <th className="action-col">Thao tác</th>
-            )}
+            {hasActions && <th className="action-col">Thao tác</th>}
           </tr>
         </thead>
 
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan={colSpan} className="empty">
-                Không có dữ liệu
-              </td>
-            </tr>
+            <EmptyRow colSpan={colCount} />
           ) : (
             data.map((o) => {
-              const isPending = normalizeStatus(o.status) === "chờ duyệt";
-              const isManager = HRM_PERMISSIONS.LEAVE_EDIT.includes(user?.role);
-              const canEditOrDelete = isManager || isPending;
+              const deleted = isSoftDeleted(o.deletedAt);
 
-              const isDeleted = Boolean(o.deletedAt);
+              const statusLower = String(o.status || "").toLowerCase();
+              const isPending = statusLower === "chờ duyệt";
+              const isManager = HRM_PERMISSIONS.HRM_LEAVE_UPDATE.includes(user?.role);
+              const canEditOrDelete = isManager || isPending;
 
               return (
                 <tr
                   key={o.id}
                   className={[
                     onRowClick && "clickable",
-                    isDeleted && "deleted",
+                    deleted && "deleted",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={() => onRowClick?.(o)}
+                  onClick={(e) => handleRowClick(e, o)}
                 >
                   <td>{o.employeeCode || "-"}</td>
                   <td>{o.employeeName || "-"}</td>
-                  <td>{o.departmentName || "-"}</td>
-                  <td>{o.positionName || "-"}</td>
+
+                  {/* Chuẩn hoá: nếu backend trả code thì resolve bằng map, nếu đã là name thì vẫn hiển thị */}
+                  <td>{resolve(departmentMap, o.departmentCode || o.departmentName)}</td>
+                  <td>{resolve(positionMap, o.positionCode || o.positionName)}</td>
+
                   <td>{o.leaveType || "-"}</td>
                   <td>{formatDate(o.fromDate)}</td>
                   <td>{formatDate(o.toDate)}</td>
                   <td>{o.reason || "—"}</td>
 
                   <td>
-                    <span
-                      className={`status ${
-                        isDeleted
-                          ? "deleted"
-                          : normalizeStatus(o.status) === "đã duyệt"
-                          ? "active"
-                          : normalizeStatus(o.status) === "từ chối"
-                          ? "inactive"
-                          : ""
-                      }`}
-                    >
-                      {isDeleted
-                        ? "Đã xoá"
-                        : o.status || "Không rõ"}
-                    </span>
+                    <StatusBadge status={o.status} isDeleted={deleted} />
                   </td>
 
                   {hasActions && (
-                    <td
-                      className="actions"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      {onView && (
-                        <button title="Xem" onClick={() => onView(o)}>
-                          <FaEye />
-                        </button>
-                      )}
-
-                      {onEdit && !isDeleted && canEditOrDelete && (
-                        <button title="Sửa" onClick={() => onEdit(o)}>
-                          <FaEdit />
-                        </button>
-                      )}
-
-                      {onDelete && !isDeleted && canEditOrDelete && (
-                        <button className="danger" title="Xóa" onClick={() => onDelete(o)}>
-                          <FaTrash />
-                        </button>
-                      )}
-
-                      {renderExtraActions?.(o)}
-                    </td>
+                    <TableActions
+                      data={o}
+                      onView={onView}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      renderExtra={renderExtraActions}
+                      isDeleted={deleted}
+                      canEdit={canEditOrDelete}
+                      canDelete={canEditOrDelete}
+                    />
                   )}
                 </tr>
               );
@@ -143,26 +120,12 @@ export default function OnLeaveTable({
         </tbody>
       </table>
 
-      {/* PAGINATION */}
-      <div className="pagination">
-        <button
-          disabled={page === 1}
-          onClick={onPrev}
-        >
-          <FaCaretLeft /> Trước
-        </button>
-
-        <span>
-          Trang {page} / {totalPages}
-        </span>
-
-        <button
-          disabled={page === totalPages}
-          onClick={onNext}
-        >
-          Sau <FaCaretRight />
-        </button>
-      </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
     </>
   );
 }

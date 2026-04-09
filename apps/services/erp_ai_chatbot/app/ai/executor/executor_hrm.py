@@ -1,24 +1,75 @@
 from __future__ import annotations
+
 import re
+import json
+import os
+
+from uuid import UUID
 from typing import Any, Dict, Optional, List
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from app.core.rbac import check_role
-from app.core.audit_log import audit
-from app.core.errors import PermissionDenied, ToolExecutionError
 from app.ai.router import plan_route
 from app.ai.plan_validator import validate_plan
 from app.ai.module_registry import get_tool
 from app.ai.tooling import ToolSpec
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough
-
+from app.ai.executor.context_injection import inject_auth_into_args
+from app.ai.llm_payload_filter import filter_step_infos_for_llm
 from app.db.hrm_database import HrmSessionLocal
 
-import json
-import os
-from google import genai
+from app.core.audit_log import audit
+from app.core.errors import PermissionDenied, ToolExecutionError, InvalidPlan 
 
-from app.ai.executor.context_injection import inject_auth_into_args
+from app.core.role.rbac import check_role
+from app.core.role.auth_context import build_auth_context
+from app.core.role.tool_policies import TOOL_POLICIES
+from app.core.role.scope_resolver import resolve_scope
+from app.core.role.enforcer import (
+    check_required_permissions,
+    sanitize_args_by_scope,
+    apply_field_policy,
+)
+from uuid import UUID
+from typing import Any
+
+def _looks_like_uuid(v: Any) -> bool:
+    if isinstance(v, UUID):
+        return True
+    if isinstance(v, str) and "-" in v:
+        try:
+            UUID(v)
+            return True
+        except Exception:
+            return False
+    return False
+
+def _fix_args_before_validate(args: dict, tool, auth_ctx) -> dict:
+    out = dict(args or {})
+    fields = getattr(tool.args_model, "model_fields", {}) or {}
+
+    # Nếu tool dùng employee_code thì ưu tiên employee_code, bỏ employee_id nếu bị UUID
+    if "employee_code" in fields:
+        # nếu plan lỡ đưa employee_id=UUID => drop
+        if _looks_like_uuid(out.get("employee_id")):
+            out.pop("employee_id", None)
+        return out
+
+    # Nếu tool dùng user_id thì chỉ set user_id
+    if "user_id" in fields:
+        # đảm bảo user_id là UUID đúng
+        if "user_id" not in out or out["user_id"] is None:
+            out["user_id"] = auth_ctx.user_id
+        return out
+
+    # Chỉ khi tool thật sự có employee_id thì mới inject employee_id
+    if "employee_id" in fields:
+        v = out.get("employee_id")
+        if v is None or _looks_like_uuid(v):
+            if auth_ctx.employee_id is None:
+                raise ToolExecutionError("Không xác định được employee_id của user hiện tại.")
+            out["employee_id"] = auth_ctx.employee_id
+
+    return out
 
 def _args_has_target_user_id_field(tool) -> bool:
     # tool.args_model là Pydantic model class
@@ -33,9 +84,11 @@ CONTEXT_ONLY_TOOLS_BY_MODULE: dict[str, set[str]] = {
 }
 
 _EMP_PROFILE_KW = re.compile(
-    r"(thông tin|hồ sơ|profile|liên hệ|sđt|điện thoại|email|phòng ban|chức vụ|ngày vào|ngày nghỉ|trạng thái)",
+    r"(thông tin|hồ sơ|profile|liên hệ|sđt|điện thoại|email|phòng ban|thuộc phòng|phòng nào|department"
+    r"|chức vụ|ngày vào|ngày nghỉ|trạng thái|status|active|inactive)",
     re.IGNORECASE
 )
+
 
 def _wants_employee_profile(message: str) -> bool:
     return bool(_EMP_PROFILE_KW.search(message or ""))
@@ -47,11 +100,6 @@ def _filter_step_infos_for_compose(module: str, message: str, step_infos: list[d
         return [si for si in step_infos if si.get("tool") not in suppress]
     return step_infos
 
-def _filter_step_infos_for_answer(module: str, message: str, step_infos: list[dict]) -> list[dict]:
-    suppress = CONTEXT_ONLY_TOOLS_BY_MODULE.get(module, set())
-    if module == "hrm" and (not _wants_employee_profile(message)):
-        return [x for x in step_infos if x.get("tool") not in suppress]
-    return step_infos
 
 def _extract_requested_metrics(message: str) -> list[str]:
     m = (message or "").lower()
@@ -84,7 +132,7 @@ def _is_int_like(s: str) -> bool:
     s = (s or "").strip()
     return s.isdigit()
 
-def _auto_resolve_hrm_employee_id(args: Dict[str, Any]) -> Dict[str, Any]:
+def _auto_resolve_hrm_employee_id(args: Dict[str, Any], auth_ctx) -> Dict[str, Any]:
     """
     Nếu args.employee_id đang là mã NV (VD: 'NV001') thay vì int,
     thì tự gọi tool 'thong_tin_nhan_vien' (fallback 'tim_nhan_vien') để lấy employee_id int.
@@ -111,7 +159,7 @@ def _auto_resolve_hrm_employee_id(args: Dict[str, Any]) -> Dict[str, Any]:
         return args
 
     lookup_args = {"employee_code": raw} if tool.name == "thong_tin_nhan_vien" else {"tu_khoa": raw}
-    lookup_res = _execute_tool("hrm", tool, lookup_args)
+    lookup_res = _execute_tool("hrm", tool, lookup_args, auth_ctx)
 
     data = (lookup_res or {}).get("data") if isinstance(lookup_res, dict) else None
     emp_id = data.get("employee_id") if isinstance(data, dict) else None
@@ -160,7 +208,6 @@ VAR_DBL_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+|\[[0-9]+\])*)\
 
 class UnresolvedRefError(Exception):
     pass
-
 
 def _get_path(store: dict, path: str):
     cur: Any = store
@@ -232,7 +279,6 @@ def _render_value(tpl: str, store: dict):
 
     return VAR_DBL_RE.sub(repl, tpl)
 
-
 def _normalize_ref(s: str) -> str:
     s = (s or "").strip()
 
@@ -257,7 +303,6 @@ def _normalize_ref(s: str) -> str:
 
     return s
 
-
 def _resolve_args(args: Dict[str, Any], store: dict) -> Dict[str, Any]:
     out = {}
     for k, v in (args or {}).items():
@@ -275,10 +320,11 @@ def _resolve_args(args: Dict[str, Any], store: dict) -> Dict[str, Any]:
             out[k] = v
     return out
 
-def _execute_tool(module: str, tool: ToolSpec, args: Dict[str, Any]) -> Dict[str, Any]:
+def _execute_tool(module: str, tool: ToolSpec, args: Dict[str, Any], auth_ctx) -> Dict[str, Any]:
     if module == "hrm":
         session = HrmSessionLocal()
         try:
+            args = _fix_args_before_validate(args, tool, auth_ctx)
             parsed = tool.args_model.model_validate(args)
             return tool.handler(session=session, **parsed.model_dump())
         except Exception as e:
@@ -287,7 +333,6 @@ def _execute_tool(module: str, tool: ToolSpec, args: Dict[str, Any]) -> Dict[str
             session.close()
 
     raise ToolExecutionError(f"Chưa hỗ trợ executor cho module '{module}'.")
-
 
 def _s(v, default="N/A"):
     if v is None: return default
@@ -309,7 +354,6 @@ def _fmt_date_vi(iso: Any) -> str:
             return s.split("T")[0]
     return str(iso)
 
-
 def _fmt_list(lines: List[str], limit: int = 7) -> str:
     if not lines: return ""
     shown = lines[:limit]
@@ -328,303 +372,6 @@ def _fmt_money(v: Any) -> str:
         return f"{float(v):,.0f}"
     except Exception:
         return str(v)
-
-# def _fallback_from_result(result: Any) -> Optional[str]:
-#     if not isinstance(result, dict):
-#         return None
-
-#     data = result.get("data")
-#     msg = (result.get("thong_diep") or "").strip()
-
-#     # ok(None, "...")
-#     if data is None:
-#         return msg or None
-
-#     # =========================
-#     # HRM: Nhân sự (card)
-#     # =========================
-#     if isinstance(data, dict) and "employee_code" in data and "full_name" in data:
-#         code = _s(data.get("employee_code"))
-#         name = _s(data.get("full_name"))
-#         status = _s(data.get("status"))
-#         dept = _s(data.get("department_name"))
-#         dept_code = _s(data.get("department_code"))
-#         pos = _s(data.get("position_title"))
-#         phone = _s(data.get("phone"))
-#         email = _s(data.get("email_company"))
-#         join_date = _fmt_date_vi(data.get("join_date"))
-#         resign_date = _fmt_date_vi(data.get("resign_date")) if data.get("resign_date") else "N/A"
-
-#         lines = [
-#             f"Nhân viên {code} - {name} (trạng thái: {status}).",
-#             f"Phòng ban: {dept_code} - {dept}.",
-#             f"Chức vụ: {pos}.",
-#             f"Liên hệ: {phone} | {email}.",
-#             f"Ngày vào: {join_date}. Nghỉ việc: {resign_date}.",
-#         ]
-#         return "\n".join(lines) if not msg else f"{msg}\n" + "\n".join(lines)
-
-#     # =========================
-#     # HRM: Chấm công theo ngày (dict có timesheet_id + date)
-#     # =========================
-#     if isinstance(data, dict) and "timesheet_id" in data and "date" in data and "status" in data:
-#         d = _fmt_date_vi(data.get("date"))
-#         st = _s(data.get("status"))
-#         cin = _s(data.get("check_in_time"))
-#         cout = _s(data.get("check_out_time"))
-#         late = data.get("late_minutes", 0)
-#         early = data.get("early_leave_minutes", 0)
-#         ot = data.get("ot_hours", 0)
-#         shift = _s(data.get("shift_name"))
-#         logs = data.get("attendance_logs") if isinstance(data.get("attendance_logs"), list) else []
-#         log_txt = f"Số log: {len(logs)}." if logs is not None else ""
-
-#         base = [
-#             f"Chấm công ngày {d}: {st}.",
-#             f"Ca: {shift}. Check-in: {cin}. Check-out: {cout}.",
-#             f"Đi muộn: {late} phút. Về sớm: {early} phút. OT: {ot} giờ. {log_txt}".strip(),
-#         ]
-#         base = [x for x in base if x]
-#         return "\n".join(base) if not msg else f"{msg}\n" + "\n".join(base)
-
-#     # =========================
-#     # HRM: Lịch sử chấm công (list)
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "date" in data[0] and "status" in data[0]:
-#         lines = []
-#         for r in data[:7]:
-#             d = _fmt_date_vi(r.get("date"))
-#             st = _s(r.get("status"))
-#             cin = _s(r.get("check_in_time"))
-#             cout = _s(r.get("check_out_time"))
-#             late = r.get("late_minutes", 0)
-#             ot = r.get("ot_hours", 0)
-#             lines.append(f"- {d}: {st} | in {cin} | out {cout} | late {late}p | OT {ot}h")
-#         txt = "Lịch sử chấm công:\n" + _fmt_list(lines, 7)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Tổng hợp chấm công tháng (dict)
-#     # =========================
-#     if isinstance(data, dict) and {"month", "year", "present_days", "absent_days", "leave_days"}.issubset(data.keys()):
-#         m = data.get("month")
-#         y = data.get("year")
-#         txt = (
-#             f"Tổng hợp chấm công {m:02d}/{y}: "
-#             f"Đi làm {data.get('present_days', 0)}, "
-#             f"Vắng {data.get('absent_days', 0)}, "
-#             f"Nghỉ {data.get('leave_days', 0)}. "
-#             f"Đi muộn {data.get('late_minutes', 0)} phút, "
-#             f"Về sớm {data.get('early_leave_minutes', 0)} phút, "
-#             f"OT {data.get('ot_hours', 0)} giờ."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Ngày thiếu checkout
-#     # =========================
-#     if isinstance(data, dict) and "missing_checkout_days" in data and isinstance(data.get("missing_checkout_days"), list):
-#         m = data.get("month")
-#         y = data.get("year")
-#         rows = data.get("missing_checkout_days") or []
-
-#         if not rows:
-#             return f"Không có ngày nào thiếu check-out trong {m:02d}/{y}."
-        
-#         lines = []
-#         for r in rows[:10]:
-#             lines.append(f"- { _fmt_date_vi(r.get('date')) }: check-in { _s(r.get('check_in_time')) }")
-#         txt = f"Danh sách ngày thiếu check-out ({m:02d}/{y}):\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Nghỉ phép (list)
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "leave_request_id" in data[0]:
-#         lines = []
-#         for r in data[:8]:
-#             lines.append(
-#                 f"- #{r.get('leave_request_id')} | {r.get('leave_type')} | "
-#                 f"{_fmt_date_vi(r.get('from_date'))} → {_fmt_date_vi(r.get('to_date'))} | "
-#                 f"{r.get('total_days')} ngày | {r.get('status')}"
-#             )
-#         txt = "Danh sách đơn nghỉ phép:\n" + _fmt_list(lines, 8)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # HRM: Nghỉ phép (detail)
-#     if isinstance(data, dict) and "leave_request_id" in data and "leave_type" in data and "status" in data:
-#         txt = (
-#             f"Đơn nghỉ phép #{data.get('leave_request_id')}: {data.get('leave_type')} | "
-#             f"{_fmt_date_vi(data.get('from_date'))} → {_fmt_date_vi(data.get('to_date'))} | "
-#             f"{data.get('total_days')} ngày | Trạng thái: {data.get('status')}.\n"
-#             f"Lý do: {_s(data.get('reason'))}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # HRM: tổng hợp nghỉ phép năm
-#     if isinstance(data, dict) and "approved_total_days" in data and "year" in data and "employee_id" in data:
-#         txt = (
-#             f"Tổng nghỉ phép đã duyệt năm {data.get('year')} (employee_id={data.get('employee_id')}): "
-#             f"{data.get('approved_total_days', 0)} ngày."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Tăng ca (list / detail / summary)
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "ot_request_id" in data[0]:
-#         lines = []
-#         for r in data[:8]:
-#             lines.append(
-#                 f"- #{r.get('ot_request_id')} | {r.get('ot_date')} | "
-#                 f"{r.get('from_time')}–{r.get('to_time')} | {r.get('total_hours')}h | {r.get('status')}"
-#             )
-#         txt = "Danh sách đơn tăng ca:\n" + _fmt_list(lines, 8)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "ot_request_id" in data and "ot_date" in data:
-#         txt = (
-#             f"Đơn OT #{data.get('ot_request_id')} ({data.get('ot_type')}): {data.get('ot_date')} | "
-#             f"{data.get('from_time')}–{data.get('to_time')} | {data.get('total_hours')} giờ | "
-#             f"Trạng thái: {data.get('status')}.\n"
-#             f"Lý do: {_s(data.get('reason'))}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "breakdown" in data and isinstance(data.get("breakdown"), list):
-#         m = data.get("month")
-#         y = data.get("year")
-#         rows = data.get("breakdown") or []
-#         lines = []
-#         for r in rows[:10]:
-#             lines.append(f"- {r.get('ot_type')}: {r.get('approved_hours')} giờ")
-#         txt = f"Tổng hợp OT đã duyệt {m:02d}/{y}:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Hợp đồng
-#     # =========================
-#     if isinstance(data, dict) and "contract_number" in data and "basic_salary" in data:
-#         txt = (
-#             f"Hợp đồng {data.get('contract_number')} ({data.get('contract_type')}): "
-#             f"{_fmt_date_vi(data.get('start_date'))} → {_fmt_date_vi(data.get('end_date'))}. "
-#             f"Lương cơ bản: {_fmt_money(data.get('basic_salary'))}. "
-#             f"PC trách nhiệm: {_fmt_money(data.get('allowance_responsibility'))}, "
-#             f"PC đi lại: {_fmt_money(data.get('allowance_transport'))}, "
-#             f"PC ăn trưa: {_fmt_money(data.get('allowance_lunch'))}. "
-#             f"Trạng thái: {data.get('status')}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "contract_number" in data[0]:
-#         lines = []
-#         for r in data[:8]:
-#             lines.append(
-#                 f"- {r.get('contract_number')} | {r.get('contract_type')} | "
-#                 f"{_fmt_date_vi(r.get('start_date'))} → {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
-#             )
-#         txt = "Lịch sử hợp đồng:\n" + _fmt_list(lines, 8)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "rows" in data and isinstance(data.get("rows"), list) and "from" in data and "to" in data:
-#         lines = []
-#         for r in (data.get("rows") or [])[:10]:
-#             lines.append(
-#                 f"- {r.get('contract_number')} | {r.get('employee_id')} | "
-#                 f"end {_fmt_date_vi(r.get('end_date'))} | {r.get('status')}"
-#             )
-#         txt = f"Hợp đồng sắp hết hạn ({_fmt_date_vi(data.get('from'))} → {_fmt_date_vi(data.get('to'))}):\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Danh mục (phòng ban/chức vụ/ca làm)
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "department_code" in data[0]:
-#         lines = [f"- {r.get('department_code')}: {r.get('department_name')}" for r in data[:10]]
-#         txt = "Danh sách phòng ban:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "position_title" in data[0]:
-#         lines = []
-#         for r in data[:10]:
-#             lines.append(f"- {r.get('position_title')} | { _fmt_money(r.get('base_salary_range_min')) } → { _fmt_money(r.get('base_salary_range_max')) }")
-#         txt = "Danh sách chức vụ:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "shift_name" in data[0] and "start_time" in data[0]:
-#         lines = [f"- {r.get('shift_name')}: {r.get('start_time')}–{r.get('end_time')}" for r in data[:10]]
-#         txt = "Danh sách ca làm:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Kỳ lương / Payslip / Chi tiết lương
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "payroll_period_id" in data[0] and "month" in data[0]:
-#         lines = []
-#         for r in data[:10]:
-#             lines.append(f"- #{r.get('payroll_period_id')} | {r.get('name')} | {r.get('month'):02d}/{r.get('year')} | {r.get('status')}")
-#         txt = "Danh sách kỳ lương:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "payslip_id" in data and "net_salary" in data and "period_name" in data:
-#         txt = (
-#             f"{data.get('period_name')} ({data.get('month'):02d}/{data.get('year')}): "
-#             f"Lương gross {_fmt_money(data.get('gross_salary'))}, "
-#             f"khấu trừ {_fmt_money(data.get('total_deduction'))}, "
-#             f"thực nhận {_fmt_money(data.get('net_salary'))}. "
-#             f"OT: {data.get('total_ot_hours')}h | Công: {data.get('total_working_days')} | Trạng thái: {data.get('status')}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "lines" in data and isinstance(data.get("lines"), list) and "total_allowance" in data and "total_deduction" in data:
-#         lines = []
-#         for r in (data.get("lines") or [])[:12]:
-#             lines.append(
-#                 f"- {r.get('rule_code')} | {r.get('rule_name')} | {r.get('rule_type')} | { _fmt_money(r.get('amount')) }"
-#             )
-#         txt = (
-#             f"Chi tiết bảng lương (payslip_id={data.get('payslip_id')}):\n"
-#             f"Tổng phụ cấp: {_fmt_money(data.get('total_allowance'))}. "
-#             f"Tổng khấu trừ: {_fmt_money(data.get('total_deduction'))}.\n"
-#             f"Dòng chi tiết:\n{_fmt_list(lines, 12)}"
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Face data
-#     # =========================
-#     if isinstance(data, dict) and "has_active_face_data" in data and "employee_id" in data:
-#         txt = (
-#             f"Face data employee_id={data.get('employee_id')}: "
-#             f"{'ĐÃ có' if data.get('has_active_face_data') else 'CHƯA có'} dữ liệu active. "
-#             f"image_path={_s(data.get('image_path'))}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # =========================
-#     # HRM: Payment request
-#     # =========================
-#     if isinstance(data, list) and data and isinstance(data[0], dict) and "request_code" in data[0] and "total_amount" in data[0]:
-#         lines = []
-#         for r in data[:10]:
-#             lines.append(
-#                 f"- {r.get('request_code')} | period_id={r.get('payroll_period_id')} | "
-#                 f"{_fmt_money(r.get('total_amount'))} | {r.get('status')}"
-#             )
-#         txt = "Danh sách yêu cầu thanh toán HRM:\n" + _fmt_list(lines, 10)
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     if isinstance(data, dict) and "request_code" in data and "total_amount" in data:
-#         txt = (
-#             f"Yêu cầu {data.get('request_code')} (period_id={data.get('payroll_period_id')}): "
-#             f"Tổng tiền {_fmt_money(data.get('total_amount'))}, "
-#             f"số NV {data.get('total_employees')}, trạng thái {data.get('status')}, "
-#             f"finance_txn_id={_s(data.get('finance_transaction_id'))}."
-#         )
-#         return txt if not msg else f"{msg}\n{txt}"
-
-#     # fallback cuối: nếu có msg thì trả msg
-#     return msg or None
 
 def _drop_none(d: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
@@ -652,304 +399,118 @@ def _strip_sensitive(d: Dict[str, Any]) -> Dict[str, Any]:
         return d
     return {k: v for k, v in d.items() if k not in _HRM_SENSITIVE_KEYS}
 
-# def _filter_row_hrm(row: Dict[str, Any]) -> Dict[str, Any]:
-#     """
-#     Chọn field theo “shape” HRM để:
-#     - Payload gọn
-#     - Không lộ PII
-#     """
-#     row = _strip_sensitive(row)
-#     keys = set(row.keys())
+def _sanitize_args_for_scope(step_tool: str, args: dict, auth: dict) -> dict:
+    a = dict(args or {})
+    uid = auth.get("user_id")
+    eid = auth.get("employee_id")
 
-#     # 1) Nhân viên (employee profile)
-#     if "employee_code" in keys or "employee_id" in keys:
-#         keep = [
-#             "employee_id", "user_id",
-#             "employee_code", "full_name", "status",
-#             "department_code", "department_name",
-#             "position_title",
-#             "join_date", "resign_date",
-#         ]
+    # Tool self: luôn ép user_id đúng người đang đăng nhập
+    if step_tool == "thong_tin_nhan_vien_theo_user":
+        if uid is not None:
+            a["user_id"] = uid
+        return a
 
-#     # 2) Đơn nghỉ phép
-#     elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
-#         keep = [
-#             "leave_request_id", "id",
-#             "employee_id",
-#             "leave_type",
-#             "from_date", "to_date",
-#             "total_days",
-#             "status",
-#             "approver_id",
-#             "reason",
-#             "approved_at",
-#         ]
+    # Nếu scope SELF (bạn lấy scope ở validate_plan rồi), thì chặn chỉ định người khác
+    # (cái này validator đã làm, nhưng sanitize để chắc)
+    # Ví dụ: tool theo id
+    if step_tool == "thong_tin_nhan_vien_id" and eid is not None:
+        a["employee_id"] = int(eid)
 
-#     # 3) Chấm công ngày (timesheet daily)
-#     elif "date" in keys and ("check_in_time" in keys or "check_out_time" in keys):
-#         keep = [
-#             "date",
-#             "status",
-#             "shift_code", "shift_name",
-#             "check_in_time", "check_out_time",
-#             "late_minutes", "early_leave_minutes",
-#             "ot_hours",
-#         ]
+    # tool theo mã: trong SELF thì không cho
+    # tool theo mã: chỉ pop trong SELF
+    if step_tool == "thong_tin_nhan_vien" and auth.get("scope") == "SELF":
+        a.pop("employee_code", None)
 
-#     # 4) Tổng hợp chấm công tháng
-#     elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
-#         keep = [
-#             "month", "year",
-#             "days_total",
-#             "present_days", "absent_days", "leave_days",
-#             "late_minutes", "early_leave_minutes",
-#             "ot_hours",
-#             "working_day_count",
-#         ]
-
-#     # 5) Thiếu check-out (tool ngay_thieu_checkout)
-#     elif "missing_checkout_days" in keys:
-#         keep = ["month", "year", "missing_checkout_days"]
-
-#     # 6) OT theo ngày / danh sách OT (nếu bạn có tool OT)
-#     elif "ot_hours" in keys and ("date" in keys or "from_time" in keys or "to_time" in keys):
-#         keep = [
-#             "date", "ot_hours",
-#             "status",
-#             "reason",
-#             "approver_id",
-#         ]
-
-#     else:
-#         keep = list(keys)[:10]  # generic fallback
-
-#     out: Dict[str, Any] = {}
-#     for k in keep:
-#         if k in row:
-#             out[k] = row.get(k)
-
-#     # Nếu missing_checkout_days là list dict => preview từng item gọn
-#     if "missing_checkout_days" in out and isinstance(out["missing_checkout_days"], list):
-#         items = []
-#         for x in out["missing_checkout_days"][:20]:
-#             if isinstance(x, dict):
-#                 x = _strip_sensitive(x)
-#                 items.append(_drop_none({
-#                     "date": x.get("date"),
-#                     "check_in_time": x.get("check_in_time"),
-#                 }))
-#             else:
-#                 items.append(x)
-#         out["missing_checkout_days"] = items
-
-#     return _drop_none(out)
-
-# def _preview_data_hrm(data: Any, list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
-#     # list output
-#     if isinstance(data, list):
-#         preview = []
-#         for r in data[:max(1, min(list_n, 20))]:
-#             if isinstance(r, dict):
-#                 preview.append(_filter_row_hrm(r))
-#             else:
-#                 preview.append(r)
-#         return {"type": "list", "total": len(data), "items_preview": preview}
-
-#     # object output
-#     if isinstance(data, dict):
-#         data2 = _strip_sensitive(data)
-#         out: Dict[str, Any] = {"type": "object"}
-
-#         keys = set(data2.keys())
-
-#         # core fields theo shape
-#         if "employee_code" in keys or "employee_id" in keys:
-#             core_keep = [
-#                 "employee_id", "employee_code", "full_name", "status",
-#                 "department_code", "department_name", "position_title",
-#                 "join_date", "resign_date",
-#             ]
-#         elif "leave_request_id" in keys or ("leave_type" in keys and "from_date" in keys):
-#             core_keep = [
-#                 "leave_request_id", "employee_id",
-#                 "leave_type", "from_date", "to_date", "total_days",
-#                 "status", "approver_id", "approved_at",
-#             ]
-#         elif "month" in keys and "year" in keys and ("late_minutes" in keys or "present_days" in keys):
-#             core_keep = [
-#                 "month", "year",
-#                 "days_total", "present_days", "absent_days", "leave_days",
-#                 "late_minutes", "early_leave_minutes", "ot_hours",
-#             ]
-#         elif "missing_checkout_days" in keys:
-#             core_keep = ["month", "year"]
-#         else:
-#             # fallback: scalar keys tối đa 10
-#             core_keep = []
-#             for k, v in data2.items():
-#                 if isinstance(v, (str, int, float, bool)) or v is None:
-#                     core_keep.append(k)
-#                 if len(core_keep) >= 10:
-#                     break
-
-#         core = {}
-#         for k in core_keep:
-#             if k in data2:
-#                 core[k] = data2.get(k)
-#         out["core"] = _drop_none(core)
-
-#         # nested preview
-#         if isinstance(data2.get("missing_checkout_days"), list):
-#             items = data2["missing_checkout_days"]
-#             out["missing_checkout_total"] = len(items)
-#             out["missing_checkout_preview"] = [
-#                 _drop_none({"date": x.get("date"), "check_in_time": x.get("check_in_time")})
-#                 for x in items[:max(1, min(nested_n, 20))]
-#                 if isinstance(x, dict)
-#             ]
-
-#         if isinstance(data2.get("items"), list):
-#             items = data2["items"]
-#             out["items_total"] = len(items)
-#             out["items_preview"] = [
-#                 _filter_row_hrm(x) for x in items[:max(1, min(nested_n, 20))] if isinstance(x, dict)
-#             ]
-
-#         return out
-
-#     # primitive
-#     return {"type": type(data).__name__, "value": data}
-
-# def _build_facts_for_paraphrase_hrm(store: Dict[str, Any], list_n: int = 6, nested_n: int = 10) -> Dict[str, Any]:
-#     """
-#     Dùng cho:
-#     - log/debug
-#     - hoặc frontend/LLM muốn “facts” gọn theo từng step
-#     """
-#     steps = []
-#     i = 1
-#     while True:
-#         si = store.get(f"s{i}")
-#         if not isinstance(si, dict):
-#             break
-#         steps.append(_drop_none({
-#             "step": f"s{i}",
-#             "tool_message": si.get("thong_diep"),
-#             "ok": si.get("ok"),
-#             "preview": _preview_data_hrm(si.get("data"), list_n=list_n, nested_n=nested_n),
-#         }))
-#         i += 1
-
-#     return _drop_none({
-#         "steps_total": len(steps),
-#         "steps": steps,
-#         "store_keys": list(store.keys())[:30],
-#     })
-
-# def _build_compose_payload_hrm(
-#     module: str,
-#     role: Optional[str],
-#     question: str,
-#     step_infos: List[dict],
-#     draft_answer: Optional[str] = None,
-# ):
-#     """
-#     Payload sạch để frontend đưa cho LLM:
-#     - Không lộ phone/email
-#     - Dữ liệu đã clip + preview đúng shape HRM
-#     """
-#     tool_results = []
-#     for si in (step_infos or []):
-#         r = si.get("result")
-#         data = None
-#         thong_diep = None
-#         ok_flag = None
-
-#         if isinstance(r, dict):
-#             data = r.get("data")
-#             thong_diep = r.get("thong_diep")
-#             ok_flag = r.get("ok")
-#         else:
-#             data = r
-
-#         # nếu bạn vẫn muốn clip sâu thì dùng _clip_data của bạn
-#         # ở đây preview_data_hrm đã đủ gọn, còn muốn giữ raw thì tuỳ
-#         tool_results.append(_drop_none({
-#             "step_id": si.get("id"),
-#             "tool": si.get("tool"),
-#             "args": si.get("args"),
-#             "ok": ok_flag,
-#             "thong_diep": thong_diep,
-#             "preview": _preview_data_hrm(data, list_n=6, nested_n=10),
-#         }))
-
-#     return _drop_none({
-#         "module": module,
-#         "role": role,
-#         "question": question,
-#         "draft_answer": draft_answer,
-#         "tool_results": tool_results,
-#     })
-
-# def compose_answer_with_llm(module: str, user_question: str, step_infos: list[dict]) -> str:
-#     filtered_step_infos = _filter_step_infos_for_compose(module, user_question, step_infos)
-#     requested_metrics = _extract_requested_metrics(user_question)
-
-#     payload = {
-#         "module": module,
-#         "question": user_question,
-#         "requested_metrics": requested_metrics,
-#         "tool_results": [
-#             {
-#                 "step_id": si["id"],
-#                 "tool": si["tool"],
-#                 "data": (si.get("result") or {}).get("data"),
-#                 "thong_diep": (si.get("result") or {}).get("thong_diep"),
-#                 "ok": (si.get("result") or {}).get("ok"),
-#             }
-#             for si in filtered_step_infos
-#         ],
-#     }
-
-#     sys = """
-# Bạn là trợ lý ERP. Trả lời NGẮN GỌN, đúng trọng tâm theo câu hỏi.
-# QUY TẮC:
-# - Chỉ dùng dữ liệu trong tool_results.
-# - Nếu requested_metrics có "late_minutes" thì chỉ trả tổng phút đi muộn (kèm tháng/năm nếu có).
-# - Nếu câu hỏi chỉ hỏi 1 ý, KHÔNG thêm thông tin khác (không nhắc phòng ban, email, SĐT, chức vụ...).
-# - Nếu tool_results trả list rỗng: trả "Không có." hoặc "Không có dữ liệu phù hợp." đúng ngữ cảnh.
-# - Ưu tiên 1 câu, tối đa 2 câu.
-# """
-
-#     resp = _client.models.generate_content(
-#         model=_GEMINI_COMPOSE_MODEL,
-#         contents=json.dumps(payload, ensure_ascii=False),
-#         config={"system_instruction": sys, "temperature": 0.1},
-#     )
-#     return (resp.text or "").strip()
+    return a
 
 # =========================
 # Main
 # =========================
 def execute_chat_hrm(
     module: str,
-    user_id: int | None,
+    user_id: UUID | None,
     role: str | None,
     message: str,
-    paraphrase_enabled: bool = True,
     compose_enabled: bool = True,
 ):
-    if not check_role(module, role):
-        raise PermissionDenied(f"Role '{role}' không được phép dùng chatbot module '{module}'.")
+    auth_ctx = build_auth_context(user_id=user_id)
+    if not auth_ctx.is_authenticated or not auth_ctx.role:
+        audit({"event": "permission_denied", "module": module, "reason": "not_authenticated"})
+        raise PermissionDenied("Bạn không có quyền truy cập.")
 
-    auth = {"user_id": user_id, "role": role, "is_authenticated": True}
-    plan = plan_route(module=module, message=message, auth=auth)
+    user_perms = set(auth_ctx.permissions)
+    effective_role = auth_ctx.role
+    # gate theo module (scope matrix + min perms nếu bạn có)
+    if not check_role(module, auth_ctx):
+        audit({"event": "permission_denied", "module": module, "reason": "not_authenticated"})
+        raise PermissionDenied(f"Role '{effective_role }' không được phép dùng chatbot module '{module}'.")
+
+    # auth dùng cho executor/sanitize (nội bộ)
+    auth = {
+        "user_id": user_id,
+        "role": effective_role,
+        "is_authenticated": True,
+        "employee_id": None,
+        "department_code": None,
+    }
+
+    # ===== bootstrap employee_id của user (để enforce SELF) =====
+    # (không sửa tool; nếu tool không có thì bỏ qua)
+    try:
+        boot_tool = get_tool("hrm", "thong_tin_nhan_vien_theo_user")
+        if boot_tool is not None and user_id is not None:
+            boot_res = _execute_tool("hrm", boot_tool, {"user_id": user_id}, auth_ctx)
+            if isinstance(boot_res, dict) and boot_res.get("ok") and isinstance(boot_res.get("data"), dict):
+                auth["employee_id"] = boot_res["data"].get("employee_id")
+                auth["department_code"] = boot_res["data"].get("department_code")
+    except Exception:
+        pass
+
+    # auth dùng cho planner/LLM (tránh set trong JSON)
+    auth_for_planner = {
+        "user_id": user_id,
+        "role": auth_ctx.role,
+        "is_authenticated": True,
+        "permissions": sorted(list(user_perms)),
+        "employee_id": auth.get("employee_id"),
+        "department_code": auth.get("department_code"),
+    }
+
+    # ===== helper: lấy policy tool (hỗ trợ cả 2 dạng TOOL_POLICIES) =====
+    def _get_policy(mod: str, tool_name: str) -> dict | None:
+        # dạng 1: TOOL_POLICIES = {"hrm": {"tool": {...}}}
+        if isinstance(TOOL_POLICIES, dict) and mod in TOOL_POLICIES and isinstance(TOOL_POLICIES.get(mod), dict):
+            return TOOL_POLICIES[mod].get(tool_name)
+        # dạng 2: TOOL_POLICIES = {"tool": {...}}
+        if isinstance(TOOL_POLICIES, dict):
+            return TOOL_POLICIES.get(tool_name)
+        return None
+
+    def _strip_fields(obj: Any, deny_fields: set[str]) -> Any:
+        if not deny_fields:
+            return obj
+        if isinstance(obj, dict):
+            return {k: _strip_fields(v, deny_fields) for k, v in obj.items() if k not in deny_fields}
+        if isinstance(obj, list):
+            return [_strip_fields(x, deny_fields) for x in obj]
+        return obj
+
+    # ===== Plan =====
+    plan = plan_route(module=module, message=message, auth=auth_for_planner)
     audit({"event": "plan_created", "module": module, "plan": plan.model_dump()})
+
+    if not plan.steps and plan.final_response_template:
+        return {
+            "answer": plan.final_response_template,
+            "data": {},
+            "plan": plan.model_dump(),
+        }
 
     if plan.needs_clarification:
         return {"answer": plan.clarifying_question, "plan": plan.model_dump()}
 
-    validate_plan(plan)
+    # validate_plan mới (có permission + scope + vượt SELF)
+    validate_plan(plan, auth=auth, user_perms=user_perms)
 
     store: Dict[str, Any] = {}
     step_infos: list[dict] = []
@@ -975,25 +536,72 @@ def execute_chat_hrm(
                     resolved_args["year"] = now.year
 
             if plan.module == "hrm":
-                resolved_args = _auto_resolve_hrm_employee_id(resolved_args)
-
-                audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
-                result = _execute_tool(plan.module, tool, resolved_args)
+                resolved_args = _auto_resolve_hrm_employee_id(resolved_args, auth_ctx)
 
         except UnresolvedRefError as e:
             audit({"event": "arg_unresolved_stop", "error": str(e), "step": step.model_dump()})
             break
 
+        auth_user_id = user_id if user_id is not None else None
+
+        # inject auth như code cũ (giữ nguyên)
         resolved_args = inject_auth_into_args(
             message=message,
-            role=role,
-            auth_user_id=user_id,
+            role= auth_ctx.role,
+            auth_user_id=auth_user_id,
             tool_args=resolved_args,
             has_target_user_id_field=_args_has_target_user_id_field(tool),
         )
 
+        # ưu tiên ép args cho tool self theo auth (chống LLM truyền sai)
+        resolved_args = _sanitize_args_for_scope(step.tool, resolved_args, auth)
+
+
+        # ===== ENFORCE: permission + scope + sanitize args + field masking =====
+        policy = _get_policy(plan.module, step.tool)
+        if not policy:
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_policy"})
+            raise PermissionDenied(f"Tool '{step.tool}' chưa khai báo policy (TOOL_POLICIES).")
+
+        required = set(policy.get("required_permissions", []))
+        if required and not required.issubset(user_perms):
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_permissions"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        scope = resolve_scope(role_name=auth_ctx.role, module=plan.module, tool_name=step.tool) 
+        if scope == "NONE":
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "scope_NONE"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        allowed_scopes = policy.get("allowed_scopes", ["SELF"])
+        if scope not in allowed_scopes:
+            scope = policy.get("default_scope", "SELF")
+            if scope not in allowed_scopes:
+                audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "scope_not_allowed"})
+                raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        before_args = dict(resolved_args)
+        
+        # nếu SELF mà chưa bootstrap được employee_id thì nên chặn (không enforce được)
+        if scope == "SELF" and auth.get("employee_id") is None and (
+            "employee_id" in resolved_args or "approver_id" in resolved_args
+        ):
+            raise PermissionDenied("Không xác định được employee_id để enforce phạm vi SELF.")
+        
+        resolved_args = sanitize_args_by_scope(resolved_args, scope, auth)
+
+        audit({"event": "scope_resolved", "module": plan.module, "tool": step.tool, "scope": scope})
+        if before_args != resolved_args:
+            audit({"event": "args_sanitized", "module": plan.module, "tool": step.tool, "before": before_args, "after": resolved_args})
+
+        # ===== Execute tool =====
         audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
-        result = _execute_tool(plan.module, tool, resolved_args)
+        result = _execute_tool(plan.module, tool, resolved_args, auth_ctx)
+
+        # field policy: allow/mask theo scope
+        scope_field_policy = (policy.get("field_policy") or {}).get(scope) or {}
+        result = apply_field_policy(result, scope_field_policy)
+
         audit({"event": "tool_result", "module": plan.module, "tool": step.tool, "result": result})
 
         step_infos.append({"id": step.id, "tool": step.tool, "args": resolved_args, "result": result})
@@ -1011,47 +619,21 @@ def execute_chat_hrm(
             else:
                 store[step.save_as] = result
 
-    # --- FILTER context-only tool outputs trước khi LLM compose ---
-    step_infos_for_answer = _filter_step_infos_for_answer(plan.module, message, step_infos)
-
-    # ===== Compose answer bằng LLM (cho mọi module) =====
+    # ===== Compose answer bằng LLM =====
     answer = None
     composed_used = False
 
     if compose_enabled:
         try:
-            composed = compose_answer_with_llm(plan.module, message, step_infos)
+            step_infos_for_llm = filter_step_infos_for_llm(plan.module, step_infos)
+            composed = compose_answer_with_llm(plan.module, message, step_infos_for_llm)
             if composed:
                 answer = composed
                 composed_used = True
         except Exception as e:
             audit({"event": "compose_failed", "error": str(e)})
 
-    # ===== Fallback deterministic nếu LLM fail =====
     if not answer:
-        # parts = []
-        # suppress = CONTEXT_ONLY_TOOLS_BY_MODULE.get(plan.module, set())
-        # skip_employee = (plan.module == "hrm" and not _wants_employee_profile(message))
-
-        # for i in range(1, len(plan.steps) + 1):
-        #     step = plan.steps[i - 1]
-        #     if skip_employee and step.tool in suppress:
-        #         continue
-
-        #     si = store.get(f"s{i}")
-        #     if isinstance(si, dict):
-        #         fb = _fallback_from_result(si)
-        #         if fb and fb not in parts:
-        #             parts.append(fb)
-
-        answer = "Đã tra cứu xong."
-
-
-    # ===== Paraphrase (chỉ khi KHÔNG dùng LLM compose) =====
-    # if paraphrase_enabled and (not composed_used):
-    #     facts_for_paraphrase = _build_facts_for_paraphrase_hrm(store, list_n=6, nested_n=6)
-    #     answer_final = paraphrase_answer(answer, facts=facts_for_paraphrase, enabled=True)
-    # else:
-    #     answer_final = answer
+        answer = "Không tìm thấy thông tin."
 
     return {"answer": answer, "data": store, "plan": plan.model_dump()}

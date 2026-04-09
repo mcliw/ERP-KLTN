@@ -4,14 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "server": "json-server --watch apps/frontend/erp-portal/src/data/db.json --port 3001 --id code"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.27.0",
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "recharts": "^3.6.0"
+    "file-saver": "^2.0.5",
+    "recharts": "^3.6.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "json-server": "^0.17.4"
   }
 }

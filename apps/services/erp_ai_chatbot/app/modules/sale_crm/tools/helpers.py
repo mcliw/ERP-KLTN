@@ -46,8 +46,12 @@ def voucher_compute_discount(
     max_discount_amount: Any = None,
 ) -> Tuple[float, float]:
     dv = to_float(discount_value) or 0.0
-    if (discount_type or "").upper() == "PERCENT":
+    dt = (discount_type or "").upper()
+    if dt in {"PERCENT", "PERCENTAGE"}:
         discount = order_amount * dv / 100.0
+    elif dt == "SHIPPING":
+        # Không có bảng shipping fee riêng trong schema; coi như giảm trực tiếp 1 số tiền.
+        discount = dv
     else:
         discount = dv
 

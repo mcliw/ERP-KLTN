@@ -18,7 +18,7 @@ import re
 _DATE_YMD = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _DATE_DMY = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
 _NUM_TOKEN = re.compile(r"\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{4,}\b")
-_CODE_RE = re.compile(r"\b[A-Z]{2,}-\d+\b")
+_CODE_RE = re.compile(r"\b(?:[A-Z]{2,10}\d{2,6}|[A-Z]{2,10}-\d{1,12})\b")
 
 def is_llm_available() -> bool:
     return _client is not None
@@ -43,7 +43,7 @@ def _extract_dates_norm(text: str) -> set[str]:
 def _extract_codes(text: str) -> set[str]:
     return set(_CODE_RE.findall(text or ""))
 
-def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: int = 1200) -> bool:
+def is_safe_enough(answer: str, payload_text: str | None = None, max_len: int = 1200) -> bool:
     if not answer:
         return False
     if len(answer) > max_len:
@@ -51,11 +51,9 @@ def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: i
     if any(x in answer for x in ("{{", "}}", "{s", "...")):
         return False
 
-    # Nếu không truyền payload_text => chỉ check marker
     if not payload_text:
         return True
 
-    # Không cho sinh số/ngày/mã mới ngoài payload
     if not _extract_numbers_norm(answer).issubset(_extract_numbers_norm(payload_text)):
         return False
     if not _extract_dates_norm(answer).issubset(_extract_dates_norm(payload_text)):
@@ -65,6 +63,44 @@ def compose_safe_enough(answer: str, payload_text: str | None = None, max_len: i
 
     return True
 
+compose_safe_enough = is_safe_enough
+
+
+def compose_fallback_from_steps(question: str, step_infos: List[Dict[str, Any]]) -> str:
+    """
+    Fallback cực gọn, KHÔNG bịa số:
+    - nếu có step ok: true + có 'thong_diep' -> dùng thong_diep
+    - nếu có error -> dùng error.message
+    - không dump JSON
+    """
+    msgs: List[str] = []
+    for si in step_infos or []:
+        res = (si.get("result") or {})
+        if not isinstance(res, dict):
+            continue
+
+        if res.get("ok") is False:
+            err = res.get("error") or {}
+            m = err.get("message")
+            if m:
+                msgs.append(str(m).strip())
+            continue
+
+        td = res.get("thong_diep")
+        if td:
+            msgs.append(str(td).strip())
+
+    # nếu vẫn trống -> trả 1 câu an toàn
+    if not msgs:
+        return "Mình đã xử lý yêu cầu nhưng hiện chưa đủ dữ liệu để trả lời rõ ràng. Bạn thử hỏi cụ thể hơn giúp mình."
+
+    # gộp tối đa 2 ý để tránh lan man
+    uniq = []
+    for m in msgs:
+        if m and m not in uniq:
+            uniq.append(m)
+    return " ".join(uniq[:2]).strip()
+
 def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[str, Any]]) -> str:
     # ✅ gửi full data/result (không preview)
     payload = {
@@ -73,17 +109,18 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
         "tool_results": [
             {
                 "step_id": si.get("id"),
+                "module": si.get("module"),
                 "tool": si.get("tool"),
                 "args": si.get("args"),
-                # FULL result: ok/data/thong_diep/...
                 "result": si.get("result"),
             }
             for si in step_infos
-        ],
+],
+
     }
 
     sys = (
-        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi.\n"
+        "Bạn là trợ lý ERP. Nhiệm vụ: trả lời ĐÚNG TRỌNG TÂM theo câu hỏi và nếu có từ tiếng anh hãy chuyển sang tiếng việt và phải hợp ngữ cảnh.\n"
         "QUY TẮC BẮT BUỘC:\n"
         "1) CHỈ dùng dữ liệu trong payload.tool_results[*].result. Không suy đoán.\n"
         "2) TỰ xác định người dùng đang hỏi những TRƯỜNG nào (fields) trong câu hỏi.\n"
@@ -91,11 +128,12 @@ def compose_answer_with_llm(module: str, question: str, step_infos: List[Dict[st
         "4) Nếu field được hỏi KHÔNG tồn tại trong data -> trả đúng: 'Không có dữ liệu <field>' (ngắn gọn).\n"
         "5) Nếu câu hỏi hỏi nhiều ý (vd: 'đơn nào + trạng thái + thanh toán') -> trả lần lượt từng ý.\n"
         "6) Không copy nguyên JSON.\n"
+        "7) CẤM TUYỆT ĐỐI BỊA SỐ LIỆU (SĐT/ĐỊA CHỈ/EMAIL/SỐ LƯỢNG/TIỀN/....). NẾU KHÔNG CÓ THÌ TRẢ LỜI KHÔNG CÓ DỮ LIỆU"
         '\n'
         'Đặc biệt lưu ý: \n'
         '1) Trả lời người dùng thân thiện như 1 tin nhắn. Cấu trúc 1 đoạn văn rõ rằng, mạch lạc\n'
         '2) Không sử dụng gạch đầu dòng hay xuống dòng\n'
-        '3) Có thuật ngữ hoặc từ tiếng anh thì hãy thay bằng từ tiếng việt luôn ví dụ ANNUAL là nghỉ phép năm, APPROVE là đã duyệt,...'
+        '3) Hãy dịch luôn các từ tiếng anh có trong câu trả lời thành tiếng việt ví dụ ANNUAL là nghỉ phép năm, APPROVE là đã duyệt, ACTIVE là hoạt động,...'
         "\n"
         "ĐỊNH DẠNG GỢI Ý:\n"
         "- Khi liệt kê danh sách, hãy tự động gộp các mục trùng nhau (cùng SKU, Tên hoặc ID) thành một dòng duy nhất và cộng tổng các số liệu liên quan (số lượng, giá trị...). Tuyệt đối không hiển thị các dòng dữ liệu lặp lại rời rạc."

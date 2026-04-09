@@ -1,0 +1,62 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework # Giữ header gốc từ Nginx (Host, X-Real-IP)
+
+# --- CẤU HÌNH JWT (Đã gộp lại) ---
+jwt:
+  # Key cũ (giữ lại để phòng hờ)
+  secret: ${JWT_SECRET}
+  # Key mới (QUAN TRỌNG: Code Java SecurityConfig đang tìm key này)
+  signerKey: ${JWT_SECRET}
+
+spring:
+  application:
+    name: gateway-service
+  
+  main:
+    web-application-type: reactive
+
+  # --- Security Configuration ---
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Vì ta đã cấu hình thủ công trong SecurityConfig.java nên phần này để mặc định
+          # hoặc có thể bỏ qua. Đảm bảo không có config gây conflict.
+          jwk-set-uri: null
+
+  # --- Spring Cloud Gateway Configuration ---
+  cloud:
+    gateway:
+      # A. Global CORS (Cho phép Frontend gọi vào)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://ldgcompany.local"
+              - "https://store.local"
+              - "https://checkin.local"
+              - "http://localhost:3000"
+              - "http://localhost:5173"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.http.server.reactive: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: DEBUG
+    # Bật log debug cho Security để theo dõi quá trình xác thực
+    org.springframework.security: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "gateway, health, info"
+  endpoint:
+    gateway:
+      enabled: true

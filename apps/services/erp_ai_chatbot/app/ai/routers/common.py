@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -21,8 +22,9 @@ _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 _GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 _client = genai.Client(api_key=_GEMINI_API_KEY) if _GEMINI_API_KEY else genai.Client()
 
-PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
+PLAN_JSON_SCHEMA_BASE = {
     "type": "object",
+    "additionalProperties": False,
     "required": ["module", "intent", "needs_clarification", "steps", "final_response_template"],
     "properties": {
         "module": {"type": "string"},
@@ -33,9 +35,12 @@ PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["id", "tool", "args"],
+                "additionalProperties": False,
+                # nếu bạn KHÔNG muốn bắt buộc save_as thì bỏ "save_as" khỏi required
+                "required": ["id", "module", "tool", "args", "save_as"],
                 "properties": {
                     "id": {"type": "string", "pattern": "^s[0-9]+$"},
+                    "module": {"type": "string"},
                     "tool": {"type": "string"},
                     "args": {"type": "object"},
                     "save_as": {"type": ["string", "null"]},
@@ -46,11 +51,16 @@ PLAN_JSON_SCHEMA_BASE: Dict[str, Any] = {
     },
 }
 
+
 def schema_for_module(module: str) -> Dict[str, Any]:
     schema = deepcopy(PLAN_JSON_SCHEMA_BASE)
     schema["properties"]["module"]["enum"] = [module]
+
     tool_names = [t.ten_tool for t in list_tools(module)]
     schema["properties"]["steps"]["items"]["properties"]["tool"]["enum"] = tool_names
+
+    # ✅ khóa luôn step.module = module (để planner không nhảy module)
+    schema["properties"]["steps"]["items"]["properties"]["module"]["enum"] = [module]
     return schema
 
 def tool_catalog(module: str) -> str:
@@ -67,6 +77,58 @@ def tool_catalog(module: str) -> str:
         lines.append(f"- {t.ten_tool}: {t.mo_ta} | args: {', '.join(fields)}")
     return "\n".join(lines)
 
+def normalize_plan_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(d, dict):
+        return d
+
+    steps = d.get("steps")
+    if isinstance(steps, list):
+        for st in steps:
+            if not isinstance(st, dict):
+                continue
+
+            # 0) normalize id -> sN (hỗ trợ: 1, "step_1", "Step 1", "s1")
+            sid = st.get("id")
+            if isinstance(sid, int):
+                st["id"] = f"s{sid}"
+            elif isinstance(sid, str):
+                s0 = sid.strip()
+                m = re.search(r"(\d+)$", s0)
+                if m:
+                    st["id"] = f"s{int(m.group(1))}"
+
+            # 1) tool alias: tool_code/tool_name -> tool
+            if "tool" not in st:
+                st["tool"] = st.pop("tool_code", None) or st.pop("tool_name", None)
+
+            # 2) args alias: tool_input -> args
+            if "args" not in st and "tool_input" in st:
+                st["args"] = st.pop("tool_input")
+
+            # 3) args string JSON -> dict
+            if "args" in st and isinstance(st["args"], str):
+                s = st["args"].strip()
+                if s.startswith("{") and s.endswith("}"):
+                    try:
+                        st["args"] = json.loads(s)
+                    except Exception:
+                        pass
+
+            # 4) đảm bảo args là dict tối thiểu
+            if "args" not in st or st["args"] is None or not isinstance(st["args"], dict):
+                st["args"] = {}
+
+            # 5) nếu thiếu module trong step -> fill theo plan.module
+            if not st.get("module"):
+                st["module"] = d.get("module")
+
+            # 6) nếu thiếu save_as -> set None (để pass schema nếu required)
+            if "save_as" not in st:
+                st["save_as"] = None
+
+    return d
+
+
 def build_system_instruction(module: str, auth: dict, extra_hints: Optional[List[str]] = None) -> str:
     now = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d")
 
@@ -79,14 +141,15 @@ def build_system_instruction(module: str, auth: dict, extra_hints: Optional[List
     parts.append(f"Role: {auth.get('role')}")
     parts.append("")
 
-    parts.append("Quy tắc bắt buộc:")
-    parts.append("1) steps.id luôn là s1, s2, s3... theo thứ tự.")
-    parts.append("2) Chỉ dùng tool thuộc module hiện tại (tool đã bị khóa enum).")
-    parts.append("3) Thiếu thông tin => needs_clarification=true và đặt clarifying_question (1 câu ngắn).")
-    parts.append("4) final_response_template BẮT BUỘC null.")
-    parts.append("5) Nếu needs_clarification=true => steps phải là [] (không gọi tool).")
+    parts.append("RÀNG BUỘC FORMAT (BẮT BUỘC TUÂN THỦ):")
+    parts.append("- Output phải là JSON object duy nhất, KHÔNG markdown, KHÔNG giải thích.")
+    parts.append("- Tuyệt đối KHÔNG dùng các key sai như: tool_code, tool_name, tool_input.")
+    parts.append("- Mỗi step CHỈ dùng key: id, module, tool, args, save_as.")
+    parts.append("- args BẮT BUỘC là JSON object (ví dụ {\"employee_code\":\"a20006\"}), KHÔNG được là string dạng \"{...}\".")
+    parts.append("- Nếu thiếu bất kỳ arg required nào => needs_clarification=true và steps=[].")
     parts.append("")
 
+    
     guide = get_planner_guide(module)
     if guide:
         parts.append("HƯỚNG DẪN LẬP PLAN THEO MODULE:")
@@ -104,21 +167,37 @@ def build_system_instruction(module: str, auth: dict, extra_hints: Optional[List
 
 def gemini_fallback(module: str, message: str, auth: dict, extra_hints: Optional[List[str]] = None) -> Plan:
     msg = (message or "").strip()
-    sys = build_system_instruction(module, auth, extra_hints=extra_hints)
     schema = schema_for_module(module)
 
-    resp = _client.models.generate_content(
-        model=_GEMINI_MODEL,
-        contents=f"USER_MESSAGE:\n{msg}",
-        config={
-            "system_instruction": sys,
-            "temperature": 0.0,
-            "response_mime_type": "application/json",
-            "response_json_schema": schema,
-        },
-    )
+    def _call(sys_text: str) -> str:
+        resp = _client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=f"USER_MESSAGE:\n{msg}",
+            config={
+                "system_instruction": sys_text,
+                "temperature": 0.0,
+                "response_mime_type": "application/json",
+                "response_json_schema": schema,
+            },
+        )
+        return (resp.text or "").strip()
 
-    text = (resp.text or "").strip()
+    def _parse(t: str) -> Plan | None:
+        try:
+            data = json.loads(t)
+            data = normalize_plan_dict(data)
+            return Plan.model_validate(data)
+        except Exception:
+            return None
+
+    # Call lần 1
+    sys = build_system_instruction(module, auth, extra_hints=extra_hints)
+    text = _call(sys)
+
+    print("=== ROUTER_RAW ===")
+    print(text)
+    print("=== /ROUTER_RAW ===")
+
     if not text:
         return Plan(
             module=module,
@@ -129,13 +208,26 @@ def gemini_fallback(module: str, message: str, auth: dict, extra_hints: Optional
             final_response_template=None,
         )
 
-    try:
-        data = json.loads(text)
-        plan = Plan.model_validate(data)
-    except Exception:
-        try:
-            plan = Plan.model_validate_json(text)
-        except Exception:
+    plan = _parse(text)
+
+    # Retry lần 2 (thắt chặt)
+    if plan is None:
+        retry_hints = [
+            "Output MUST be a single valid JSON object. No markdown, no comments.",
+            "Do NOT output schema/types like 'string'. Fill real values.",
+            "steps[i].id MUST be s1,s2,... ; steps[i].args MUST be an object, not a string.",
+            "Each step MUST contain ONLY keys: id, module, tool, args, save_as.",
+        ]
+        sys2 = build_system_instruction(module, auth, extra_hints=(extra_hints or []) + retry_hints)
+        text2 = _call(sys2)
+
+        print("=== ROUTER_RAW_RETRY ===")
+        print(text2)
+        print("=== /ROUTER_RAW_RETRY ===")
+
+        plan = _parse(text2)
+
+        if plan is None:
             return Plan(
                 module=module,
                 intent="router_parse_error",
@@ -154,3 +246,4 @@ def gemini_fallback(module: str, message: str, auth: dict, extra_hints: Optional
         plan = plan.model_copy(update={"steps": []})
 
     return plan
+

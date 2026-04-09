@@ -1,341 +1,213 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/account.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn chính xác tới file axiosClient.js
 import { employeeService } from "./employee.service";
 import { departmentService } from "./department.service";
 import { positionService } from "./position.service";
 
-const KEY = "ACCOUNTS";
-
 /* =========================
- * Utils & Helpers
+ * Config & Constants
  * ========================= */
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/accounts";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-const storage = {
-  get() {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
-  },
-  set(data) {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  },
+const STATUS = {
+  ACTIVE: "Hoạt động",
+  DELETED: "Đã xoá",
 };
 
-const normalizeUsername = (username) =>
-  String(username || "").trim().toLowerCase();
+const EMP_STATUS = {
+  WORKING: "Đang làm việc",
+};
 
-const createHttpError = (status, message, field) => {
-  const err = new Error(message);
-  err.status = status;
-  if (field) err.field = field;
-  return err;
+const ERROR_MSGS = {
+  FETCH_FAILED: "Lỗi kết nối đến máy chủ",
+  NOT_FOUND: "Không tìm thấy tài khoản",
+  EXISTS_USERNAME: "Tên đăng nhập đã tồn tại",
+  EXISTS_EMPLOYEE: "Nhân viên này đã có tài khoản",
+  INVALID_EMPLOYEE: "Chỉ tạo tài khoản cho nhân viên đang làm việc",
+  REQUIRED_USERNAME: "Tên đăng nhập bắt buộc",
+  REQUIRED_EMPLOYEE: "Phải chọn nhân viên",
+  UPDATE_FAILED: "Không thể cập nhật dữ liệu",
 };
 
 /* =========================
- * Enrich helpers
+ * Helpers
  * ========================= */
+const normalizeUsername = (username) => String(username || "").trim().toLowerCase();
+const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 
-// Gắn thông tin nhân viên / phòng ban / chức vụ vào account
-async function enrichAccount(account) {
-  if (!account?.employeeCode) return { ...account, employee: null };
+const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-  const emp = await employeeService.getByCode(account.employeeCode);
-  if (!emp) {
-    return { ...account, employee: null };
-  }
-
-  const [dept, pos] = await Promise.all([
-    emp.department
-      ? departmentService.getByCode(emp.department)
-      : null,
-    emp.position
-      ? positionService.getByCode(emp.position)
-      : null,
-  ]);
+/* =========================
+ * Internal Logic (Enrich Data)
+ * ========================= */
+const enrichAccountData = (account, allEmployees, allDepartments, allPositions) => {
+  const emp = allEmployees.find((e) => e.id === account.employeeId || e.code === account.employeeCode);
+  if (!emp) return account;
 
   return {
     ...account,
-    employee: {
-      code: emp.code,
-      name: emp.name,
-      email: emp.email,
-      departmentCode: emp.department,
-      departmentName: dept?.name || emp.department,
-      positionCode: emp.position,
-      positionName: pos?.name || emp.position,
-    },
+    employeeName: emp.name,
+    employeeCode: emp.code,
+    departmentName: allDepartments.find((d) => d.code === emp.department)?.name || emp.department,
+    positionName: allPositions.find((p) => p.code === emp.position)?.name || emp.position,
   };
-}
+};
 
 /* =========================
- * Account Service
+ * Business Validators
  * ========================= */
+const validators = {
+  async ensureCanCreate(data) {
+    if (!data.username) throw new Error(ERROR_MSGS.REQUIRED_USERNAME);
+    if (!data.employeeId && !data.employeeCode) throw new Error(ERROR_MSGS.REQUIRED_EMPLOYEE);
 
+    const emp = data.employeeId 
+      ? await employeeService.getById(data.employeeId)
+      : await employeeService.getByCode(data.employeeCode);
+
+    if (!emp || emp.status !== EMP_STATUS.WORKING || isSoftDeleted(emp.deletedAt)) {
+      throw new Error(ERROR_MSGS.INVALID_EMPLOYEE);
+    }
+
+    const allAccounts = await axiosClient.get(API_URL);
+    const accounts = Array.isArray(allAccounts) ? allAccounts : [];
+    
+    if (accounts.some((a) => normalizeUsername(a.username) === normalizeUsername(data.username))) {
+      throw new Error(ERROR_MSGS.EXISTS_USERNAME);
+    }
+    if (accounts.some((a) => a.employeeId === emp.id || a.employeeCode === emp.code)) {
+      throw new Error(ERROR_MSGS.EXISTS_EMPLOYEE);
+    }
+  },
+
+  async ensureCanRestore(account) {
+    const emp = account.employeeId 
+      ? await employeeService.getById(account.employeeId)
+      : await employeeService.getByCode(account.employeeCode);
+      
+    if (!emp || emp.status !== EMP_STATUS.WORKING || isSoftDeleted(emp.deletedAt)) {
+      throw new Error(ERROR_MSGS.INVALID_EMPLOYEE);
+    }
+  },
+};
+
+/* =========================
+ * Main Service
+ * ========================= */
 export const accountService = {
-  /**
-   * Lấy toàn bộ tài khoản
-   */
-  async getAll({ includeDeleted = false } = {}) {
-    await delay();
-    const list = storage.get();
-    const filtered = includeDeleted
-      ? list
-      : list.filter((a) => !a.deletedAt);
+  async getAll({ includeDeleted = false, enrich = true } = {}) {
+    try {
+      // Sử dụng axiosClient thay cho fetch
+      const accounts = await axiosClient.get(API_URL);
+      
+      let result = Array.isArray(accounts) ? accounts : [];
 
-    return Promise.all(filtered.map(enrichAccount));
+      if (!includeDeleted) {
+        result = result.filter((a) => a.status !== STATUS.DELETED && !isSoftDeleted(a.deletedAt));
+      }
+
+      if (enrich) {
+        const [employees, departments, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          departmentService.getAll({ includeDeleted: true, enrich: false }),
+          positionService.getAll({ includeDeleted: true }),
+        ]);
+
+        result = result.map((a) => enrichAccountData(a, employees, departments, positions));
+      }
+
+      return result.sort((a, b) => normalizeUsername(a.username).localeCompare(normalizeUsername(b.username)));
+    } catch (error) {
+      console.error(ERROR_MSGS.FETCH_FAILED, error);
+      return [];
+    }
   },
 
-  /**
-   * Lấy tài khoản đang hoạt động
-   */
-  async getActive() {
-    const list = await this.getAll();
-    return list.filter(
-      (a) => a.status === "Hoạt động" && !a.deletedAt
-    );
+  async getById(id) {
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
   },
 
-  /**
-   * Lấy tài khoản theo username
-   */
   async getByUsername(username) {
-    await delay();
-    const u = normalizeUsername(username);
-
-    const found = storage
-      .get()
-      .find((a) => normalizeUsername(a.username) === u);
-
-    if (!found) return null;
-    return enrichAccount(found);
+    try {
+      const target = normalizeUsername(username);
+      const data = await axiosClient.get(API_URL, {
+        params: { username: target }
+      });
+      return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    } catch {
+      return null;
+    }
   },
 
-  /**
-   * Kiểm tra username tồn tại
-   */
-  async checkUsernameExists(username) {
-    await delay(200);
-    const u = normalizeUsername(username);
-    if (!u) return false;
-
-    return storage
-      .get()
-      .some((a) => normalizeUsername(a.username) === u);
-  },
-
-  /**
-   * Kiểm tra nhân viên đã có account chưa
-   */
-  async checkEmployeeHasAccount(employeeCode) {
-    await delay(200);
-    if (!employeeCode) return false;
-
-    return storage
-      .get()
-      .some(
-        (a) =>
-          a.employeeCode === employeeCode &&
-          !a.deletedAt
-      );
-  },
-
-  /**
-   * Tạo mới tài khoản
-   */
   async create(data) {
-    await delay();
+    await validators.ensureCanCreate(data);
 
-    const list = storage.get();
-    const username = normalizeUsername(data?.username);
-
-    const emp = await employeeService.getByCode(data.employeeCode);
-    if (!emp || emp.status !== "Đang làm việc") {
-      throw createHttpError(
-        400,
-        "Chỉ tạo tài khoản cho nhân viên đang làm việc",
-        "employeeCode"
-      );
-    }
-
-    if (!username) {
-      throw createHttpError(
-        400,
-        "Tên đăng nhập bắt buộc",
-        "username"
-      );
-    }
-
-    if (
-      list.some(
-        (a) => normalizeUsername(a.username) === username
-      )
-    ) {
-      throw createHttpError(
-        409,
-        "Tên đăng nhập đã tồn tại",
-        "username"
-      );
-    }
-
-    if (!data.employeeCode) {
-      throw createHttpError(
-        400,
-        "Phải chọn nhân viên",
-        "employeeCode"
-      );
-    }
-
-    if (
-      list.some(
-        (a) =>
-          a.employeeCode === data.employeeCode &&
-          !a.deletedAt
-      )
-    ) {
-      throw createHttpError(
-        409,
-        "Nhân viên này đã có tài khoản",
-        "employeeCode"
-      );
-    }
-
-    const account = {
-      username,
-      employeeCode: data.employeeCode,
-      role: data.role,
-      status: data.status ?? "Hoạt động",
-      password: data.password,
+    const newAccount = {
+      ...data,
+      username: normalizeUsername(data.username),
+      status: STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    storage.set([...list, account]);
-    return enrichAccount(account);
+    return await axiosClient.post(API_URL, newAccount);
   },
 
-  /**
-   * Cập nhật tài khoản (không cho đổi username & employee)
-   */
   async update(username, data) {
-    await delay();
+    const current = await this.getByUsername(username);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const u = normalizeUsername(username);
-
-    const index = list.findIndex(
-      (a) => normalizeUsername(a.username) === u
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy tài khoản",
-        "username"
-      );
-    }
-
-    const updated = {
-      ...list[index],
-      role: data.role ?? list[index].role,
-      status: data.status ?? list[index].status,
-      ...(data.password
-        ? { password: data.password }
-        : {}),
+    const updatedAccount = {
+      ...current,
+      ...data,
       updatedAt: new Date().toISOString(),
     };
 
-    list[index] = updated;
-    storage.set(list);
-
-    return enrichAccount(updated);
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedAccount);
   },
 
-  /**
-   * Xóa tài khoản (soft delete)
-   */
   async remove(username) {
-    await delay();
+    const current = await this.getByUsername(username);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const u = normalizeUsername(username);
-    const list = storage.get();
-
-    const index = list.findIndex(
-      (a) => normalizeUsername(a.username) === u
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy tài khoản",
-        "username"
-      );
-    }
-
-    list[index] = {
-      ...list[index],
-      status: "Đã xoá",
-      deletedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const softDeleteData = {
+      ...current,
+      status: STATUS.DELETED,
+      deletedAt: now,
+      updatedAt: now,
     };
 
-    storage.set(list);
-    return true;
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
-  /**
-   * Khôi phục tài khoản đã xóa
-   */
   async restore(username) {
-    await delay();
+    const current = await this.getByUsername(username);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const u = normalizeUsername(username);
-    const list = storage.get();
+    await validators.ensureCanRestore(current);
 
-    const index = list.findIndex(
-      (a) => normalizeUsername(a.username) === u
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy tài khoản",
-        "username"
-      );
-    }
-
-    list[index] = {
-      ...list[index],
-      status: "Hoạt động",
+    const restoreData = {
+      ...current,
+      status: STATUS.ACTIVE,
       deletedAt: null,
       updatedAt: new Date().toISOString(),
     };
 
-    storage.set(list);
-    return enrichAccount(list[index]);
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
   },
 
-  /**
-   * Xóa vĩnh viễn
-   */
   async destroy(username) {
-    await delay();
-    const u = normalizeUsername(username);
-    const list = storage.get();
+    const current = await this.getByUsername(username);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (a) => normalizeUsername(a.username) === u
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy tài khoản",
-        "username"
-      );
-    }
-
-    list.splice(index, 1);
-    storage.set(list);
-    return true;
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

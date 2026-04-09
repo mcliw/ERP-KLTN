@@ -12,38 +12,37 @@ export default function Login() {
   const navigate = useNavigate();
   const { login, loading, error } = useAuthStore();
 
-  const [username, setUsername] = useState("");
+  // 1. State form đăng nhập
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // Xử lý đăng nhập
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const user = await login({ username, password });
+      const user = await login({ email, password });
       redirectByRole(navigate, user.role);
     } catch (_) {
-      // error đã được set trong store
+      // Lỗi đã được xử lý trong store và hiển thị qua biến error
     }
   };
 
   return (
     <div className="login-container">
-      {/* LEFT */}
+      {/* LEFT - Banner giới thiệu */}
       <div className="login-left">
         <h1>CHÀO MỪNG ĐẾN</h1>
         <h2>LDG TECH</h2>
-
         <p className="slogan">Sáng tạo đổi mới giá trị</p>
-
         <p className="subtitle">TỰ ĐỘNG - TIỆN ÍCH - MINH BẠCH</p>
-
         <p className="desc">
           Hệ thống ERP - Quản lý doanh nghiệp <br />
           tích hợp AI Chatbot
         </p>
       </div>
 
-      {/* RIGHT */}
+      {/* RIGHT - Khu vực Form Đăng Nhập */}
       <div className="login-right">
         <h2>ĐĂNG NHẬP</h2>
 
@@ -52,9 +51,9 @@ export default function Login() {
             <span className="icon"><FaUser /></span>
             <input
               type="text"
-              placeholder="Tên tài khoản"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Email doanh nghiệp (VD: abc@ldg.company)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
@@ -91,7 +90,7 @@ export default function Login() {
           {error && <div className="login-error">{error}</div>}
 
           <button className="login-btn" disabled={loading}>
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+            {loading ? "Đang xử lý..." : "Đăng nhập"}
           </button>
         </form>
       </div>

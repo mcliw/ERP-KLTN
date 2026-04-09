@@ -1,308 +1,208 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/onLeave.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn chính xác tới file axiosClient.js của bạn
 import { employeeService } from "./employee.service";
 import { departmentService } from "./department.service";
 import { positionService } from "./position.service";
 
-const KEY = "ON_LEAVES";
-
 /* =========================
- * Utils & Helpers
+ * Config & Constants
  * ========================= */
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/onLeaves";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-const storage = {
-  get() {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
-  },
-  set(data) {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  },
+const EMP_STATUS = {
+  WORKING: "Đang làm việc",
 };
 
-const normalizeId = (id) => String(id || "").trim();
+export const LEAVE_STATUS = {
+  PENDING: "Chờ duyệt",
+  APPROVED: "Đã duyệt",
+  REJECTED: "Từ chối",
+};
 
-const createHttpError = (status, message, field) => {
-  const err = new Error(message);
-  err.status = status;
-  if (field) err.field = field;
-  return err;
+const ERROR_MSGS = {
+  FETCH_FAILED: "Lỗi kết nối đến máy chủ",
+  NOT_FOUND: "Không tìm thấy đơn nghỉ",
+  MISSING_EMPLOYEE: "Thiếu nhân viên",
+  INVALID_EMPLOYEE: "Chỉ tạo đơn nghỉ cho nhân viên đang làm việc",
+  MISSING_RANGE: "Thiếu thời gian nghỉ",
+  INVALID_RANGE: "Khoảng thời gian nghỉ không hợp lệ",
+  UPDATE_FAILED: "Không thể cập nhật dữ liệu",
+  CANNOT_DELETE_PENDING: "Không được xóa đơn khi đang chờ duyệt",
+};
+
+/* =========================
+ * Helpers
+ * ========================= */
+const normalizeCode = (code) => String(code || "").trim().toUpperCase();
+
+const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
+
+/* =========================
+ * Internal Logic (Enrich Data)
+ * ========================= */
+const enrichLeaveData = (leave, allEmployees, allDepartments, allPositions) => {
+  const emp = allEmployees.find((e) => e.code === leave.employeeCode);
+  if (!emp) return leave;
+
+  return {
+    ...leave,
+    employeeName: emp.name,
+    departmentName: allDepartments.find((d) => d.code === emp.department)?.name || emp.department,
+    positionName: allPositions.find((p) => p.code === emp.position)?.name || emp.position,
+  };
 };
 
 /* =========================
  * Business Validators
  * ========================= */
+const validators = {
+  async validate(data) {
+    if (!data.employeeCode) throw new Error(ERROR_MSGS.MISSING_EMPLOYEE);
+    if (!data.fromDate || !data.toDate) throw new Error(ERROR_MSGS.MISSING_RANGE);
 
-async function validateEmployeeWorking(employeeCode) {
-  if (!employeeCode) {
-    throw createHttpError(400, "Thiếu nhân viên", "employeeCode");
-  }
-
-  const emp = await employeeService.getByCode(employeeCode);
-
-  if (!emp || emp.deletedAt || emp.status !== "Đang làm việc") {
-    throw createHttpError(
-      400,
-      "Chỉ tạo đơn nghỉ cho nhân viên đang làm việc",
-      "employeeCode"
-    );
-  }
-
-  return emp;
-}
-
-function validateLeaveRange(fromDate, toDate) {
-  if (!fromDate || !toDate) {
-    throw createHttpError(400, "Thiếu thời gian nghỉ");
-  }
-
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
-
-  if (isNaN(from) || isNaN(to) || from > to) {
-    throw createHttpError(
-      400,
-      "Khoảng thời gian nghỉ không hợp lệ",
-      "fromDate"
-    );
-  }
-}
-
-/* =========================
- * Enrich helper (CHUẨN HÓA)
- * ========================= */
-
-async function enrichOnLeave(item) {
-  if (!item) return null;
-
-  let employeeName = null;
-  let departmentName = null;
-  let positionName = null;
-
-  if (item.employeeCode) {
-    const emp = await employeeService.getByCode(item.employeeCode);
-
-    if (emp) {
-      employeeName = emp.name;
-
-      const [dept, pos] = await Promise.all([
-        emp.department
-          ? departmentService.getByCode(emp.department)
-          : null,
-        emp.position
-          ? positionService.getByCode(emp.position)
-          : null,
-      ]);
-
-      departmentName = dept?.name || emp.department;
-      positionName = pos?.name || emp.position;
+    const from = new Date(data.fromDate);
+    const to = new Date(data.toDate);
+    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from > to) {
+      throw new Error(ERROR_MSGS.INVALID_RANGE);
     }
-  }
 
-  return {
-    ...item,
-    employeeName,
-    departmentName,
-    positionName,
-  };
-}
+    const emp = await employeeService.getByCode(data.employeeCode);
+    if (!emp || emp.status !== EMP_STATUS.WORKING || isSoftDeleted(emp.deletedAt)) {
+      throw new Error(ERROR_MSGS.INVALID_EMPLOYEE);
+    }
+  },
+};
 
 /* =========================
- * OnLeave Service
+ * Main Service
  * ========================= */
-
 export const onLeaveService = {
-  async getAll({ includeDeleted = false } = {}) {
-    await delay();
-    const list = storage.get();
+  async getAll({ includeDeleted = false, enrich = true } = {}) {
+    try {
+      // Sử dụng axiosClient đã cấu hình interceptor để lấy data trực tiếp
+      const leaves = await axiosClient.get(API_URL);
+      
+      let result = Array.isArray(leaves) ? leaves : [];
 
-    const filtered = includeDeleted
-      ? list
-      : list.filter((i) => !i.deletedAt);
+      if (!includeDeleted) {
+        result = result.filter((l) => !isSoftDeleted(l.deletedAt));
+      }
 
-    return Promise.all(filtered.map(enrichOnLeave));
+      if (enrich) {
+        const [employees, departments, positions] = await Promise.all([
+          employeeService.getAll({ includeDeleted: true }),
+          departmentService.getAll({ includeDeleted: true, enrich: false }),
+          positionService.getAll({ includeDeleted: true }),
+        ]);
+
+        result = result.map((l) => enrichLeaveData(l, employees, departments, positions));
+      }
+
+      return result.sort((a, b) => {
+        const da = new Date(a.createdAt || 0).getTime();
+        const db = new Date(b.createdAt || 0).getTime();
+        return db - da; // Mới nhất lên đầu
+      });
+    } catch (error) {
+      console.error(ERROR_MSGS.FETCH_FAILED, error);
+      return [];
+    }
   },
 
   async getById(id) {
-    await delay();
-    const i = normalizeId(id);
-
-    const found = storage
-      .get()
-      .find((x) => normalizeId(x.id) === i);
-
-    return found ? enrichOnLeave(found) : null;
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
   },
 
   async create(data) {
-    await delay();
+    await validators.validate(data);
 
-    await validateEmployeeWorking(data?.employeeCode);
-    validateLeaveRange(data?.fromDate, data?.toDate);
-
-    const now = new Date().toISOString();
-
-    const item = {
+    const newLeave = {
       ...data,
-      id: crypto.randomUUID(),
-      status: data?.status ?? "Chờ duyệt",
-      approvedAt: null,
-      approvedBy: null,
-      createdAt: now,
+      status: LEAVE_STATUS.PENDING,
+      createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
+      approvedAt: null,
+      approvedBy: null,
+      rejectReason: null,
     };
 
-    storage.set([item, ...storage.get()]);
-    return enrichOnLeave(item);
+    return await axiosClient.post(API_URL, newLeave);
   },
 
   async update(id, data) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-    }
-
-    if (data?.fromDate || data?.toDate) {
-      validateLeaveRange(
-        data.fromDate ?? list[index].fromDate,
-        data.toDate ?? list[index].toDate
-      );
-    }
-
-    const updated = {
-      ...list[index],
+    const updatedLeave = {
+      ...current,
       ...data,
-      id: list[index].id,
-      employeeCode: list[index].employeeCode,
       updatedAt: new Date().toISOString(),
     };
 
-    list[index] = updated;
-    storage.set(list);
-
-    return enrichOnLeave(updated);
+    return await axiosClient.put(`${API_URL}/${id}`, updatedLeave);
   },
 
   async remove(id) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
+    // [RULE] Không được xóa đơn khi đang chờ duyệt (Tránh mất data)
+    if (current.status === LEAVE_STATUS.PENDING) {
+      throw new Error(ERROR_MSGS.CANNOT_DELETE_PENDING);
     }
 
-    list[index] = {
-      ...list[index],
-      deletedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const softDeleteData = {
+      ...current,
+      deletedAt: now,
+      updatedAt: now,
     };
 
-    storage.set(list);
-    return true;
+    return await axiosClient.put(`${API_URL}/${id}`, softDeleteData);
   },
 
   async restore(id) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-    }
-
-    list[index] = {
-      ...list[index],
+    const restoreData = {
+      ...current,
       deletedAt: null,
-      approvedAt: null,
-      approvedBy: null,
       updatedAt: new Date().toISOString(),
     };
 
-    storage.set(list);
-    return enrichOnLeave(list[index]);
+    return await axiosClient.put(`${API_URL}/${id}`, restoreData);
   },
 
   async approve(id, approver = "admin") {
-    await delay();
     return this.update(id, {
-      status: "Đã duyệt",
+      status: LEAVE_STATUS.APPROVED,
       approvedAt: new Date().toISOString(),
       approvedBy: approver,
-      updatedAt: new Date().toISOString(),
+      rejectReason: null,
     });
   },
 
-  // async reject(id, reason, approver = "admin") {
-  //   await delay();
-  //   const list = storage.get();
-  //   const i = normalizeId(id);
-  //   const index = list.findIndex((x) => normalizeId(x.id) === i);
-
-  //   if (index === -1) {
-  //     throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-  //   }
-  //   const updated = {
-  //     ...list[index],
-  //     status: "Từ chối",
-  //     reason: reason,
-  //     approvedAt: new Date().toISOString(),
-  //     approvedBy: approver,
-  //     updatedAt: new Date().toISOString(),
-  //   };
-
-  //   list[index] = updated;
-  //   storage.set(list);
-
-  //   return enrichOnLeave(updated);
-  // },
-
   async reject(id, reason, approver = "admin") {
-    await delay();
     return this.update(id, {
-      status: "Từ chối",
-      rejectReason: reason,
+      status: LEAVE_STATUS.REJECTED,
+      rejectReason: reason || null,
       approvedAt: new Date().toISOString(),
-      approvedBy: approver, // Lưu tên người từ chối vào đây
-      updatedAt: new Date().toISOString(),
+      approvedBy: approver,
     });
   },
 
   async destroy(id) {
-    await delay();
+    const current = await this.getById(id);
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const list = storage.get();
-    const i = normalizeId(id);
-
-    const index = list.findIndex(
-      (x) => normalizeId(x.id) === i
-    );
-
-    if (index === -1) {
-      throw createHttpError(404, "Không tìm thấy đơn nghỉ", "id");
-    }
-
-    list.splice(index, 1);
-    storage.set(list);
-    return true;
+    return await axiosClient.delete(`${API_URL}/${id}`);
   },
 };

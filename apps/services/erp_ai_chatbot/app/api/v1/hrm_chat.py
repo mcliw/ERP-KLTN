@@ -3,12 +3,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from fastapi.encoders import jsonable_encoder
 from app.ai.executor.executor_hrm import execute_chat_hrm 
+from uuid import UUID
 
 router = APIRouter(prefix="/hrm")
 
 class ChatRequest(BaseModel):
     module: str = "hrm"
-    user_id: int | None = None
+    user_id: UUID | None = None
     role: str | None = None
     message: str
     debug: bool = False

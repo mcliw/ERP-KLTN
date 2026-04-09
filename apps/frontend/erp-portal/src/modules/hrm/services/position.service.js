@@ -1,292 +1,206 @@
 // apps/frontend/erp-portal/src/modules/hrm/services/position.service.js
-
+import { axiosClient } from "../../../services/axiosClient"; // Đảm bảo đường dẫn chính xác tới file axiosClient.js
 import { employeeService } from "./employee.service";
 
-const KEY = "POSITIONS";
-
 /* =========================
- * Utils & Helpers
+ * Config & Constants
  * ========================= */
+// axiosClient đã có baseURL là "/api", nên ở đây chỉ cần path tương đối
+const API_URL = "/hrm/positions";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-const storage = {
-  get() {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
-  },
-  set(data) {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  },
+const STATUS = {
+  ACTIVE: "Hoạt động",
+  INACTIVE: "Ngưng hoạt động",
 };
 
-const normalizeCode = (code) =>
-  String(code || "").trim().toUpperCase();
+const EMP_STATUS = {
+  WORKING: "Đang làm việc",
+};
 
-const createHttpError = (status, message, field) => {
-  const err = new Error(message);
-  err.status = status;
-  if (field) err.field = field;
-  return err;
+const ERROR_MSGS = {
+  FETCH_FAILED: "Lỗi kết nối đến máy chủ",
+  NOT_FOUND: "Không tìm thấy chức vụ",
+  EXISTS: "Mã chức vụ đã tồn tại",
+  HAS_ASSIGNEES: "Không thể ngưng hoạt động chức vụ vì đang có nhân viên đảm nhận",
+  UPDATE_FAILED: "Không thể cập nhật dữ liệu",
 };
 
 /* =========================
- * Enrich helpers
+ * Helpers
  * ========================= */
-/**
- * Source of truth: EMPLOYEE
- * → số lượng & danh sách nhân viên đang giữ chức vụ này
- */
-async function enrichPosition(position) {
-  if (!position) return null;
+const normalizeCode = (code) => String(code || "").trim().toUpperCase();
 
-  const employees = await employeeService.getAll();
-  const posCode = normalizeCode(position.code);
+const isSoftDeleted = (deletedAt) => !!(deletedAt && String(deletedAt).trim() !== "");
 
-  const assignees = employees.filter(
-    (e) =>
-      !e.deletedAt &&
-      normalizeCode(e.position) === posCode &&
-      e.status === "Đang làm việc"
+/* =========================
+ * Internal Logic (Enrich Data)
+ * ========================= */
+const enrichPositionData = (position, allEmployees) => {
+  const posCode = position.code;
+  const assignees = allEmployees.filter(
+    (e) => e.position === posCode && e.status === EMP_STATUS.WORKING && !isSoftDeleted(e.deletedAt)
   );
 
   return {
     ...position,
-    assignees,
     assigneeCount: assignees.length,
   };
-}
-
-async function hasActiveAssignees(positionCode) {
-  const employees = await employeeService.getAll();
-  const code = normalizeCode(positionCode);
-
-  return employees.some(
-    (e) =>
-      !e.deletedAt &&
-      e.status === "Đang làm việc" &&
-      normalizeCode(e.position) === code
-  );
-}
+};
 
 /* =========================
- * Position Service
+ * Business Validators
  * ========================= */
-
-export const positionService = {
-  /**
-   * Lấy danh sách chức vụ
-   */
-  async getAll({ includeDeleted = false } = {}) {
-    await delay();
-
-    const list = storage.get();
-    const filtered = includeDeleted
-      ? list
-      : list.filter((p) => !p.deletedAt);
-
-    return Promise.all(
-      filtered.map(enrichPosition)
+const validators = {
+  async checkHasActiveAssignees(posCode) {
+    const employees = await employeeService.getAll();
+    const activeInPos = employees.filter(
+      (e) => e.position === posCode && e.status === EMP_STATUS.WORKING && !isSoftDeleted(e.deletedAt)
     );
+
+    if (activeInPos.length > 0) {
+      throw new Error(ERROR_MSGS.HAS_ASSIGNEES);
+    }
+  },
+};
+
+/* =========================
+ * Main Service
+ * ========================= */
+export const positionService = {
+  async getAll({ includeDeleted = false, enrich = true } = {}) {
+    try {
+      // Sử dụng axiosClient thay cho fetch
+      const positions = await axiosClient.get(API_URL);
+
+      let result = Array.isArray(positions) ? positions : [];
+
+      if (!includeDeleted) {
+        result = result.filter((p) => !isSoftDeleted(p.deletedAt));
+      }
+
+      if (enrich) {
+        const employees = await employeeService.getAll({ includeDeleted: true, enrich: false });
+        result = result.map((p) => enrichPositionData(p, employees));
+      }
+
+      return result.sort((a, b) => normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
+    } catch (error) {
+      console.error(ERROR_MSGS.FETCH_FAILED, error);
+      return [];
+    }
   },
 
-  /**
-   * Lấy chức vụ theo mã
-   */
-  async getByCode(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const found = storage
-      .get()
-      .find((p) => normalizeCode(p.code) === c);
-
-    return found
-      ? enrichPosition(found)
-      : null;
+  async getById(id) {
+    try {
+      return await axiosClient.get(`${API_URL}/${id}`);
+    } catch (error) {
+      console.error("getById failed:", error);
+      return null;
+    }
   },
 
-  /**
-   * Kiểm tra mã chức vụ đã tồn tại
-   */
+  async getByCode(code, { enrich = true } = {}) {
+    try {
+      const targetCode = normalizeCode(code);
+      const data = await axiosClient.get(API_URL, {
+        params: { code: targetCode },
+      });
+
+      const pos = Array.isArray(data) && data.length > 0 ? data[0] : null;
+
+      if (pos && enrich) {
+        const employees = await employeeService.getAll({ includeDeleted: true });
+        return enrichPositionData(pos, employees);
+      }
+
+      return pos;
+    } catch {
+      return null;
+    }
+  },
+
   async checkCodeExists(code) {
-    await delay(200);
-
-    const c = normalizeCode(code);
-    if (!c) return false;
-
-    return storage
-      .get()
-      .some((p) => normalizeCode(p.code) === c);
+    const pos = await this.getByCode(code, { enrich: false });
+    return !!pos;
   },
 
-  /**
-   * Tạo mới chức vụ
-   */
   async create(data) {
-    await delay();
-
-    const list = storage.get();
     const code = normalizeCode(data?.code);
 
-    if (!code) {
-      throw createHttpError(
-        400,
-        "Mã chức vụ bắt buộc",
-        "code"
-      );
-    }
+    const exists = await this.checkCodeExists(code);
+    if (exists) throw new Error(ERROR_MSGS.EXISTS);
 
-    if (
-      list.some(
-        (p) => normalizeCode(p.code) === code
-      )
-    ) {
-      throw createHttpError(
-        409,
-        "Mã chức vụ đã tồn tại",
-        "code"
-      );
-    }
-
-    const position = {
+    const newPosition = {
       ...data,
       code,
-      status: data?.status ?? "Hoạt động",
-      capacity: Number(data?.capacity ?? 1),
+      status: data.status || STATUS.ACTIVE,
       createdAt: new Date().toISOString(),
       updatedAt: null,
       deletedAt: null,
     };
 
-    storage.set([...list, position]);
-    return position;
+    return await axiosClient.post(API_URL, newPosition);
   },
 
-  /**
-   * Cập nhật chức vụ (không cho đổi mã)
-   */
   async update(code, data) {
-    await delay();
-
-    const list = storage.get();
     const targetCode = normalizeCode(code);
 
-    const index = list.findIndex(
-      (p) => normalizeCode(p.code) === targetCode
-    );
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy chức vụ",
-        "code"
-      );
+    if (data.status === STATUS.INACTIVE && current.status !== STATUS.INACTIVE) {
+      await validators.checkHasActiveAssignees(targetCode);
     }
 
-    const updated = {
-      ...list[index],
+    const updatedPosition = {
+      ...current,
       ...data,
-      code: list[index].code, // khóa mã
+      code: targetCode,
       updatedAt: new Date().toISOString(),
     };
 
-    list[index] = updated;
-    storage.set(list);
-
-    return updated;
+    return await axiosClient.put(`${API_URL}/${current.id}`, updatedPosition);
   },
 
-  /**
-   * Xóa chức vụ (soft delete)
-   */
   async remove(code) {
-    await delay();
+    const targetCode = normalizeCode(code);
 
-    const c = normalizeCode(code);
-    const list = storage.get();
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (p) => normalizeCode(p.code) === c
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy chức vụ",
-        "code"
-      );
-    }
-
-    const stillHasAssignees = await hasActiveAssignees(c);
-    if (stillHasAssignees) {
-      throw createHttpError(
-        400,
-        "Không thể xoá chức vụ vì đang có nhân viên đảm nhận"
-      );
-    }
+    await validators.checkHasActiveAssignees(targetCode);
 
     const now = new Date().toISOString();
+    const softDeleteData = {
+      ...current,
+      deletedAt: now,
+      status: STATUS.INACTIVE,
+      updatedAt: now,
+    };
 
-    list[index].deletedAt = now;
-    list[index].updatedAt = now;
-
-    storage.set(list);
-    return true;
+    return await axiosClient.put(`${API_URL}/${current.id}`, softDeleteData);
   },
 
-  /**
-   * Xóa chức vụ vĩnh viễn (hard delete)
-   */
-  async destroy(code) {
-    await delay();
-
-    const c = normalizeCode(code);
-    const list = storage.get();
-
-    const index = list.findIndex(
-      (p) => normalizeCode(p.code) === c
-    );
-
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy chức vụ",
-        "code"
-      );
-    }
-
-    list.splice(index, 1);
-    storage.set(list);
-
-    return true;
-  },
-
-  /**
-   * Khôi phục chức vụ đã xóa
-   */
   async restore(code) {
-    await delay();
+    const targetCode = normalizeCode(code);
 
-    const c = normalizeCode(code);
-    const list = storage.get();
+    const current = await this.getByCode(targetCode, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    const index = list.findIndex(
-      (p) => normalizeCode(p.code) === c
-    );
+    const restoreData = {
+      ...current,
+      deletedAt: null,
+      status: STATUS.ACTIVE,
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (index === -1) {
-      throw createHttpError(
-        404,
-        "Không tìm thấy chức vụ",
-        "code"
-      );
-    }
+    return await axiosClient.put(`${API_URL}/${current.id}`, restoreData);
+  },
 
-    list[index].deletedAt = null;
-    list[index].updatedAt =
-      new Date().toISOString();
+  async destroy(code) {
+    const current = await this.getByCode(code, { enrich: false });
+    if (!current) throw new Error(ERROR_MSGS.NOT_FOUND);
 
-    storage.set(list);
-    return list[index];
+    return await axiosClient.delete(`${API_URL}/${current.id}`);
   },
 };

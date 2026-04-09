@@ -1,92 +1,208 @@
-# app/modules/finance_accounting/tools/thu_chi.py
 from __future__ import annotations
+
+from datetime import date, timedelta
 from typing import Optional
-from datetime import date, datetime
+
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.ai.tooling import ToolSpec, ok
-from app.modules.finance_accounting.models import CashTransaction
-
-def _iso(d): return d.isoformat() if d else None
-def _to_str(x): return str(x) if x is not None else None
+from app.ai.tooling import ToolSpec, ok, can_lam_ro
+from app.modules.finance_accounting.models import CashTransaction, JournalEntry
+from .helpers import norm_text, norm_code, iso_date, to_str, fmt_money, candidates_by_prefix, require_any
 
 
-class GiaoDichArgs(BaseModel):
-    loai: Optional[str] = None           # RECEIPT/PAYMENT
-    phuong_thuc: Optional[str] = None    # CASH/BANK_TRANSFER
-    tu_ngay: Optional[date] = None
-    den_ngay: Optional[date] = None
+class CashChiTietArgs(BaseModel):
+    transaction_id: Optional[int] = None
     reference_doc_id: Optional[str] = None
-    limit: int = 50
 
 
-def giao_dich(session: Session, loai: Optional[str] = None, phuong_thuc: Optional[str] = None,
-             tu_ngay: Optional[date] = None, den_ngay: Optional[date] = None,
-             reference_doc_id: Optional[str] = None, limit: int = 50):
+class CashLichSuArgs(BaseModel):
+    from_date: Optional[date] = None
+    to_date: Optional[date] = None
+    transaction_type: Optional[str] = None  # RECEIPT/PAYMENT
+    payment_method: Optional[str] = None    # CASH/BANK_TRANSFER
+    limit: int = 20
+
+
+class CashTongHopThangArgs(BaseModel):
+    month: int
+    year: int
+
+
+class CashGanNhatArgs(BaseModel):
+    days: int = 7
+    limit: int = 20
+
+
+def cash_chi_tiet(session: Session, transaction_id: Optional[int] = None, reference_doc_id: Optional[str] = None):
+    missing = require_any(transaction_id=transaction_id, reference_doc_id=reference_doc_id)
+    if missing:
+        return missing
 
     q = session.query(CashTransaction)
+    if transaction_id:
+        tx = q.filter(CashTransaction.transaction_id == transaction_id).first()
+    else:
+        ref = norm_text(reference_doc_id)
+        tx = q.filter(CashTransaction.reference_doc_id == ref).first()
+        if not tx and ref:
+            # gợi ý prefix
+            cands = candidates_by_prefix(session, CashTransaction, "reference_doc_id", ref, limit=10)
+            if cands:
+                return can_lam_ro(f"Không tìm thấy giao dịch '{reference_doc_id}'. Bạn muốn chọn mã nào?", cands)
 
-    if loai:
-        q = q.filter(CashTransaction.transaction_type == loai)
-    if phuong_thuc:
-        q = q.filter(CashTransaction.payment_method == phuong_thuc)
-    if reference_doc_id:
-        q = q.filter(CashTransaction.reference_doc_id == reference_doc_id.strip())
+    if not tx:
+        return can_lam_ro("Không tìm thấy giao dịch thu/chi.", [])
 
-    if tu_ngay:
-        q = q.filter(CashTransaction.created_at >= datetime.combine(tu_ngay, datetime.min.time()))
-    if den_ngay:
-        q = q.filter(CashTransaction.created_at <= datetime.combine(den_ngay, datetime.max.time()))
+    je = session.query(JournalEntry).filter(JournalEntry.entry_id == tx.entry_id).first() if tx.entry_id else None
 
-    rows = q.order_by(CashTransaction.created_at.desc()).limit(limit).all()
-
-    data = [{
-        "transaction_id": r.transaction_id,
-        "transaction_type": r.transaction_type,
-        "amount": _to_str(r.amount),
-        "payment_method": r.payment_method,
-        "bank_account_number": r.bank_account_number,
-        "reference_doc_id": r.reference_doc_id,
-        "entry_id": r.entry_id,
-        "created_at": _iso(r.created_at),
-    } for r in rows]
-
-    return ok(data, "Danh sách giao dịch thu/chi.")
-
-
-class DongTienArgs(BaseModel):
-    tu_ngay: Optional[date] = None
-    den_ngay: Optional[date] = None
+    return ok(
+        {
+            "transaction_id": tx.transaction_id,
+            "transaction_type": tx.transaction_type,
+            "amount": to_str(tx.amount),
+            "payment_method": tx.payment_method,
+            "bank_account_number": tx.bank_account_number,
+            "reference_doc_id": tx.reference_doc_id,
+            "created_at": tx.created_at.isoformat() if tx.created_at else None,
+            "journal_entry": {
+                "entry_id": je.entry_id if je else tx.entry_id,
+                "reference_no": je.reference_no if je else None,
+                "transaction_date": iso_date(je.transaction_date) if je else None,
+                "status": je.status if je else None,
+            }
+            if (je or tx.entry_id)
+            else None,
+        },
+        "Chi tiết giao dịch thu/chi.",
+    )
 
 
-def dong_tien(session: Session, tu_ngay: Optional[date] = None, den_ngay: Optional[date] = None):
+def cash_lich_su(
+    session: Session,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    transaction_type: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    limit: int = 20,
+):
     q = session.query(CashTransaction)
 
-    if tu_ngay:
-        q = q.filter(CashTransaction.created_at >= datetime.combine(tu_ngay, datetime.min.time()))
-    if den_ngay:
-        q = q.filter(CashTransaction.created_at <= datetime.combine(den_ngay, datetime.max.time()))
+    if from_date:
+        q = q.filter(func.date(CashTransaction.created_at) >= from_date)
+    if to_date:
+        q = q.filter(func.date(CashTransaction.created_at) <= to_date)
 
-    thu = session.query(func.coalesce(func.sum(CashTransaction.amount), 0)).filter(
-        CashTransaction.transaction_type == "RECEIPT"
-    ).scalar() or 0
+    if transaction_type:
+        q = q.filter(CashTransaction.transaction_type == norm_code(transaction_type))
+    if payment_method:
+        q = q.filter(CashTransaction.payment_method == norm_code(payment_method))
 
-    chi = session.query(func.coalesce(func.sum(CashTransaction.amount), 0)).filter(
-        CashTransaction.transaction_type == "PAYMENT"
-    ).scalar() or 0
+    rows = (
+        q.order_by(CashTransaction.created_at.desc(), CashTransaction.transaction_id.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
 
-    return ok({
-        "tu_ngay": _iso(tu_ngay),
-        "den_ngay": _iso(den_ngay),
-        "tong_thu": _to_str(thu),
-        "tong_chi": _to_str(chi),
-        "net": _to_str((thu or 0) - (chi or 0)),
-    }, "Tổng hợp dòng tiền (thu/chi/net).")
+    data = [
+        {
+            "transaction_id": r.transaction_id,
+            "transaction_type": r.transaction_type,
+            "amount": to_str(r.amount),
+            "payment_method": r.payment_method,
+            "reference_doc_id": r.reference_doc_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "entry_id": r.entry_id,
+        }
+        for r in rows
+    ]
+
+    return ok(data, "Lịch sử thu/chi.")
+
+
+def cash_tong_hop_thang(session: Session, month: int, year: int):
+    if not (1 <= int(month) <= 12):
+        return can_lam_ro("Month không hợp lệ (1-12).", [])
+
+    m = int(month)
+    y = int(year)
+    start = date(y, m, 1)
+    # end = ngày 1 của tháng kế tiếp (lọc < end)
+    end = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+
+    recv = (
+        session.query(func.coalesce(func.sum(CashTransaction.amount), 0))
+        .filter(CashTransaction.transaction_type == "RECEIPT")
+        .filter(CashTransaction.created_at >= start)
+        .filter(CashTransaction.created_at < end)
+        .scalar()
+        or 0
+    )
+    pay = (
+        session.query(func.coalesce(func.sum(CashTransaction.amount), 0))
+        .filter(CashTransaction.transaction_type == "PAYMENT")
+        .filter(CashTransaction.created_at >= start)
+        .filter(CashTransaction.created_at < end)
+        .scalar()
+        or 0
+    )
+    net = (recv or 0) - (pay or 0)
+
+    ans = (
+        f"Thu/chi {month:02d}/{year}: Thu {fmt_money(recv)}, Chi {fmt_money(pay)}, "
+        f"Dòng tiền {('dương' if net >= 0 else 'âm')} {fmt_money(net)}."
+    )
+
+    return ok(
+        {
+            "month": m,
+            "year": y,
+            "total_receipt": to_str(recv),
+            "total_payment": to_str(pay),
+            "net_cash_flow": to_str(net),
+        },
+        "Tổng hợp thu/chi theo tháng.",
+        answer=ans,
+    )
+
+
+def cash_gan_nhat(session: Session, days: int = 7, limit: int = 20):
+    days = max(1, min(int(days or 7), 90))
+    since = date.today() - timedelta(days=days)
+
+    rows = (
+        session.query(CashTransaction)
+        .filter(func.date(CashTransaction.created_at) >= since)
+        .order_by(CashTransaction.created_at.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+
+    return ok(
+        {
+            "since": since.isoformat(),
+            "days": days,
+            "rows": [
+                {
+                    "transaction_id": r.transaction_id,
+                    "transaction_type": r.transaction_type,
+                    "amount": to_str(r.amount),
+                    "payment_method": r.payment_method,
+                    "reference_doc_id": r.reference_doc_id,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "entry_id": r.entry_id,
+                }
+                for r in rows
+            ],
+        },
+        "Danh sách giao dịch thu/chi gần đây.",
+    )
 
 
 THU_CHI_TOOLS = [
-    ToolSpec("giao_dich", "Tra giao dịch thu/chi (cash_transactions).", GiaoDichArgs, giao_dich, "finance_accounting"),
-    ToolSpec("dong_tien", "Tổng hợp dòng tiền theo khoảng ngày.", DongTienArgs, dong_tien, "finance_accounting"),
+    ToolSpec("cash_chi_tiet", "Chi tiết giao dịch thu/chi theo transaction_id hoặc reference_doc_id.", CashChiTietArgs, cash_chi_tiet, "finance_accounting"),
+    ToolSpec("cash_lich_su", "Lịch sử thu/chi theo khoảng ngày/loại/phương thức.", CashLichSuArgs, cash_lich_su, "finance_accounting"),
+    ToolSpec("cash_tong_hop_thang", "Tổng thu, tổng chi, dòng tiền theo tháng.", CashTongHopThangArgs, cash_tong_hop_thang, "finance_accounting"),
+    ToolSpec("cash_gan_nhat", "Danh sách giao dịch thu/chi gần đây (N ngày).", CashGanNhatArgs, cash_gan_nhat, "finance_accounting"),
 ]

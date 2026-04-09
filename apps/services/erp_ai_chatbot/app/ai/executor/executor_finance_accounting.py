@@ -5,18 +5,28 @@ import json
 from typing import Any, Dict, Optional, List, get_args, get_origin
 from datetime import date, datetime
 
-from app.core.rbac import check_role
-from app.core.audit_log import audit
-from app.core.errors import PermissionDenied, ToolExecutionError
-
 from app.ai.answer_composer import compose_answer_with_llm, compose_safe_enough
 from app.ai.router import plan_route
 from app.ai.plan_validator import validate_plan
 from app.ai.module_registry import get_tool
 from app.ai.tooling import ToolSpec
 from app.ai.executor.context_injection import inject_auth_into_args
-
+from app.ai.llm_payload_filter import filter_step_infos_for_llm
+from uuid import UUID
 from app.db.finance_database import FinanceSessionLocal
+
+from app.core.audit_log import audit
+from app.core.errors import PermissionDenied, ToolExecutionError
+
+from app.core.role.auth_context import build_auth_context
+from app.core.role.rbac import check_role
+from app.core.role.tool_policies import TOOL_POLICIES
+from app.core.role.scope_resolver import resolve_scope
+from app.core.role.enforcer import (
+    check_required_permissions,
+    sanitize_args_by_scope,
+    apply_field_policy,
+)
 
 
 _DATE_YMD = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
@@ -332,32 +342,83 @@ def _is_empty_data(x: Any) -> bool:
 # =========================================================
 def execute_chat_finance_accounting(
     module: str,
-    user_id: int | None,
+    user_id: UUID | None,
     role: str | None,
     message: str,
-    paraphrase_enabled: bool = True,
     compose_enabled: bool = True,
 ):
-    if not check_role(module, role):
-        raise PermissionDenied(f"Role '{role}' không được phép dùng chatbot module '{module}'.")
 
-    auth = {"user_id": user_id, "role": role, "is_authenticated": True}
+    auth_ctx = build_auth_context(user_id=user_id)
+    if not auth_ctx.is_authenticated or not auth_ctx.role:
+        audit({"event": "permission_denied", "module": module, "reason": "not_authenticated"})
+        raise PermissionDenied("Bạn không có quyền truy cập.")
+
+    user_perms = set(getattr(auth_ctx, "permissions", []) or [])
+    effective_role = auth_ctx.role
+    auth = {"user_id": user_id, "role": effective_role, "is_authenticated": True}
+
+    if not check_role(module, auth_ctx):
+        audit({"event": "permission_denied", "module": module, "role": effective_role, "reason": "module_gate"})
+        raise PermissionDenied(f"Role '{effective_role}' không được phép dùng chatbot module '{module}'.")
+
     plan = plan_route(module=module, message=message, auth=auth)
     audit({"event": "plan_created", "module": module, "plan": plan.model_dump()})
 
     if plan.needs_clarification:
         return {"answer": plan.clarifying_question, "plan": plan.model_dump()}
 
-    validate_plan(plan)
+    validate_plan(plan, auth=auth, user_perms=user_perms)
+
+    def _apply_field_policy(result: Any, deny_fields: list[str] | None) -> Any:
+        if not deny_fields or not isinstance(result, dict) or "data" not in result:
+            return result
+
+        def _strip(x):
+            if isinstance(x, dict):
+                return {k: _strip(v) for k, v in x.items() if k not in set(deny_fields)}
+            if isinstance(x, list):
+                return [_strip(i) for i in x]
+            return x
+
+        out = dict(result)
+        out["data"] = _strip(result.get("data"))
+        return out
+
+    def _sanitize_finance_args(scope: str, args: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+        # Finance thường không SELF theo user_id, nhưng vẫn ép nếu tool có target_user_id
+        if scope != "SELF" or user_id is None:
+            return args, False
+        a = dict(args or {})
+        changed = False
+        if "target_user_id" in a and a.get("target_user_id") not in (None, user_id):
+            a["target_user_id"] = user_id
+            changed = True
+        return a, changed
 
     store: Dict[str, Any] = {}
     step_infos: list[dict] = []
 
-    # --- run tools ---
     for idx, step in enumerate(plan.steps, start=1):
         tool = get_tool(plan.module, step.tool)
         if tool is None:
             raise ToolExecutionError(f"Không tìm thấy tool '{step.tool}' trong module '{plan.module}'.")
+
+        policy = TOOL_POLICIES.get(step.tool)
+        if not policy:
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_policy"})
+            raise PermissionDenied("Tool chưa khai báo policy (TOOL_POLICIES).")
+
+        required = set(policy.get("required_permissions", []) or [])
+        if required and not required.issubset(user_perms):
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "missing_permissions"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
+
+        scope = resolve_scope(role_name=effective_role, module=plan.module, tool_name=step.tool)
+        audit({"event": "scope_resolved", "module": plan.module, "tool": step.tool, "scope": scope, "role": effective_role})
+
+        if scope == "NONE":
+            audit({"event": "permission_denied", "module": plan.module, "tool": step.tool, "reason": "scope_none"})
+            raise PermissionDenied("Bạn không có quyền truy cập chức năng này.")
 
         try:
             resolved_args = _resolve_args(step.args, store)
@@ -371,17 +432,27 @@ def execute_chat_finance_accounting(
             has_target_user_id_field=_args_has_target_user_id_field(tool),
         )
 
-        # ✅ tối thiểu: normalize args theo schema để tránh fail validate
         resolved_args = _normalize_args_for_tool(tool, resolved_args)
+
+        resolved_args, changed = _sanitize_finance_args(scope, resolved_args)
+        if changed:
+            audit({"event": "args_sanitized", "module": plan.module, "tool": step.tool, "args": resolved_args, "scope": scope})
 
         audit({"event": "tool_call", "module": plan.module, "tool": step.tool, "args": resolved_args})
         result = _execute_tool(plan.module, tool, resolved_args)
-        audit({"event": "tool_result", "module": plan.module, "tool": step.tool, "result": result})
 
+        deny_fields = policy.get("field_policy", {}).get("deny_fields", []) if isinstance(policy.get("field_policy"), dict) else []
+        result = _apply_field_policy(result, deny_fields)
+
+        audit({"event": "tool_result", "module": plan.module, "tool": step.tool, "result": result})
         step_infos.append({"id": step.id, "tool": step.tool, "args": resolved_args, "result": result})
 
         if isinstance(result, dict) and result.get("needs_clarification"):
-            return {"answer": result.get("question"), "candidates": result.get("candidates"), "plan": plan.model_dump()}
+            return {
+                "answer": result.get("question"),
+                "candidates": result.get("candidates"),
+                "plan": plan.model_dump()
+            }
 
         store[step.id] = result
         store[f"s{idx}"] = result
@@ -393,57 +464,17 @@ def execute_chat_finance_accounting(
             else:
                 store[step.save_as] = result
 
-    step_infos_for_answer = _filter_step_infos_for_answer(plan.module, message, step_infos)
-
     answer = None
-    composed_used = False
-    compose_error: str | None = None
-
-    # có data thật không?
-    has_real_data = any(
-        isinstance(si.get("result"), dict)
-        and si["result"].get("ok") is True
-        and not _is_empty_data(si["result"])
-        for si in step_infos_for_answer
-    )
-
-    # Ưu tiên compose khi có data
-    if compose_enabled and has_real_data:
+    if compose_enabled:
         try:
-            composed = compose_answer_with_llm(plan.module, message, step_infos_for_answer)
-            if composed and compose_safe_enough(composed):
+            step_infos_for_llm = filter_step_infos_for_llm(plan.module, step_infos)
+            composed = compose_answer_with_llm(plan.module, message, step_infos_for_llm)
+            if composed:
                 answer = composed
-                composed_used = True
-        except Exception as e:
-            compose_error = str(e)
-            audit({"event": "compose_failed", "error": compose_error})
-
-    # 2) Nếu tool không có answer -> mới compose bằng LLM (và qua safety)
-    if (not answer) and compose_enabled:
-        try:
-            composed = compose_answer_with_llm(plan.module, message, step_infos_for_answer)
-            if composed and compose_safe_enough(composed):
-                answer = composed
-                composed_used = True
         except Exception as e:
             audit({"event": "compose_failed", "error": str(e)})
 
-    # Nếu vẫn chưa có answer -> STRICT (không fallback format)
     if not answer:
-        last = step_infos_for_answer[-1]["result"] if step_infos_for_answer else None
-        if isinstance(last, dict):
-            data = last.get("data")
-            if data is None or data == [] or (isinstance(data, dict) and not data):
-                answer = "Không có dữ liệu phù hợp."
-            else:
-                answer = "Không có dữ liệu phù hợp."
-        else:
-            answer = "Đã tra cứu xong."
+        answer = "Không tra cứu được."
 
-    return {
-        "answer": answer,
-        "composed_used": composed_used,
-        "compose_error": compose_error,
-        "data": store,
-        "plan": plan.model_dump(),
-    }
+    return {"answer": answer, "data": store, "plan": plan.model_dump()}
